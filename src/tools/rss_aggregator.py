@@ -1,0 +1,235 @@
+"""RSS News Aggregator Tool for CrewAI."""
+
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any
+from urllib.parse import urlparse
+
+import feedparser
+import yaml
+from crewai_tools import BaseTool
+from pydantic import Field
+
+from src.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class FeedItem:
+    """Represents a single RSS feed item."""
+
+    title: str
+    url: str
+    domain: str
+    published: datetime | None
+    summary: str
+    bias: int
+    source_name: str
+
+
+class RSSAggregator:
+    """Aggregates news from multiple RSS feeds."""
+
+    def __init__(self, feeds_config_path: str | None = None):
+        """Initialize with feeds configuration."""
+        self.feeds_config_path = feeds_config_path or str(
+            settings.config_dir / "rss_feeds.yaml"
+        )
+        self.feeds = self._load_feeds()
+
+    def _load_feeds(self) -> list[dict[str, Any]]:
+        """Load feeds from configuration file."""
+        try:
+            with open(self.feeds_config_path) as f:
+                config = yaml.safe_load(f)
+
+            feeds = []
+            for category, feed_list in config.get("feeds", {}).items():
+                for feed in feed_list:
+                    feed["category"] = category
+                    feeds.append(feed)
+
+            return feeds
+        except Exception as e:
+            logger.error(f"Failed to load feeds config: {e}")
+            return []
+
+    def _parse_date(self, entry: dict) -> datetime | None:
+        """Parse date from feed entry."""
+        if hasattr(entry, "published_parsed") and entry.published_parsed:
+            try:
+                return datetime(*entry.published_parsed[:6])
+            except Exception:
+                pass
+        if hasattr(entry, "updated_parsed") and entry.updated_parsed:
+            try:
+                return datetime(*entry.updated_parsed[:6])
+            except Exception:
+                pass
+        return None
+
+    def _extract_domain(self, url: str) -> str:
+        """Extract domain from URL."""
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.replace("www.", "")
+            return domain
+        except Exception:
+            return ""
+
+    def fetch_feed(
+        self,
+        feed_url: str,
+        max_items: int = 10,
+        bias: int = 0,
+        source_name: str = "Unknown",
+    ) -> list[FeedItem]:
+        """Fetch items from a single RSS feed."""
+        items = []
+        try:
+            parsed = feedparser.parse(feed_url)
+
+            for entry in parsed.entries[:max_items]:
+                title = entry.get("title", "")
+                link = entry.get("link", "")
+                summary = entry.get("summary", entry.get("description", ""))
+
+                # Clean summary (remove HTML)
+                if summary:
+                    summary = summary[:500]  # Truncate
+
+                items.append(
+                    FeedItem(
+                        title=title,
+                        url=link,
+                        domain=self._extract_domain(link),
+                        published=self._parse_date(entry),
+                        summary=summary,
+                        bias=bias,
+                        source_name=source_name,
+                    )
+                )
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch {feed_url}: {e}")
+
+        return items
+
+    def fetch_all(
+        self,
+        max_age_hours: int = 24,
+        max_per_feed: int = 5,
+        categories: list[str] | None = None,
+    ) -> list[FeedItem]:
+        """Fetch items from all configured feeds."""
+        all_items = []
+        cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
+
+        for feed in self.feeds:
+            if categories and feed.get("category") not in categories:
+                continue
+
+            items = self.fetch_feed(
+                feed_url=feed["url"],
+                max_items=max_per_feed,
+                bias=feed.get("bias", 0),
+                source_name=feed.get("name", "Unknown"),
+            )
+
+            # Filter by age
+            for item in items:
+                if item.published is None or item.published > cutoff:
+                    all_items.append(item)
+
+        return all_items
+
+    def search_feeds(
+        self,
+        keywords: list[str],
+        max_age_hours: int = 48,
+        max_per_feed: int = 10,
+    ) -> list[FeedItem]:
+        """Search feeds for items matching keywords."""
+        all_items = self.fetch_all(max_age_hours=max_age_hours, max_per_feed=max_per_feed)
+
+        # Filter by keywords
+        keywords_lower = [k.lower() for k in keywords]
+        matching = []
+
+        for item in all_items:
+            text = f"{item.title} {item.summary}".lower()
+            if any(kw in text for kw in keywords_lower):
+                matching.append(item)
+
+        return matching
+
+
+class RSSAggregatorTool(BaseTool):
+    """CrewAI tool for RSS news aggregation."""
+
+    name: str = "RSS News Aggregator"
+    description: str = """Fetches recent news articles from curated RSS feeds across
+    the political spectrum. Can search by keywords or fetch all recent stories.
+    Returns titles, URLs, summaries, and bias ratings."""
+
+    def _run(
+        self,
+        keywords: str = "",
+        max_age_hours: int = 24,
+        categories: str = "",
+    ) -> str:
+        """Execute RSS aggregation.
+
+        Args:
+            keywords: Comma-separated keywords to search for (optional)
+            max_age_hours: Maximum age of articles in hours
+            categories: Comma-separated feed categories to include
+
+        Returns:
+            Formatted string of news items
+        """
+        aggregator = RSSAggregator()
+
+        if keywords:
+            keyword_list = [k.strip() for k in keywords.split(",")]
+            items = aggregator.search_feeds(keyword_list, max_age_hours=max_age_hours)
+        else:
+            category_list = [c.strip() for c in categories.split(",")] if categories else None
+            items = aggregator.fetch_all(
+                max_age_hours=max_age_hours, categories=category_list
+            )
+
+        if not items:
+            return "No news items found matching the criteria."
+
+        # Format output
+        output_lines = [f"Found {len(items)} news items:\n"]
+
+        for i, item in enumerate(items[:20], 1):  # Limit to 20
+            bias_label = self._bias_to_label(item.bias)
+            date_str = item.published.strftime("%Y-%m-%d") if item.published else "Unknown"
+
+            output_lines.append(
+                f"{i}. [{bias_label}] {item.title}\n"
+                f"   Source: {item.source_name} | Date: {date_str}\n"
+                f"   URL: {item.url}\n"
+            )
+
+        return "\n".join(output_lines)
+
+    def _bias_to_label(self, bias: int) -> str:
+        """Convert bias score to label."""
+        labels = {
+            -4: "Far Left",
+            -3: "Left",
+            -2: "Lean Left",
+            -1: "Slight Left",
+            0: "Center",
+            1: "Slight Right",
+            2: "Lean Right",
+            3: "Right",
+            4: "Far Right",
+        }
+        return labels.get(bias, "Unknown")

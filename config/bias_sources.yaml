@@ -1,0 +1,263 @@
+# Known Source Bias Ratings
+# Pre-configured ratings for common news sources
+# Scale: -4 (Far Left) to +4 (Far Right), 0 = Center
+
+sources:
+  # === CENTER (0) ===
+  "reuters.com": 
+    bias: 0
+    factual: high
+    name: Reuters
+    
+  "apnews.com":
+    bias: 0
+    factual: high
+    name: Associated Press
+    
+  "c-span.org":
+    bias: 0
+    factual: high
+    name: C-SPAN
+    
+  "thehill.com":
+    bias: 0
+    factual: mostly_factual
+    name: The Hill
+
+  # === SLIGHT LEFT (-1) ===
+  "npr.org":
+    bias: -1
+    factual: high
+    name: NPR
+    
+  "bbc.com":
+    bias: -1
+    factual: high
+    name: BBC
+    
+  "bbc.co.uk":
+    bias: -1
+    factual: high
+    name: BBC
+    
+  "pbs.org":
+    bias: -1
+    factual: high
+    name: PBS
+
+  # === LEAN LEFT (-2) ===
+  "nytimes.com":
+    bias: -2
+    factual: high
+    name: New York Times
+    
+  "washingtonpost.com":
+    bias: -2
+    factual: high
+    name: Washington Post
+    
+  "cnn.com":
+    bias: -2
+    factual: mixed
+    name: CNN
+    
+  "theguardian.com":
+    bias: -2
+    factual: mostly_factual
+    name: The Guardian
+    
+  "politico.com":
+    bias: -2
+    factual: mostly_factual
+    name: Politico
+
+  # === LEFT (-3) ===
+  "msnbc.com":
+    bias: -3
+    factual: mixed
+    name: MSNBC
+    
+  "huffpost.com":
+    bias: -3
+    factual: mostly_factual
+    name: HuffPost
+    
+  "vox.com":
+    bias: -3
+    factual: mostly_factual
+    name: Vox
+    
+  "slate.com":
+    bias: -3
+    factual: mostly_factual
+    name: Slate
+
+  # === FAR LEFT (-4) ===
+  "jacobin.com":
+    bias: -4
+    factual: mostly_factual
+    name: Jacobin
+    
+  "truthout.org":
+    bias: -4
+    factual: mostly_factual
+    name: TruthOut
+    
+  "commondreams.org":
+    bias: -4
+    factual: mostly_factual
+    name: Common Dreams
+
+  # === SLIGHT RIGHT (+1) ===
+  "realclearpolitics.com":
+    bias: 1
+    factual: mostly_factual
+    name: RealClearPolitics
+    
+  "axios.com":
+    bias: 1
+    factual: high
+    name: Axios
+
+  # === LEAN RIGHT (+2) ===
+  "wsj.com":
+    bias: 2
+    factual: mostly_factual
+    name: Wall Street Journal
+    
+  "nypost.com":
+    bias: 2
+    factual: mixed
+    name: New York Post
+    
+  "washingtonexaminer.com":
+    bias: 2
+    factual: mostly_factual
+    name: Washington Examiner
+
+  # === RIGHT (+3) ===
+  "foxnews.com":
+    bias: 3
+    factual: mixed
+    name: Fox News
+    
+  "dailywire.com":
+    bias: 3
+    factual: mostly_factual
+    name: Daily Wire
+    
+  "nationalreview.com":
+    bias: 3
+    factual: mostly_factual
+    name: National Review
+    
+  "theblaze.com":
+    bias: 3
+    factual: mixed
+    name: The Blaze
+
+  # === FAR RIGHT (+4) ===
+  "breitbart.com":
+    bias: 4
+    factual: mixed
+    name: Breitbart
+    
+  "thegatewaypundit.com":
+    bias: 4
+    factual: low
+    name: Gateway Pundit
+    
+  "infowars.com":
+    bias: 4
+    factual: very_low
+    name: InfoWars
+
+  # === LIBERTARIAN (special category) ===
+  "reason.com":
+    bias: 0
+    factual: mostly_factual
+    name: Reason
+    category: libertarian
+    
+  "mises.org":
+    bias: 0
+    factual: mostly_factual
+    name: Mises Institute
+    category: libertarian
+    
+  "fee.org":
+    bias: 1
+    factual: mostly_factual
+    name: FEE
+    category: libertarian
+    
+  "antiwar.com":
+    bias: 0
+    factual: mostly_factual
+    name: Antiwar.com
+    category: libertarian
+
+  # === INDEPENDENT / ANTI-ESTABLISHMENT ===
+  "theintercept.com":
+    bias: -2
+    factual: high
+    name: The Intercept
+    category: independent
+    
+  "zerohedge.com":
+    bias: 2
+    factual: mixed
+    name: Zero Hedge
+    category: independent
+    
+  "taibbi.substack.com":
+    bias: 0
+    factual: mostly_factual
+    name: Matt Taibbi
+    category: independent
+    
+  "greenwald.substack.com":
+    bias: 0
+    factual: mostly_factual
+    name: Glenn Greenwald
+    category: independent
+
+  # === ALTERNATIVE MEDIA / PODCASTS ===
+  "joerogan.com":
+    bias: 0
+    factual: mixed
+    name: Joe Rogan
+    category: alternative
+    
+  "timcast.com":
+    bias: 2
+    factual: mixed
+    name: Tim Pool
+    category: alternative
+    
+  "breakingpoints.com":
+    bias: 0
+    factual: mostly_factual
+    name: Breaking Points
+    category: alternative
+
+# Factual rating scale
+factual_ratings:
+  very_low: 1
+  low: 2
+  mixed: 3
+  mostly_factual: 4
+  high: 5
+  very_high: 6
+
+# Bias labels
+bias_labels:
+  -4: "Far Left"
+  -3: "Left"
+  -2: "Lean Left"
+  -1: "Slight Left"
+  0: "Center"
+  1: "Slight Right"
+  2: "Lean Right"
+  3: "Right"
+  4: "Far Right"

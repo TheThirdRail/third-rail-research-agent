@@ -1,0 +1,152 @@
+# RSS Feeds Configuration
+# Curated list of news feeds across the political spectrum
+
+feeds:
+  # Center / Wire Services
+  center:
+    - name: Reuters
+      url: https://www.reutersagency.com/feed/?taxonomy=best-topics&post_type=best
+      bias: 0
+      
+    - name: Associated Press
+      url: https://rsshub.app/apnews/topics/apf-topnews
+      bias: 0
+      
+    - name: C-SPAN
+      url: https://www.c-span.org/podcasts/rss
+      bias: 0
+
+  # Slight Left (-1)
+  slight_left:
+    - name: NPR
+      url: https://feeds.npr.org/1001/rss.xml
+      bias: -1
+      
+    - name: BBC
+      url: http://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml
+      bias: -1
+
+  # Lean Left (-2)
+  lean_left:
+    - name: New York Times
+      url: https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
+      bias: -2
+      
+    - name: Washington Post
+      url: https://feeds.washingtonpost.com/rss/politics
+      bias: -2
+      
+    - name: CNN
+      url: http://rss.cnn.com/rss/cnn_topstories.rss
+      bias: -2
+
+  # Left (-3)
+  left:
+    - name: MSNBC
+      url: https://www.msnbc.com/feeds/latest
+      bias: -3
+      
+    - name: HuffPost
+      url: https://www.huffpost.com/section/politics/feed
+      bias: -3
+
+  # Far Left (-4)
+  far_left:
+    - name: Jacobin
+      url: https://jacobin.com/feed
+      bias: -4
+
+  # Slight Right (+1)
+  slight_right:
+    - name: The Hill
+      url: https://thehill.com/feed/
+      bias: 1
+      
+    - name: RealClearPolitics
+      url: https://www.realclearpolitics.com/index.xml
+      bias: 1
+
+  # Lean Right (+2)
+  lean_right:
+    - name: Wall Street Journal
+      url: https://feeds.a.dj.com/rss/RSSOpinion.xml
+      bias: 2
+      
+    - name: New York Post
+      url: https://nypost.com/feed/
+      bias: 2
+
+  # Right (+3)
+  right:
+    - name: Fox News
+      url: https://moxie.foxnews.com/google-publisher/politics.xml
+      bias: 3
+      
+    - name: Daily Wire
+      url: https://www.dailywire.com/feeds/rss.xml
+      bias: 3
+      
+    - name: National Review
+      url: https://www.nationalreview.com/feed/
+      bias: 3
+
+  # Far Right (+4)
+  far_right:
+    - name: Breitbart
+      url: https://feeds.feedburner.com/breitbart
+      bias: 4
+
+  # Libertarian (doesn't fit left-right)
+  libertarian:
+    - name: Reason
+      url: https://reason.com/feed/
+      bias: 0
+      category: libertarian
+      
+    - name: Mises Institute
+      url: https://mises.org/feed/wire
+      bias: 0
+      category: libertarian
+      
+    - name: Antiwar.com
+      url: https://www.antiwar.com/feed/
+      bias: 0
+      category: libertarian
+
+  # Anti-Establishment / Independent
+  independent:
+    - name: The Intercept
+      url: https://theintercept.com/feed/?lang=en
+      bias: -2
+      category: independent
+      
+    - name: Zero Hedge
+      url: https://feeds.feedburner.com/zerohedge/feed
+      bias: 2
+      category: independent
+      
+    - name: Glenn Greenwald
+      url: https://greenwald.substack.com/feed
+      bias: 0
+      category: independent
+
+# Topic-specific feeds
+topic_feeds:
+  geopolitics:
+    - name: War on the Rocks
+      url: https://warontherocks.com/feed/
+      
+  technology:
+    - name: TechCrunch
+      url: https://techcrunch.com/feed/
+      
+  economics:
+    - name: ZeroHedge Markets
+      url: https://feeds.feedburner.com/zerohedge/feed
+
+# Refresh settings
+settings:
+  default_max_age_hours: 24
+  max_items_per_feed: 10
+  request_timeout_seconds: 10
+  user_agent: "ResearchAgent/1.0 (News Research Tool)"

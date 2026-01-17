@@ -1,0 +1,203 @@
+# Channel Profile Configuration
+# This file defines your YouTube channel's focus areas and preferences
+# The Research Agent uses this to find and rank relevant stories
+
+channel:
+  name: "Your Channel Name"
+  description: |
+    A libertarian commentary channel covering American politics, 
+    geopolitics, and cultural issues from a constitutional/liberty perspective.
+    
+  worldview: "libertarian"
+  worldview_description: |
+    Libertarian in the tradition of Ron Paul, Dave Smith, and Thomas Massie.
+    Emphasizes individual liberty, constitutional limits on government,
+    non-interventionist foreign policy, and free market economics.
+
+# Content approach
+content_style:
+  # Present facts neutrally first, then clearly labeled opinion
+  facts_first: true
+  
+  # How to label opinion sections
+  opinion_marker: "MY TAKE:"
+  
+  # Preferred report structure
+  structure:
+    - story_overview
+    - agreed_facts
+    - disputed_facts  
+    - mainstream_narrative
+    - alternative_takes
+    - libertarian_perspective
+    - talking_points
+
+# Topics to monitor (ordered by priority)
+topics:
+  primary:
+    - us_national_politics
+    - geopolitics
+    - conspiracy_theories
+    - breaking_news
+    - cultural_issues
+    - government_overreach
+    - foreign_policy
+    
+  secondary:
+    - spirituality_religion
+    - technology
+    - political_commentators
+    - online_debates
+    - florida_politics
+
+# Topic keywords for story discovery
+topic_keywords:
+  us_national_politics:
+    - congress
+    - president
+    - senate
+    - supreme court
+    - legislation
+    - election
+    - republican
+    - democrat
+    - constitutional
+    - federal
+    
+  geopolitics:
+    - china
+    - russia
+    - ukraine
+    - israel
+    - iran
+    - nato
+    - war
+    - sanctions
+    - diplomacy
+    - military
+    
+  conspiracy_theories:
+    - deep state
+    - cia
+    - fbi
+    - cover-up
+    - declassified
+    - whistleblower
+    - epstein
+    - surveillance
+    
+  cultural_issues:
+    - free speech
+    - cancel culture
+    - woke
+    - gender
+    - education
+    - censorship
+    - big tech
+    - media bias
+    
+  government_overreach:
+    - mandates
+    - regulations
+    - federal reserve
+    - inflation
+    - taxation
+    - surveillance
+    - civil liberties
+    
+  foreign_policy:
+    - intervention
+    - troops
+    - military industrial complex
+    - endless wars
+    - defense spending
+    - isolationism
+    - non-intervention
+    
+  spirituality_religion:
+    - christianity
+    - church
+    - religious liberty
+    - faith
+    - secularism
+    
+  technology:
+    - ai
+    - privacy
+    - social media
+    - big tech
+    - silicon valley
+    - surveillance
+    
+  political_commentators:
+    - tucker carlson
+    - joe rogan
+    - ben shapiro
+    - tim pool
+    - jimmy dore
+    - glenn greenwald
+    - matt taibbi
+    - dave smith
+    - ron paul
+    
+  florida_politics:
+    - desantis
+    - florida
+    - miami
+    - tampa
+    - state legislature
+
+# Sources to prioritize
+preferred_sources:
+  libertarian:
+    - reason.com
+    - mises.org
+    - lewrockwell.com
+    - tomwoods.com
+    - antiwar.com
+    
+  independent:
+    - theintercept.com
+    - consortiumnews.com
+    - zerohedge.com
+    - realclearpolitics.com
+    
+  mainstream_for_context:
+    - reuters.com
+    - apnews.com
+
+# Sources to include for balance (not preferred, but needed for comparison)
+balance_sources:
+  left:
+    - cnn.com
+    - msnbc.com
+    - nytimes.com
+    - washingtonpost.com
+    
+  right:
+    - foxnews.com
+    - dailywire.com
+    - breitbart.com
+    - nypost.com
+
+# Story selection criteria weights (0.0 to 1.0)
+ranking_weights:
+  topic_relevance: 0.35
+  recency: 0.25
+  controversy_level: 0.15
+  source_diversity: 0.10
+  predicted_performance: 0.15  # Based on historical data
+
+# Exclusion rules
+exclusions:
+  # Skip stories primarily about these (noise reduction)
+  topics_to_avoid:
+    - celebrity_gossip
+    - sports_scores
+    - entertainment_news
+    
+  # Skip stories from these domains
+  domains_to_skip:
+    - tmz.com
+    - buzzfeed.com
+    - people.com

@@ -3,7 +3,7 @@
 import logging
 from dataclasses import dataclass
 
-from crewai_tools import BaseTool
+from crewai.tools.base_tool import BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,9 @@ class KeywordExtractorTool(BaseTool):
         top_n = min(max(1, top_n), 20)  # Clamp to 1-20
 
         if not text or len(text) < 50:
-            return "Text too short for keyword extraction (need at least 50 characters)."
+            return (
+                "Text too short for keyword extraction (need at least 50 characters)."
+            )
 
         extractor = KeywordExtractor()
         keywords = extractor.extract(text, top_n)
@@ -170,7 +172,7 @@ class TopicMatcherTool(BaseTool):
 
         # Format output
         output_lines = [
-            f"=== TOPIC MATCH RESULTS ===\n",
+            "=== TOPIC MATCH RESULTS ===\n",
             f"Keywords checked: {len(keywords)}\n",
             f"Keywords found: {len(matches)}\n",
             f"Relevance Score: {relevance:.2f}\n\n",

@@ -7,6 +7,7 @@ from src.database.crud import (
     StoryCRUD,
 )
 from src.database.models import (
+    AgentConfiguration,
     Analysis,
     Base,
     ChannelProfile,
@@ -30,6 +31,7 @@ __all__ = [
     "Analysis",
     "VideoPerformance",
     "ChannelProfile",
+    "AgentConfiguration",
     # CRUD
     "StoryCRUD",
     "SourceCRUD",

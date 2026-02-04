@@ -3,9 +3,8 @@
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any
 
-from crewai_tools import BaseTool
+from crewai.tools.base_tool import BaseTool
 from duckduckgo_search import DDGS
 
 logger = logging.getLogger(__name__)
@@ -178,8 +177,7 @@ class NewsSearchTool(BaseTool):
 
         for i, result in enumerate(results, 1):
             output_lines.append(
-                f"{i}. {result.title}\n"
-                f"   Source: {result.source} | URL: {result.url}\n"
+                f"{i}. {result.title}\n   Source: {result.source} | URL: {result.url}\n"
             )
 
         return "\n".join(output_lines)

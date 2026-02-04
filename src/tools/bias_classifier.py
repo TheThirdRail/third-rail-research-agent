@@ -2,11 +2,10 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any
 from urllib.parse import urlparse
 
 import yaml
-from crewai_tools import BaseTool
+from crewai.tools.base_tool import BaseTool
 
 from src.core.config import settings
 
@@ -130,50 +129,108 @@ class BiasClassifier:
         )
 
     def _heuristic_classify(self, domain: str, text: str) -> BiasResult:
-        """Simple heuristic bias classification based on text patterns.
+        """Classify bias using LLM analysis.
 
-        This is a fallback when LLM is not available.
-        For production, this should use an LLM for better accuracy.
+        Uses the LLMRouter for intelligent classification of unknown sources.
+        Falls back to simple heuristic if LLM fails.
         """
+        # Try LLM classification first
+        try:
+            return self._llm_classify(domain, text)
+        except Exception as e:
+            logger.warning(f"LLM classification failed, using heuristic: {e}")
+            return self._simple_heuristic(domain, text)
+
+    def _llm_classify(self, domain: str, text: str) -> BiasResult:
+        """Use LLM for bias classification."""
+        from src.core.llm_provider import get_llm_router
+
+        router = get_llm_router()
+
+        prompt = f"""Analyze the political bias of this news source and article.
+
+Domain: {domain}
+Article excerpt (first 1500 chars):
+{text[:1500]}
+
+Classify the political bias on a 9-point scale:
+-4 = Far Left, -3 = Left, -2 = Lean Left, -1 = Slight Left
+0 = Center
++1 = Slight Right, +2 = Lean Right, +3 = Right, +4 = Far Right
+
+Also identify if this is a libertarian or independent source.
+
+Respond with ONLY a JSON object (no markdown, no explanation):
+{{"bias": <number -4 to 4>, "category": "<libertarian|independent|mainstream|null>", "confidence": <0.0-1.0>}}"""
+
+        response = router.complete(
+            [{"role": "user", "content": prompt}], max_tokens=100
+        )
+
+        # Parse JSON from response
+        import json
+        import re
+
+        # Extract JSON from response
+        json_match = re.search(r"\{[^}]+\}", response)
+        if json_match:
+            data = json.loads(json_match.group())
+            bias = max(-4, min(4, int(data.get("bias", 0))))
+            return BiasResult(
+                domain=domain,
+                bias=bias,
+                bias_label=BIAS_LABELS.get(bias, "Unknown"),
+                confidence=float(data.get("confidence", 0.7)),
+                method="llm",
+                factual_rating=None,
+                category=data.get("category"),
+            )
+
+        raise ValueError("Could not parse LLM response")
+
+    def _simple_heuristic(self, domain: str, text: str) -> BiasResult:
+        """Simple keyword-based fallback when LLM unavailable."""
         text_lower = text.lower()
 
-        # Simple keyword scoring (very basic, should be replaced with LLM)
         left_keywords = [
-            "progressive", "social justice", "inequality", "systemic",
-            "marginalized", "climate crisis", "diversity", "inclusion",
+            "progressive",
+            "social justice",
+            "inequality",
+            "systemic",
+            "marginalized",
         ]
         right_keywords = [
-            "freedom", "liberty", "constitution", "traditional",
-            "patriot", "free market", "border security", "limited government",
+            "freedom",
+            "liberty",
+            "constitution",
+            "traditional",
+            "patriot",
         ]
         libertarian_keywords = [
-            "libertarian", "non-intervention", "free market", "individual rights",
-            "civil liberties", "end the fed", "taxation is theft",
+            "libertarian",
+            "non-intervention",
+            "individual rights",
+            "civil liberties",
         ]
 
         left_count = sum(1 for kw in left_keywords if kw in text_lower)
         right_count = sum(1 for kw in right_keywords if kw in text_lower)
         lib_count = sum(1 for kw in libertarian_keywords if kw in text_lower)
 
-        # Calculate bias (-4 to +4)
         if lib_count > left_count and lib_count > right_count:
-            bias = 0
-            category = "libertarian"
+            bias, category = 0, "libertarian"
         elif left_count > right_count + 3:
-            bias = -2
-            category = None
+            bias, category = -2, None
         elif right_count > left_count + 3:
-            bias = 2
-            category = None
+            bias, category = 2, None
         else:
-            bias = 0
-            category = None
+            bias, category = 0, None
 
         return BiasResult(
             domain=domain,
             bias=bias,
             bias_label=BIAS_LABELS.get(bias, "Unknown"),
-            confidence=0.3,  # Low confidence for heuristic
+            confidence=0.3,
             method="heuristic",
             factual_rating=None,
             category=category,
@@ -251,7 +308,9 @@ class MultiBiasClassifierTool(BaseTool):
             Formatted comparison table
         """
         # Parse sources
-        source_list = [s.strip() for s in sources.replace(",", "\n").split("\n") if s.strip()]
+        source_list = [
+            s.strip() for s in sources.replace(",", "\n").split("\n") if s.strip()
+        ]
 
         if not source_list:
             return "No sources provided."
@@ -281,6 +340,8 @@ class MultiBiasClassifierTool(BaseTool):
         center = [r for r in results if r.bias == 0]
         right = [r for r in results if r.bias > 0]
 
-        output_lines.append(f"Distribution: Left={len(left)}, Center={len(center)}, Right={len(right)}")
+        output_lines.append(
+            f"Distribution: Left={len(left)}, Center={len(center)}, Right={len(right)}"
+        )
 
         return "".join(output_lines)

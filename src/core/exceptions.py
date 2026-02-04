@@ -41,3 +41,9 @@ class RateLimitError(ResearchAgentError):
     """Rate limit exceeded on external service."""
 
     pass
+
+
+class BudgetExceededError(ResearchAgentError):
+    """Budget limit reached for the current period."""
+
+    pass

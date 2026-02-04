@@ -1,12 +1,12 @@
 """Article Content Extraction Tool for CrewAI."""
 
+import contextlib
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 from urllib.parse import urlparse
 
-from crewai_tools import BaseTool
+from crewai.tools.base_tool import BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -68,10 +68,8 @@ class ArticleExtractor:
             author = metadata.author if metadata else None
             date = None
             if metadata and metadata.date:
-                try:
+                with contextlib.suppress(Exception):
                     date = datetime.fromisoformat(metadata.date)
-                except Exception:
-                    pass
 
             return ExtractedArticle(
                 title=title or "",
@@ -111,10 +109,8 @@ class ArticleExtractor:
                 if isinstance(article.publish_date, datetime):
                     date = article.publish_date
                 else:
-                    try:
+                    with contextlib.suppress(Exception):
                         date = datetime.fromisoformat(str(article.publish_date))
-                    except Exception:
-                        pass
 
             authors = article.authors
             author = authors[0] if authors else None
@@ -242,9 +238,7 @@ class MultiArticleExtractorTool(BaseTool):
                 )
             else:
                 results.append(
-                    f"--- Article {i} ---\n"
-                    f"URL: {url}\n"
-                    f"Error: {article.error}\n"
+                    f"--- Article {i} ---\nURL: {url}\nError: {article.error}\n"
                 )
 
         return "\n".join(results)

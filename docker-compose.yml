@@ -1,0 +1,82 @@
+# ===========================================
+# Research Agent - Docker Compose
+# Three-service architecture: backend + frontend + ollama (optional)
+# ===========================================
+
+services:
+  # Python Backend (FastAPI + CrewAI)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: research-agent-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config:ro
+    environment:
+      # Provider Selection
+      - LLM_PROVIDER=${LLM_PROVIDER:-openrouter}
+      # API Keys (loaded from .env)
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY}
+      - SAMBANOVA_API_KEY=${SAMBANOVA_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - XAI_API_KEY=${XAI_API_KEY}
+      # Local LLM
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      # Database
+      - DATABASE_URL=sqlite:///data/research_agent.db
+      # App Settings
+      - APP_ENV=${APP_ENV:-production}
+      - DEBUG=${DEBUG:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        # This URL is baked into the client bundle at build time
+        # Must be reachable from the USER'S BROWSER
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
+    container_name: research-agent-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Ollama (Optional local LLM)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: research-agent-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    profiles:
+      - local-llm # Only starts with: docker compose --profile local-llm up
+
+volumes:
+  ollama-data:
+    driver: local
+
+networks:
+  default:
+    name: research-agent-network

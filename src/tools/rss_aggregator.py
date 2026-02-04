@@ -8,8 +8,7 @@ from urllib.parse import urlparse
 
 import feedparser
 import yaml
-from crewai_tools import BaseTool
-from pydantic import Field
+from crewai.tools.base_tool import BaseTool
 
 from src.core.config import settings
 
@@ -152,7 +151,9 @@ class RSSAggregator:
         max_per_feed: int = 10,
     ) -> list[FeedItem]:
         """Search feeds for items matching keywords."""
-        all_items = self.fetch_all(max_age_hours=max_age_hours, max_per_feed=max_per_feed)
+        all_items = self.fetch_all(
+            max_age_hours=max_age_hours, max_per_feed=max_per_feed
+        )
 
         # Filter by keywords
         keywords_lower = [k.lower() for k in keywords]
@@ -196,7 +197,9 @@ class RSSAggregatorTool(BaseTool):
             keyword_list = [k.strip() for k in keywords.split(",")]
             items = aggregator.search_feeds(keyword_list, max_age_hours=max_age_hours)
         else:
-            category_list = [c.strip() for c in categories.split(",")] if categories else None
+            category_list = (
+                [c.strip() for c in categories.split(",")] if categories else None
+            )
             items = aggregator.fetch_all(
                 max_age_hours=max_age_hours, categories=category_list
             )
@@ -209,7 +212,9 @@ class RSSAggregatorTool(BaseTool):
 
         for i, item in enumerate(items[:20], 1):  # Limit to 20
             bias_label = self._bias_to_label(item.bias)
-            date_str = item.published.strftime("%Y-%m-%d") if item.published else "Unknown"
+            date_str = (
+                item.published.strftime("%Y-%m-%d") if item.published else "Unknown"
+            )
 
             output_lines.append(
                 f"{i}. [{bias_label}] {item.title}\n"

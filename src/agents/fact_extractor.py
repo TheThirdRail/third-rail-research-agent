@@ -10,14 +10,17 @@ def create_fact_extractor_agent() -> Agent:
 
     This agent analyzes article text to separate
     verifiable facts from editorial opinions.
+    Uses the analysis LLM for higher quality reasoning.
     """
     config = AGENT_ROLES["fact_extractor"]
+    llm_config = get_llm_config(agent_name="fact_extractor")
 
     return Agent(
         role=config["role"],
         goal=config["goal"],
         backstory=config["backstory"],
         tools=[],  # Uses LLM reasoning, no external tools
+        llm=llm_config.get("model"),
         verbose=True,
         allow_delegation=False,
     )

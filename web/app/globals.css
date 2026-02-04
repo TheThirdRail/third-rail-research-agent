@@ -1,0 +1,161 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0d0221;
+  --foreground: #e0e0e0;
+}
+
+body {
+  background: radial-gradient(circle at 50% 0%, #261447 0%, #050014 70%);
+  color: var(--foreground);
+  font-family: var(--font-fira-code), ui-monospace, monospace;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* CRT Scanline Effect */
+.scanlines::before {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(to bottom,
+      rgba(18, 16, 16, 0) 50%,
+      rgba(0, 0, 0, 0.25) 50%);
+  background-size: 100% 4px;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.scanlines::after {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: rgba(18, 16, 16, 0.1);
+  opacity: 0;
+  z-index: 50;
+  pointer-events: none;
+  animation: flicker 0.15s infinite;
+}
+
+@keyframes flicker {
+  0% {
+    opacity: 0.0279;
+  }
+
+  5% {
+    opacity: 0.04853;
+  }
+
+  10% {
+    opacity: 0.02633;
+  }
+
+  15% {
+    opacity: 0.0633;
+  }
+
+  20% {
+    opacity: 0.03838;
+  }
+
+  25% {
+    opacity: 0.05705;
+  }
+
+  30% {
+    opacity: 0.019;
+  }
+
+  35% {
+    opacity: 0.0635;
+  }
+
+  40% {
+    opacity: 0.02987;
+  }
+
+  45% {
+    opacity: 0.06454;
+  }
+
+  50% {
+    opacity: 0.02701;
+  }
+
+  55% {
+    opacity: 0.0336;
+  }
+
+  60% {
+    opacity: 0.0632;
+  }
+
+  65% {
+    opacity: 0.04968;
+  }
+
+  70% {
+    opacity: 0.0279;
+  }
+
+  75% {
+    opacity: 0.0235;
+  }
+
+  80% {
+    opacity: 0.02677;
+  }
+
+  85% {
+    opacity: 0.05395;
+  }
+
+  90% {
+    opacity: 0.0232;
+  }
+
+  95% {
+    opacity: 0.05739;
+  }
+
+  100% {
+    opacity: 0.0279;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #050014;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #bd00ff;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #ff0099;
+}
+
+/* Utilities */
+.text-glow {
+  text-shadow: 0 0 10px currentColor;
+}
+
+.box-glow {
+  box-shadow: 0 0 20px rgba(0, 243, 255, 0.2);
+}

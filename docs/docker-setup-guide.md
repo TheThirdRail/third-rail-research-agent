@@ -1,0 +1,180 @@
+# Docker Setup Guide for Research Agent
+
+This guide walks you through setting up and running the Research Agent using Docker.
+
+---
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+1. **Docker Desktop** installed and running
+   - Download: [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/)
+   - Verify: `docker --version`
+
+2. **Docker Compose** (included with Docker Desktop)
+   - Verify: `docker compose version`
+
+3. **Your `.env` file configured** with at least one LLM provider API key
+
+---
+
+## Step-by-Step Setup
+
+### Step 1: Open a Terminal
+
+Open PowerShell or your preferred terminal and navigate to the project root:
+
+```powershell
+cd D:\Coding\Research-Agent
+```
+
+### Step 2: Verify Your `.env` File
+
+Make sure your `.env` file exists and has your API keys:
+
+```powershell
+cat .env
+```
+
+You should see your API keys filled in (e.g., `OPENROUTER_API_KEY=your_openrouter_api_key_here`).
+
+### Step 3: Build the Docker Images
+
+Build both the backend and frontend containers:
+
+```powershell
+docker compose build
+```
+
+This will:
+
+- Build the Python backend (FastAPI + CrewAI)
+- Build the Next.js frontend
+- Download base images if needed
+
+**Expected time:** 2-5 minutes on first run.
+
+### Step 4: Start the Containers
+
+Launch all services:
+
+```powershell
+docker compose up -d
+```
+
+The `-d` flag runs containers in detached mode (background).
+
+### Step 5: Verify Services Are Running
+
+Check that all containers started successfully:
+
+```powershell
+docker compose ps
+```
+
+You should see:
+
+| Name | Status |
+|------|--------|
+| research-agent-backend | running |
+| research-agent-frontend | running |
+
+### Step 6: Access the Application
+
+- **Frontend (UI):** [http://localhost:3000](http://localhost:3000)
+- **Backend API:** [http://localhost:8000](http://localhost:8000)
+- **API Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
+
+---
+
+## Useful Commands
+
+### View Logs
+
+```powershell
+# All services
+docker compose logs -f
+
+# Backend only
+docker compose logs -f backend
+
+# Frontend only
+docker compose logs -f frontend
+```
+
+### Stop Containers
+
+```powershell
+docker compose down
+```
+
+### Rebuild After Code Changes
+
+```powershell
+docker compose build --no-cache
+docker compose up -d
+```
+
+### Include Local Ollama (Optional)
+
+To also run a local Ollama instance:
+
+```powershell
+docker compose --profile local-llm up -d
+```
+
+This adds an Ollama container accessible at `http://localhost:11434`.
+
+---
+
+## Troubleshooting
+
+### Backend won't start
+
+Check logs:
+
+```powershell
+docker compose logs backend
+```
+
+Common issues:
+
+- Missing API keys in `.env`
+- Port 8000 already in use (change `API_PORT` in `.env`)
+
+### Frontend shows "Cannot connect to API"
+
+1. Make sure backend is running: `docker compose ps`
+2. Check if backend is healthy: `curl http://localhost:8000/health`
+3. Verify `NEXT_PUBLIC_API_URL` in docker-compose.yml
+
+### Database issues
+
+The SQLite database is stored in `./data/research_agent.db`. To reset:
+
+```powershell
+rm data/research_agent.db
+docker compose restart backend
+```
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                  Docker Network                         │
+│  ┌─────────────────┐       ┌─────────────────────────┐  │
+│  │  Frontend       │       │  Backend                │  │
+│  │  (Next.js)      │──────▶│  (FastAPI + CrewAI)     │  │
+│  │  Port: 3000     │       │  Port: 8000             │  │
+│  └─────────────────┘       └───────────┬─────────────┘  │
+│                                        │                │
+│                                        ▼                │
+│                            ┌───────────────────────┐    │
+│                            │  ./data/ (volume)     │    │
+│                            │  - research_agent.db  │    │
+│                            └───────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
+```

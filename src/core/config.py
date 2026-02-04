@@ -23,21 +23,55 @@ class Settings(BaseSettings):
     debug: bool = True
     log_level: str = "INFO"
 
-    # OpenRouter (Primary LLM)
+    # LLM Provider Selection
+    llm_provider: str = Field(
+        default="openrouter",
+        description="Primary LLM provider: openrouter|gemini|anthropic|groq|openai|grok|cerebras|sambanova|ollama",
+    )
+
+    # OpenRouter
     openrouter_api_key: str = Field(default="", description="OpenRouter API key")
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    
-    # Default models (free tier on OpenRouter)
-    default_model: str = "meta-llama/llama-4-maverick:free"
-    analysis_model: str = "deepseek/deepseek-chat-v3-0324:free"
-    
-    # Ollama (Optional fallback)
+
+    # Google Gemini
+    google_api_key: str = Field(
+        default="", description="Google Gemini API key (legacy)"
+    )
+    gemini_api_key: str = Field(default="", description="Google Gemini API key")
+
+    # Anthropic
+    anthropic_api_key: str = Field(default="", description="Anthropic API key")
+
+    # Groq
+    groq_api_key: str = Field(default="", description="Groq API key")
+
+    # OpenAI / Compatible
+    openai_api_key: str = Field(default="", description="OpenAI API key")
+    openai_base_url: str = Field(default="", description="OpenAI-compatible base URL")
+
+    # Grok (xAI)
+    xai_api_key: str = Field(default="", description="xAI Grok API key")
+
+    # Cerebras
+    cerebras_api_key: str = Field(default="", description="Cerebras API key")
+
+    # SambaNova
+    sambanova_api_key: str = Field(default="", description="SambaNova API key")
+
+    # Mistral AI
+    mistral_api_key: str = Field(default="", description="Mistral AI API key")
+
+    # Ollama (local)
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3.1:8b"
-    use_ollama_fallback: bool = False
+
+    # Model Selection (dynamic - set via API or config file)
+    selected_model: str = Field(
+        default="", description="Selected model ID (provider/model)"
+    )
+    analysis_model: str = Field(default="", description="Model for analysis tasks")
 
     # Database
-    database_url: str = "sqlite:///data/performance.db"
+    database_url: str = "sqlite:///data/research_agent.db"
 
     # API
     api_host: str = "0.0.0.0"

@@ -1,0 +1,59 @@
+# Git
+.git
+.gitignore
+
+# Python
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+*.egg
+dist
+build
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Testing
+.pytest_cache
+htmlcov
+.coverage
+*.lcov
+
+# Node (frontend)
+node_modules
+.next
+.turbo
+
+# Documentation
+*.md
+!README.md
+
+# Research/education (AI generated)
+research/
+education/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary
+tmp/
+temp/
+*.tmp
+.cache

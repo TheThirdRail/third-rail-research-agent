@@ -2,7 +2,6 @@
 
 import json
 from datetime import datetime
-from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import desc
@@ -10,14 +9,13 @@ from sqlalchemy.orm import Session
 
 from src.database.models import (
     Analysis,
-    ChannelProfile,
     Source,
     Story,
     VideoPerformance,
 )
 
-
 # --- Story CRUD ---
+
 
 class StoryCRUD:
     """CRUD operations for Story model."""
@@ -77,6 +75,7 @@ class StoryCRUD:
 
 # --- Source CRUD ---
 
+
 class SourceCRUD:
     """CRUD operations for Source model."""
 
@@ -126,6 +125,7 @@ class SourceCRUD:
 
 # --- Analysis CRUD ---
 
+
 class AnalysisCRUD:
     """CRUD operations for Analysis model."""
 
@@ -173,6 +173,7 @@ class AnalysisCRUD:
 
 # --- VideoPerformance CRUD ---
 
+
 class PerformanceCRUD:
     """CRUD operations for VideoPerformance model."""
 
@@ -211,7 +212,11 @@ class PerformanceCRUD:
 
     def get_by_story(self, story_id: str) -> VideoPerformance | None:
         """Get performance for a story."""
-        return self.db.query(VideoPerformance).filter(VideoPerformance.story_id == story_id).first()
+        return (
+            self.db.query(VideoPerformance)
+            .filter(VideoPerformance.story_id == story_id)
+            .first()
+        )
 
     def update(
         self,

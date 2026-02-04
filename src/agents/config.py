@@ -1,45 +1,34 @@
-"""Agent configuration and LLM setup."""
+"""Agent configuration and LLM setup using unified LLM provider."""
 
 from typing import Any
 
-from src.core.config import settings
+from src.core.llm_provider import get_analysis_router, get_llm_router
 
 
-def get_llm_config() -> dict[str, Any]:
+def get_llm_config(agent_name: str | None = None) -> dict[str, Any]:
     """Get LLM configuration for CrewAI agents.
 
-    Returns configuration for OpenRouter (primary) or Ollama (fallback).
+    Uses the unified LLMRouter to support multiple providers:
+    OpenRouter, Gemini, Anthropic, Groq, OpenAI, Grok, Cerebras, SambaNova, Ollama
+
+    Args:
+        agent_name: Optional name of the agent to get specific config for
+
+    Returns:
+        CrewAI-compatible LLM configuration dict
     """
-    if settings.openrouter_api_key:
-        # Primary: OpenRouter free tier
-        return {
-            "model": f"openrouter/{settings.default_model}",
-            "api_key": settings.openrouter_api_key,
-            "base_url": settings.openrouter_base_url,
-        }
-    elif settings.use_ollama_fallback:
-        # Fallback: Local Ollama
-        return {
-            "model": f"ollama/{settings.ollama_model}",
-            "base_url": settings.ollama_base_url,
-        }
-    else:
-        # No LLM configured - will fail at runtime
-        return {
-            "model": "openrouter/meta-llama/llama-4-maverick:free",
-            "api_key": "",
-        }
+    router = get_llm_router(agent_name=agent_name)
+    return router.get_crewai_config()
 
 
 def get_analysis_llm_config() -> dict[str, Any]:
-    """Get LLM config for analysis tasks (may use different model)."""
-    if settings.openrouter_api_key:
-        return {
-            "model": f"openrouter/{settings.analysis_model}",
-            "api_key": settings.openrouter_api_key,
-            "base_url": settings.openrouter_base_url,
-        }
-    return get_llm_config()
+    """Get LLM config for analysis tasks (may use different model).
+
+    Returns:
+        CrewAI-compatible LLM configuration for analysis tasks
+    """
+    router = get_analysis_router()
+    return router.get_crewai_config()
 
 
 # Agent role definitions

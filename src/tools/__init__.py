@@ -31,6 +31,11 @@ from src.tools.web_search import (
     SearchResult,
     WebSearchTool,
 )
+from src.tools.youtube_research import (
+    VideoMetadata,
+    YouTubeResearchTool,
+    create_youtube_tool,
+)
 
 __all__ = [
     # RSS
@@ -59,4 +64,8 @@ __all__ = [
     "KeywordExtractorTool",
     "TopicMatcherTool",
     "Keyword",
+    # YouTube Research
+    "YouTubeResearchTool",
+    "VideoMetadata",
+    "create_youtube_tool",
 ]

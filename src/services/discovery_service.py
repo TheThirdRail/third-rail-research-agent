@@ -44,6 +44,7 @@ class DiscoveryService:
     def discover(
         self,
         topics: list[str] | None = None,
+        count: int = 10,
     ) -> dict[str, Any]:
         """Run discovery workflow to find relevant stories.
 
@@ -60,7 +61,7 @@ class DiscoveryService:
         logger.info(f"Discovering stories for topics: {topic_list[:5]}...")
 
         # Run the CrewAI discovery workflow
-        result = run_discovery(topic_list)
+        result = run_discovery(topic_list, count=count)
 
         logger.info("Discovery complete")
 

@@ -29,6 +29,7 @@ mock_crewai = MagicMock()
 mock_crewai.__path__ = []
 sys.modules["crewai"] = mock_crewai
 sys.modules["crewai.tools"] = MagicMock()
+sys.modules["crewai.tools.base_tool"] = MagicMock()
 
 
 class MockAgent:

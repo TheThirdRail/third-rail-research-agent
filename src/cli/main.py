@@ -45,7 +45,7 @@ def cli() -> None:
 @cli.command()
 @click.option("--count", "-n", default=10, help="Number of stories to discover")
 @click.option("--topics", "-t", multiple=True, help="Topic keywords to search")
-def discover(_count: int, topics: tuple[str, ...]) -> None:
+def discover(count: int, topics: tuple[str, ...]) -> None:
     """Discover relevant stories for your channel.
 
     Searches RSS feeds and web for stories matching your channel's focus areas.
@@ -64,7 +64,7 @@ def discover(_count: int, topics: tuple[str, ...]) -> None:
     with console.status("[bold green]Searching for stories..."):
         try:
             service = DiscoveryService()
-            result = service.discover(topic_list)
+            result = service.discover(topic_list, count=count)
             console.print("\n[bold green]Discovery Complete![/bold green]\n")
             console.print(result.get("raw_output", "No results"))
         except Exception as e:

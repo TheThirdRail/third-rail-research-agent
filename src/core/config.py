@@ -1,5 +1,6 @@
 """Application configuration using Pydantic Settings."""
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -107,3 +108,8 @@ def get_settings() -> Settings:
 
 # Convenience export
 settings = get_settings()
+
+# Back-compat: allow GEMINI_API_KEY to satisfy GOOGLE_API_KEY lookups.
+if settings.gemini_api_key and not settings.google_api_key:
+    settings.google_api_key = settings.gemini_api_key
+    os.environ.setdefault("GOOGLE_API_KEY", settings.gemini_api_key)

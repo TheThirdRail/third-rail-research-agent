@@ -5,7 +5,7 @@ from crewai import Crew, Process, Task
 from src.agents import create_news_aggregator_agent
 
 
-def create_discovery_tasks(channel_topics: list[str]) -> list[Task]:
+def create_discovery_tasks(channel_topics: list[str], count: int = 10) -> list[Task]:
     """Create tasks for the discovery workflow.
 
     Args:
@@ -16,6 +16,8 @@ def create_discovery_tasks(channel_topics: list[str]) -> list[Task]:
     """
     topics_str = ", ".join(channel_topics[:10])
 
+    max_count = max(1, count)
+
     # Task 1: Aggregate news from RSS feeds
     rss_task = Task(
         description=f"""Fetch recent news from RSS feeds related to these topics: {topics_str}
@@ -23,10 +25,10 @@ def create_discovery_tasks(channel_topics: list[str]) -> list[Task]:
         Use the RSS News Aggregator tool to:
         1. Fetch stories from the past 24 hours
         2. Focus on categories: center, libertarian, independent
-        3. Return up to 20 relevant stories
+        3. Return up to {max_count} relevant stories
 
         Return a list of story titles with their sources and URLs.""",
-        expected_output="A list of 10-20 news stories with titles, sources, and URLs.",
+        expected_output=f"A list of up to {max_count} news stories with titles, sources, and URLs.",
         agent=create_news_aggregator_agent(),
     )
 
@@ -39,15 +41,15 @@ def create_discovery_tasks(channel_topics: list[str]) -> list[Task]:
         2. Find stories not already in the RSS results
         3. Look for trending or breaking news
 
-        Return additional stories with sources and URLs.""",
-        expected_output="A list of 5-10 additional news stories from web search.",
+        Return additional stories with sources and URLs. Keep the total to roughly {max_count}.""",
+        expected_output=f"Additional news stories so the combined output is around {max_count}.",
         agent=create_news_aggregator_agent(),
     )
 
     return [rss_task, search_task]
 
 
-def run_discovery(channel_topics: list[str]) -> dict:
+def run_discovery(channel_topics: list[str], count: int = 10) -> dict:
     """Run the discovery workflow.
 
     Args:
@@ -56,7 +58,7 @@ def run_discovery(channel_topics: list[str]) -> dict:
     Returns:
         Dictionary with discovered stories
     """
-    tasks = create_discovery_tasks(channel_topics)
+    tasks = create_discovery_tasks(channel_topics, count=count)
 
     crew = Crew(
         agents=[create_news_aggregator_agent()],

@@ -13,6 +13,7 @@ from src.agents.profile_reader import create_profile_reader_agent, get_channel_c
 from src.agents.relevance_scorer import create_relevance_scorer_agent
 from src.agents.report_writer import create_report_writer_agent
 from src.agents.rhetorical_analyst import create_rhetorical_analyst_agent
+from src.agents.narrative_analyzer import create_narrative_analyzer_agent
 from src.agents.source_aggregator import create_source_aggregator_agent
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "create_bias_classifier_agent",
     "create_fact_extractor_agent",
     "create_rhetorical_analyst_agent",
+    "create_narrative_analyzer_agent",
     "create_report_writer_agent",
     "create_profile_reader_agent",
     "create_relevance_scorer_agent",

@@ -145,6 +145,23 @@ class Settings(BaseSettings):
     rss_seed_fallback_enabled: bool = True
     discovery_enrichment_enabled: bool = True
 
+    # Source gathering policy
+    candidate_probe_limit: int = Field(
+        default=15, description="Max candidate URLs to search/extract before stopping"
+    )
+    retained_source_min: int = Field(
+        default=3, description="Minimum final retained sources"
+    )
+    retained_source_max: int = Field(
+        default=5, description="Maximum final retained sources"
+    )
+    search_time_window_days: int = Field(
+        default=7, description="Default ±days for event-based search window"
+    )
+    strict_bucket_enforcement: bool = Field(
+        default=True, description="Fail/warn if required bias buckets are missing"
+    )
+
     # Database
     database_url: str = "sqlite:///data/research_agent.db"
 

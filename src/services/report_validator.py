@@ -85,3 +85,48 @@ def _normalize_url(url: str) -> str:
         return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{path}"
     except Exception:
         return url.lower().rstrip("/")
+
+
+def validate_evidence_limits(
+    report_markdown: str, missing_buckets: list[str]
+) -> list[str]:
+    """Validate that missing-bucket evidence limits banner is present.
+
+    Returns list of validation warnings (empty if all checks pass).
+    """
+    warnings: list[str] = []
+
+    if missing_buckets:
+        if "evidence limitation" not in report_markdown.lower():
+            warnings.append(
+                f"Report is missing evidence limitations banner. "
+                f"Missing buckets: {', '.join(missing_buckets)}"
+            )
+
+    return warnings
+
+
+def validate_orphaned_citations(report_markdown: str) -> list[str]:
+    """Check for citation markers that don't have corresponding footnotes.
+
+    Returns list of orphaned citation markers.
+    """
+    # Find all citation markers used in the text
+    text_citations = set(re.findall(r"\[\^(\d+)\]", report_markdown))
+
+    # Find all footnote definitions
+    footnote_defs = set()
+    for line in report_markdown.splitlines():
+        match = re.match(r"^\[\^(\d+)\]:", line.strip())
+        if match:
+            footnote_defs.add(match.group(1))
+
+    orphaned = text_citations - footnote_defs
+    warnings = []
+    if orphaned:
+        warnings.append(
+            f"Orphaned citation markers without footnote definitions: "
+            f"{', '.join(f'[^{n}]' for n in sorted(orphaned, key=int))}"
+        )
+
+    return warnings

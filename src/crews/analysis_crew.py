@@ -5,6 +5,7 @@ from crewai import Crew, Process, Task
 from src.agents import (
     create_bias_classifier_agent,
     create_fact_extractor_agent,
+    create_narrative_analyzer_agent,
     create_report_writer_agent,
     create_rhetorical_analyst_agent,
     create_source_aggregator_agent,
@@ -125,7 +126,33 @@ def create_analysis_tasks(
         context=[source_task, bias_task, fact_task],
     )
 
-    # Task 5: Write the final report
+        # Task 5: Narrative analysis
+    narrative_task = Task(
+        description=f"""Analyze the narrative patterns across all sources for this story:
+
+        Story: {story_description}
+
+        Using the fact extraction and rhetoric analysis above, produce:
+        1. **Mainstream Narrative**: The dominant story told by center/mainstream sources.
+        2. **Alternative Narrative**: How independent/non-mainstream sources frame it.
+        3. **Creator Angles**: 2-3 specific angles a libertarian/independent creator
+           could explore, grounded in evidence from the sources.
+        4. **Omission Patterns**: What each ideological side omits or underplays.
+        5. **Headline Framing Differences**: Notable differences in how outlets
+           headline the same event.
+        6. **Opinion Clusters**: Group similar opinions by ideological alignment.
+
+        Rules:
+        - Every narrative claim must reference source IDs from the source task.
+        - If a bias bucket is missing from the source set, note it as a
+          missing perspective — do NOT fabricate what that side would say.
+        - Separate evidence-derived patterns from creator-angle suggestions.""",
+        expected_output="Structured narrative analysis with mainstream/alternative/creator angles.",
+        agent=create_narrative_analyzer_agent(),
+        context=[source_task, bias_task, fact_task, rhetoric_task],
+    )
+
+    # Task 6: Write the final report
     report_task = Task(
         description=f"""Write a comprehensive research report for this story:
 
@@ -180,10 +207,10 @@ def create_analysis_tasks(
         Format as clean Markdown with clear sections.""",
         expected_output="A comprehensive Markdown report with all sections.",
         agent=create_report_writer_agent(),
-        context=[source_task, bias_task, fact_task, rhetoric_task],
+        context=[source_task, bias_task, fact_task, rhetoric_task, narrative_task],
     )
 
-    return [source_task, bias_task, fact_task, rhetoric_task, report_task]
+    return [source_task, bias_task, fact_task, rhetoric_task, narrative_task, report_task]
 
 
 def run_analysis(
@@ -209,6 +236,7 @@ def run_analysis(
             create_bias_classifier_agent(),
             create_fact_extractor_agent(),
             create_rhetorical_analyst_agent(),
+            create_narrative_analyzer_agent(),
             create_report_writer_agent(),
         ],
         tasks=tasks,

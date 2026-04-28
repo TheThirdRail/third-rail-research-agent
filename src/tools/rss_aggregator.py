@@ -32,14 +32,32 @@ class RSSAggregator:
     """Aggregates news from multiple RSS feeds."""
 
     def __init__(self, feeds_config_path: str | None = None):
-        """Initialize with feeds configuration."""
+        """Initialize with source registry or legacy feeds config."""
         self.feeds_config_path = feeds_config_path or str(
             settings.config_dir / "rss_feeds.yaml"
         )
         self.feeds = self._load_feeds()
 
     def _load_feeds(self) -> list[dict[str, Any]]:
-        """Load feeds from configuration file."""
+        """Load feeds from source registry, falling back to legacy config."""
+        # Try source registry first
+        try:
+            from src.services.source_registry import get_source_registry
+
+            registry = get_source_registry()
+            grouped = registry.get_all_rss_feeds()
+            feeds = []
+            for category, feed_list in grouped.items():
+                for feed in feed_list:
+                    feed["category"] = category
+                    feeds.append(feed)
+            if feeds:
+                logger.info("Loaded %d RSS feeds from source registry", len(feeds))
+                return feeds
+        except Exception as e:
+            logger.warning("Source registry unavailable, using legacy config: %s", e)
+
+        # Fallback to legacy rss_feeds.yaml
         try:
             with open(self.feeds_config_path) as f:
                 config = yaml.safe_load(f)
@@ -149,10 +167,21 @@ class RSSAggregator:
         keywords: list[str],
         max_age_hours: int = 48,
         max_per_feed: int = 10,
+        categories: list[str] | None = None,
     ) -> list[FeedItem]:
-        """Search feeds for items matching keywords."""
+        """Search feeds for items matching keywords.
+
+        Args:
+            keywords: List of keywords to search for.
+            max_age_hours: Maximum age of articles in hours.
+            max_per_feed: Maximum items per feed.
+            categories: Optional list of categories to filter feeds by.
+                Now properly applied even when keywords are present.
+        """
         all_items = self.fetch_all(
-            max_age_hours=max_age_hours, max_per_feed=max_per_feed
+            max_age_hours=max_age_hours,
+            max_per_feed=max_per_feed,
+            categories=categories,
         )
 
         # Filter by keywords
@@ -192,14 +221,21 @@ class RSSAggregatorTool(BaseTool):
             Formatted string of news items
         """
         aggregator = RSSAggregator()
+        category_list = (
+            [c.strip() for c in categories.split(",") if c.strip()]
+            if categories
+            else None
+        )
 
         if keywords:
             keyword_list = [k.strip() for k in keywords.split(",")]
-            items = aggregator.search_feeds(keyword_list, max_age_hours=max_age_hours)
-        else:
-            category_list = (
-                [c.strip() for c in categories.split(",")] if categories else None
+            # FIX: Pass categories to search_feeds (was previously ignored)
+            items = aggregator.search_feeds(
+                keyword_list,
+                max_age_hours=max_age_hours,
+                categories=category_list,
             )
+        else:
             items = aggregator.fetch_all(
                 max_age_hours=max_age_hours, categories=category_list
             )

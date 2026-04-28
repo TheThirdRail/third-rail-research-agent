@@ -38,6 +38,9 @@ class Story(Base):
     status: Mapped[str] = mapped_column(
         String(20), default="pending"
     )  # pending, selected, analyzed, published
+    parsed_metadata: Mapped[str] = mapped_column(
+        Text, default="{}"
+    )  # JSON: StoryPacket from story parser
 
     # Relationships
     sources: Mapped[list["Source"]] = relationship(
@@ -75,6 +78,11 @@ class Source(Base):
         String(50), default="unknown"
     )  # dataset, llm, manual
     factual_rating: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    bias_provenance: Mapped[str] = mapped_column(
+        String(50), default="unknown"
+    )  # curated, allsides, llm, heuristic
+    is_curated_source: Mapped[bool] = mapped_column(Boolean, default=False)
+    bias_category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     extracted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -108,6 +116,17 @@ class Analysis(Base):
 
     # Opinions
     opinions_by_side: Mapped[str] = mapped_column(Text, default="{}")  # JSON object
+
+    # Structured extraction
+    structured_claims: Mapped[str] = mapped_column(
+        Text, default="{}"
+    )  # JSON: FactExtractionResult
+    coverage_asymmetry: Mapped[str] = mapped_column(
+        Text, default="{}"
+    )  # JSON: CoverageAsymmetry
+    narrative_json: Mapped[str] = mapped_column(
+        Text, default="{}"
+    )  # JSON: NarrativeResult
 
     # Output
     outline: Mapped[str] = mapped_column(Text, default="")
@@ -170,6 +189,11 @@ class ChannelProfile(Base):
     worldview: Mapped[str] = mapped_column(String(100), default="libertarian")
     topics: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    owner_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    raw_content: Mapped[str] = mapped_column(Text, default="")
+    format: Mapped[str] = mapped_column(String(20), default="yaml")
+    parsed_json: Mapped[str] = mapped_column(Text, default="{}")
+    version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow

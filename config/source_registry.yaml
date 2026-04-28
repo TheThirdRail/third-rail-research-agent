@@ -1,0 +1,1174 @@
+# Canonical Source Registry
+# Single source of truth for all news outlets used at runtime.
+# Merges data from bias_sources.yaml and rss_feeds.yaml.
+# Machine-readable docs and human markdown are generated FROM this file.
+#
+# Schema per outlet:
+#   name: Display name
+#   domain: Primary domain (lookup key)
+#   homepage_url: Homepage URL
+#   bias: Integer -4 to +4
+#   bias_label: Human-readable bias label
+#   category: mainstream | libertarian | independent | alternative | fringe_conspiracy | religion_spiritual | supernatural
+#   factual_rating: very_low | low | mixed | mostly_factual | high | very_high
+#   rss_urls: List of RSS feed URLs
+#   search_aliases: Alternative names/domains for web search
+#   syndication_group: Wire service or syndication group (e.g., "ap_wire")
+#   allow_in_analysis: Whether this outlet can appear in final analysis source sets
+#   notes: Free-form notes
+
+# === Bias Scale ===
+# -4: Far Left
+# -3: Left
+# -2: Lean Left
+# -1: Slight Left
+#  0: Center
+# +1: Slight Right
+# +2: Lean Right
+# +3: Right
+# +4: Far Right
+
+sources:
+  # ──────────────────────── CENTER (0) ────────────────────────
+  - name: Reuters
+    domain: reuters.com
+    homepage_url: https://www.reuters.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://www.reutersagency.com/feed/?taxonomy=best-topics&post_type=best
+    search_aliases: ["Reuters"]
+    syndication_group: reuters_wire
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Associated Press
+    domain: apnews.com
+    homepage_url: https://apnews.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://rsshub.app/apnews/topics/apf-topnews
+    search_aliases: ["AP", "Associated Press"]
+    syndication_group: ap_wire
+    allow_in_analysis: true
+    notes: ""
+
+  - name: C-SPAN
+    domain: c-span.org
+    homepage_url: https://www.c-span.org
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://www.c-span.org/podcasts/rss
+    search_aliases: ["C-SPAN", "CSPAN"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: The Hill
+    domain: thehill.com
+    homepage_url: https://thehill.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://thehill.com/feed/
+    search_aliases: ["The Hill"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: "AllSides rates as Center; some classify as Slight Right"
+
+  # ──────────────────────── SLIGHT LEFT (-1) ────────────────────────
+  - name: NPR
+    domain: npr.org
+    homepage_url: https://www.npr.org
+    bias: -1
+    bias_label: Slight Left
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://feeds.npr.org/1001/rss.xml
+    search_aliases: ["NPR", "National Public Radio"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: BBC
+    domain: bbc.com
+    homepage_url: https://www.bbc.com
+    bias: -1
+    bias_label: Slight Left
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - http://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml
+    search_aliases: ["BBC", "BBC News"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: "Also accessible via bbc.co.uk"
+
+  - name: PBS
+    domain: pbs.org
+    homepage_url: https://www.pbs.org
+    bias: -1
+    bias_label: Slight Left
+    category: mainstream
+    factual_rating: high
+    rss_urls: []
+    search_aliases: ["PBS", "PBS NewsHour"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # ──────────────────────── LEAN LEFT (-2) ────────────────────────
+  - name: New York Times
+    domain: nytimes.com
+    homepage_url: https://www.nytimes.com
+    bias: -2
+    bias_label: Lean Left
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
+      - https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml
+      - https://rss.nytimes.com/services/xml/rss/nyt/US.xml
+    search_aliases: ["NYT", "New York Times", "NY Times"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Washington Post
+    domain: washingtonpost.com
+    homepage_url: https://www.washingtonpost.com
+    bias: -2
+    bias_label: Lean Left
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://feeds.washingtonpost.com/rss/politics
+    search_aliases: ["WaPo", "Washington Post"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: CNN
+    domain: cnn.com
+    homepage_url: https://www.cnn.com
+    bias: -2
+    bias_label: Lean Left
+    category: mainstream
+    factual_rating: mixed
+    rss_urls:
+      - http://rss.cnn.com/rss/cnn_topstories.rss
+    search_aliases: ["CNN"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: The Guardian
+    domain: theguardian.com
+    homepage_url: https://www.theguardian.com
+    bias: -2
+    bias_label: Lean Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls: []
+    search_aliases: ["The Guardian", "Guardian"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Politico
+    domain: politico.com
+    homepage_url: https://www.politico.com
+    bias: -2
+    bias_label: Lean Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls: []
+    search_aliases: ["Politico"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # ──────────────────────── LEFT (-3) ────────────────────────
+  - name: MSNBC
+    domain: msnbc.com
+    homepage_url: https://www.msnbc.com
+    bias: -3
+    bias_label: Left
+    category: mainstream
+    factual_rating: mixed
+    rss_urls:
+      - https://www.msnbc.com/feeds/latest
+    search_aliases: ["MSNBC"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: HuffPost
+    domain: huffpost.com
+    homepage_url: https://www.huffpost.com
+    bias: -3
+    bias_label: Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.huffpost.com/section/politics/feed
+    search_aliases: ["HuffPost", "Huffington Post"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Vox
+    domain: vox.com
+    homepage_url: https://www.vox.com
+    bias: -3
+    bias_label: Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls: []
+    search_aliases: ["Vox"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Slate
+    domain: slate.com
+    homepage_url: https://slate.com
+    bias: -3
+    bias_label: Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls: []
+    search_aliases: ["Slate"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # ──────────────────────── FAR LEFT (-4) ────────────────────────
+  - name: Jacobin
+    domain: jacobin.com
+    homepage_url: https://jacobin.com
+    bias: -4
+    bias_label: Far Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://jacobin.com/feed
+    search_aliases: ["Jacobin"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: TruthOut
+    domain: truthout.org
+    homepage_url: https://truthout.org
+    bias: -4
+    bias_label: Far Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls: []
+    search_aliases: ["TruthOut", "Truthout"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Common Dreams
+    domain: commondreams.org
+    homepage_url: https://www.commondreams.org
+    bias: -4
+    bias_label: Far Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls: []
+    search_aliases: ["Common Dreams"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # ──────────────────────── SLIGHT RIGHT (+1) ────────────────────────
+  - name: RealClearPolitics
+    domain: realclearpolitics.com
+    homepage_url: https://www.realclearpolitics.com
+    bias: 1
+    bias_label: Slight Right
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.realclearpolitics.com/index.xml
+    search_aliases: ["RealClearPolitics", "RCP"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Axios
+    domain: axios.com
+    homepage_url: https://www.axios.com
+    bias: 1
+    bias_label: Slight Right
+    category: mainstream
+    factual_rating: high
+    rss_urls: []
+    search_aliases: ["Axios"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # ──────────────────────── LEAN RIGHT (+2) ────────────────────────
+  - name: Wall Street Journal
+    domain: wsj.com
+    homepage_url: https://www.wsj.com
+    bias: 2
+    bias_label: Lean Right
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://feeds.a.dj.com/rss/RSSOpinion.xml
+    search_aliases: ["WSJ", "Wall Street Journal"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: New York Post
+    domain: nypost.com
+    homepage_url: https://nypost.com
+    bias: 2
+    bias_label: Lean Right
+    category: mainstream
+    factual_rating: mixed
+    rss_urls:
+      - https://nypost.com/feed/
+    search_aliases: ["NY Post", "New York Post"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Washington Examiner
+    domain: washingtonexaminer.com
+    homepage_url: https://www.washingtonexaminer.com
+    bias: 2
+    bias_label: Lean Right
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls: []
+    search_aliases: ["Washington Examiner"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # ──────────────────────── RIGHT (+3) ────────────────────────
+  - name: Fox News
+    domain: foxnews.com
+    homepage_url: https://www.foxnews.com
+    bias: 3
+    bias_label: Right
+    category: mainstream
+    factual_rating: mixed
+    rss_urls:
+      - https://moxie.foxnews.com/google-publisher/politics.xml
+    search_aliases: ["Fox News", "Fox"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Daily Wire
+    domain: dailywire.com
+    homepage_url: https://www.dailywire.com
+    bias: 3
+    bias_label: Right
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.dailywire.com/feeds/rss.xml
+    search_aliases: ["Daily Wire"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: National Review
+    domain: nationalreview.com
+    homepage_url: https://www.nationalreview.com
+    bias: 3
+    bias_label: Right
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.nationalreview.com/feed/
+    search_aliases: ["National Review"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: The Blaze
+    domain: theblaze.com
+    homepage_url: https://www.theblaze.com
+    bias: 3
+    bias_label: Right
+    category: mainstream
+    factual_rating: mixed
+    rss_urls: []
+    search_aliases: ["The Blaze"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # ──────────────────────── FAR RIGHT (+4) ────────────────────────
+  - name: Breitbart
+    domain: breitbart.com
+    homepage_url: https://www.breitbart.com
+    bias: 4
+    bias_label: Far Right
+    category: mainstream
+    factual_rating: mixed
+    rss_urls:
+      - https://feeds.feedburner.com/breitbart
+    search_aliases: ["Breitbart"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Gateway Pundit
+    domain: thegatewaypundit.com
+    homepage_url: https://www.thegatewaypundit.com
+    bias: 4
+    bias_label: Far Right
+    category: mainstream
+    factual_rating: low
+    rss_urls: []
+    search_aliases: ["Gateway Pundit"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: InfoWars
+    domain: infowars.com
+    homepage_url: https://www.infowars.com
+    bias: 4
+    bias_label: Far Right
+    category: fringe_conspiracy
+    factual_rating: very_low
+    rss_urls:
+      - https://rss.infowars.com/Alex.xml
+      - https://rss.infowars.com/hourly/InfowarsHourlyAudio.xml
+    search_aliases: ["InfoWars", "Alex Jones"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # ──────────────────────── LIBERTARIAN ────────────────────────
+  - name: Reason
+    domain: reason.com
+    homepage_url: https://reason.com
+    bias: 0
+    bias_label: Center
+    category: libertarian
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://reason.com/feed/
+    search_aliases: ["Reason Magazine"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: "Libertarian, not left-right center"
+
+  - name: Mises Institute
+    domain: mises.org
+    homepage_url: https://mises.org
+    bias: 0
+    bias_label: Center
+    category: libertarian
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://mises.org/feed/wire
+    search_aliases: ["Mises Institute", "Mises"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: "Austrian economics / libertarian"
+
+  - name: FEE
+    domain: fee.org
+    homepage_url: https://fee.org
+    bias: 1
+    bias_label: Slight Right
+    category: libertarian
+    factual_rating: mostly_factual
+    rss_urls: []
+    search_aliases: ["FEE", "Foundation for Economic Education"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Antiwar.com
+    domain: antiwar.com
+    homepage_url: https://www.antiwar.com
+    bias: 0
+    bias_label: Center
+    category: libertarian
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.antiwar.com/feed/
+    search_aliases: ["Antiwar"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # ──────────────────────── INDEPENDENT ────────────────────────
+  - name: The Intercept
+    domain: theintercept.com
+    homepage_url: https://theintercept.com
+    bias: -2
+    bias_label: Lean Left
+    category: independent
+    factual_rating: high
+    rss_urls:
+      - https://theintercept.com/feed/?lang=en
+    search_aliases: ["The Intercept"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Zero Hedge
+    domain: zerohedge.com
+    homepage_url: https://www.zerohedge.com
+    bias: 2
+    bias_label: Lean Right
+    category: independent
+    factual_rating: mixed
+    rss_urls:
+      - https://feeds.feedburner.com/zerohedge/feed
+    search_aliases: ["Zero Hedge", "ZeroHedge"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Matt Taibbi
+    domain: taibbi.substack.com
+    homepage_url: https://taibbi.substack.com
+    bias: 0
+    bias_label: Center
+    category: independent
+    factual_rating: mostly_factual
+    rss_urls: []
+    search_aliases: ["Matt Taibbi", "Taibbi"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Glenn Greenwald
+    domain: greenwald.substack.com
+    homepage_url: https://greenwald.substack.com
+    bias: 0
+    bias_label: Center
+    category: independent
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://greenwald.substack.com/feed
+    search_aliases: ["Glenn Greenwald", "Greenwald"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # ──────────────────────── ALTERNATIVE / PODCASTS ────────────────────────
+  - name: Joe Rogan
+    domain: joerogan.com
+    homepage_url: https://www.joerogan.com
+    bias: 0
+    bias_label: Center
+    category: alternative
+    factual_rating: mixed
+    rss_urls: []
+    search_aliases: ["Joe Rogan", "JRE"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Tim Pool
+    domain: timcast.com
+    homepage_url: https://timcast.com
+    bias: 2
+    bias_label: Lean Right
+    category: alternative
+    factual_rating: mixed
+    rss_urls: []
+    search_aliases: ["Tim Pool", "Timcast"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Breaking Points
+    domain: breakingpoints.com
+    homepage_url: https://breakingpoints.com
+    bias: 0
+    bias_label: Center
+    category: alternative
+    factual_rating: mostly_factual
+    rss_urls: []
+    search_aliases: ["Breaking Points"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # ──────────────────────── FRINGE / CONSPIRACY ────────────────────────
+  - name: The Corbett Report
+    domain: corbettreport.com
+    homepage_url: https://www.corbettreport.com
+    bias: 1
+    bias_label: Slight Right
+    category: fringe_conspiracy
+    factual_rating: mixed
+    rss_urls:
+      - https://www.corbettreport.com/articlerss.xml
+      - https://www.corbettreport.com/newrss.xml
+    search_aliases: ["Corbett Report"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # ──────────────────────── RELIGION / SPIRITUAL ────────────────────────
+  - name: Catholic News Agency
+    domain: catholicnewsagency.com
+    homepage_url: https://www.catholicnewsagency.com
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.catholicnewsagency.com/rss/news.xml
+    search_aliases: ["CNA", "Catholic News Agency"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: USCCB
+    domain: usccb.org
+    homepage_url: https://www.usccb.org
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.usccb.org/news/rss/index.cfm
+    search_aliases: ["USCCB"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: National Catholic Register
+    domain: ncregister.com
+    homepage_url: https://ncregister.com
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://ncregister.com/feeds/general-news.xml
+    search_aliases: ["National Catholic Register"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: National Catholic Reporter
+    domain: ncronline.org
+    homepage_url: https://www.ncronline.org
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - http://ncronline.org/rss.xml
+    search_aliases: ["National Catholic Reporter", "NCR"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # ──────────────────────── SUPERNATURAL / PARANORMAL ────────────────────────
+  - name: Mysterious Universe
+    domain: mysteriousuniverse.org
+    homepage_url: https://mysteriousuniverse.org
+    bias: 0
+    bias_label: Center
+    category: supernatural
+    factual_rating: mixed
+    rss_urls:
+      - https://mysteriousuniverse.org/feed/podcast
+    search_aliases: ["Mysterious Universe"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Coast to Coast AM
+    domain: coasttocoastam.com
+    homepage_url: https://www.coasttocoastam.com
+    bias: 0
+    bias_label: Center
+    category: supernatural
+    factual_rating: mixed
+    rss_urls:
+      - https://rss.premiereradio.net/podcast/coast.xml
+    search_aliases: ["Coast to Coast AM", "Coast to Coast"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # ──────────────────────── ADDITIONAL FROM Deep-RSS-Research ────────────────────────
+  # Center additions
+  - name: Forbes
+    domain: forbes.com
+    homepage_url: https://www.forbes.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.forbes.com/business/feed/
+      - https://www.forbes.com/investing/feed/
+    search_aliases: ["Forbes"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Christian Science Monitor
+    domain: csmonitor.com
+    homepage_url: https://www.csmonitor.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://rss.csmonitor.com/feeds/world
+      - https://rss.csmonitor.com/feeds/usa
+    search_aliases: ["CSM", "Christian Science Monitor"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Newsweek
+    domain: newsweek.com
+    homepage_url: https://www.newsweek.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.newsweek.com/rss
+    search_aliases: ["Newsweek"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Bloomberg
+    domain: bloomberg.com
+    homepage_url: https://www.bloomberg.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://feeds.bloomberg.com/markets/news.rss
+      - https://feeds.bloomberg.com/technology/news.rss
+    search_aliases: ["Bloomberg"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: MarketWatch
+    domain: marketwatch.com
+    homepage_url: https://www.marketwatch.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.marketwatch.com/rss/topstories
+    search_aliases: ["MarketWatch"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # Slight Left additions
+  - name: USA Today
+    domain: usatoday.com
+    homepage_url: https://www.usatoday.com
+    bias: -1
+    bias_label: Slight Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://rssfeeds.usatoday.com/usatoday-newstopstories
+    search_aliases: ["USA Today"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: The Conversation
+    domain: theconversation.com
+    homepage_url: https://theconversation.com/us
+    bias: -1
+    bias_label: Slight Left
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://theconversation.com/us/articles.atom
+    search_aliases: ["The Conversation"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # Lean Left additions
+  - name: ABC News
+    domain: abcnews.go.com
+    homepage_url: https://abcnews.go.com
+    bias: -2
+    bias_label: Lean Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - http://feeds.abcnews.com/abcnews/usheadlines
+      - http://feeds.abcnews.com/abcnews/politicsheadlines
+    search_aliases: ["ABC News"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Al Jazeera
+    domain: aljazeera.com
+    homepage_url: https://www.aljazeera.com
+    bias: -2
+    bias_label: Lean Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.aljazeera.com/xml/rss/all.xml
+    search_aliases: ["Al Jazeera"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Business Insider
+    domain: businessinsider.com
+    homepage_url: https://www.businessinsider.com
+    bias: -2
+    bias_label: Lean Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - http://feeds.businessinsider.com/custom/all
+    search_aliases: ["Business Insider", "BI"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # Left additions
+  - name: The Atlantic
+    domain: theatlantic.com
+    homepage_url: https://www.theatlantic.com
+    bias: -3
+    bias_label: Left
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://www.theatlantic.com/feed/all/
+    search_aliases: ["The Atlantic"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: The Nation
+    domain: thenation.com
+    homepage_url: https://www.thenation.com
+    bias: -3
+    bias_label: Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.thenation.com/feed/?post_type=article
+    search_aliases: ["The Nation"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Mother Jones
+    domain: motherjones.com
+    homepage_url: https://www.motherjones.com
+    bias: -3
+    bias_label: Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.motherjones.com/feed/
+    search_aliases: ["Mother Jones"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # Far Left additions
+  - name: Democracy Now
+    domain: democracynow.org
+    homepage_url: https://www.democracynow.org
+    bias: -4
+    bias_label: Far Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.democracynow.org/democracynow.rss
+    search_aliases: ["Democracy Now"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: The Grayzone
+    domain: thegrayzone.com
+    homepage_url: https://thegrayzone.com
+    bias: -4
+    bias_label: Far Left
+    category: independent
+    factual_rating: mixed
+    rss_urls:
+      - https://thegrayzone.com/feed/
+    search_aliases: ["The Grayzone"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # Slight Right additions
+  - name: Financial Times
+    domain: ft.com
+    homepage_url: https://www.ft.com
+    bias: 1
+    bias_label: Slight Right
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://www.ft.com/?format=rss
+    search_aliases: ["FT", "Financial Times"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # Lean Right additions
+  - name: Daily Mail
+    domain: dailymail.co.uk
+    homepage_url: https://www.dailymail.co.uk
+    bias: 2
+    bias_label: Lean Right
+    category: mainstream
+    factual_rating: low
+    rss_urls:
+      - https://www.dailymail.co.uk/ushome/index.rss
+    search_aliases: ["Daily Mail"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Washington Times
+    domain: washingtontimes.com
+    homepage_url: https://www.washingtontimes.com
+    bias: 2
+    bias_label: Lean Right
+    category: mainstream
+    factual_rating: mixed
+    rss_urls:
+      - https://www.washingtontimes.com/rss/headlines/news/
+    search_aliases: ["Washington Times"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # Right additions
+  - name: The American Conservative
+    domain: theamericanconservative.com
+    homepage_url: https://www.theamericanconservative.com
+    bias: 3
+    bias_label: Right
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.theamericanconservative.com/feed/
+    search_aliases: ["The American Conservative", "TAC"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Newsmax
+    domain: newsmax.com
+    homepage_url: https://www.newsmax.com
+    bias: 3
+    bias_label: Right
+    category: mainstream
+    factual_rating: mixed
+    rss_urls:
+      - https://www.newsmax.com/rss/Newsfront/16/
+    search_aliases: ["Newsmax"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # Far Right additions
+  - name: Daily Caller
+    domain: dailycaller.com
+    homepage_url: https://dailycaller.com
+    bias: 4
+    bias_label: Far Right
+    category: mainstream
+    factual_rating: mixed
+    rss_urls:
+      - http://dailycaller.com/section/politics/feed/
+    search_aliases: ["Daily Caller"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: OANN
+    domain: oann.com
+    homepage_url: https://www.oann.com
+    bias: 4
+    bias_label: Far Right
+    category: mainstream
+    factual_rating: low
+    rss_urls:
+      - https://www.oann.com/feed/
+    search_aliases: ["OANN", "One America News"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # Fringe additions
+  - name: Above Top Secret
+    domain: abovetopsecret.com
+    homepage_url: https://www.abovetopsecret.com
+    bias: 0
+    bias_label: Center
+    category: fringe_conspiracy
+    factual_rating: low
+    rss_urls:
+      - https://www.abovetopsecret.com/rss/news.xml
+    search_aliases: ["Above Top Secret", "ATS"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Natural News
+    domain: naturalnews.com
+    homepage_url: https://www.naturalnews.com
+    bias: 4
+    bias_label: Far Right
+    category: fringe_conspiracy
+    factual_rating: very_low
+    rss_urls:
+      - https://www.naturalnews.com/rss.xml
+    search_aliases: ["Natural News"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # Religion additions
+  - name: Christianity Today
+    domain: christianitytoday.com
+    homepage_url: https://www.christianitytoday.com
+    bias: 1
+    bias_label: Slight Right
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - http://feeds.christianitytoday.com/christianitytoday/ctmag
+    search_aliases: ["Christianity Today"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  - name: Religion News Service
+    domain: religionnews.com
+    homepage_url: https://religionnews.com
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://religionnews.com/feed/
+    search_aliases: ["RNS", "Religion News Service"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: ""
+
+  # Supernatural additions
+  - name: The Black Vault
+    domain: theblackvault.com
+    homepage_url: https://www.theblackvault.com
+    bias: 0
+    bias_label: Center
+    category: supernatural
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.theblackvault.com/documentarchive/feed/
+    search_aliases: ["The Black Vault"]
+    syndication_group: null
+    allow_in_analysis: true
+    notes: "FOIA-focused"
+
+# Topic-specific feeds (not bias-classified, supplementary)
+topic_feeds:
+  geopolitics:
+    - name: War on the Rocks
+      url: https://warontherocks.com/feed/
+
+  technology:
+    - name: TechCrunch
+      url: https://techcrunch.com/feed/
+
+  economics:
+    - name: ZeroHedge Markets
+      url: https://feeds.feedburner.com/zerohedge/feed
+
+# Bias bucket definitions (for BalancedSourcePlanner)
+bias_buckets:
+  far_left: [-4]
+  left: [-3]
+  lean_left: [-2]
+  slight_left: [-1]
+  center: [0]
+  slight_right: [1]
+  lean_right: [2]
+  right: [3]
+  far_right: [4]
+
+# Bucket groups for coverage policy
+bucket_groups:
+  left_side: [-4, -3, -2]
+  center_side: [-1, 0, 1]
+  right_side: [2, 3, 4]
+
+# Factual rating scale
+factual_ratings:
+  very_low: 1
+  low: 2
+  mixed: 3
+  mostly_factual: 4
+  high: 5
+  very_high: 6
+
+# Bias labels
+bias_labels:
+  -4: "Far Left"
+  -3: "Left"
+  -2: "Lean Left"
+  -1: "Slight Left"
+  0: "Center"
+  1: "Slight Right"
+  2: "Lean Right"
+  3: "Right"
+  4: "Far Right"
+
+# Refresh settings (RSS)
+rss_settings:
+  default_max_age_hours: 24
+  max_items_per_feed: 10
+  request_timeout_seconds: 10
+  user_agent: "ResearchAgent/1.0 (News Research Tool)"

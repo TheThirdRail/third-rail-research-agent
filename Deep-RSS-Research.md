@@ -155,7 +155,7 @@ This is the comprehensive list of sources our research agent searches through, c
 * **The Gateway Pundit** (Bias: 4\)  
   * [Gateway Pundit Main](https://www.thegatewaypundit.com/feed/)  
 * **The Alex Jones Show** (Bias: 4\)  
-  * [Rumble RSS (TheAlexJonesShow)](https://rumble.com/feeds/videos.rss?v=2&channel=TheAlexJonesShow)  
+  * [The Alex Jones Show Website RSS](https://www.alexjoneslive.com/feed/)  
   * [X/Twitter Archive (Nitter)](https://nitter.net/RealAlexJones/rss)  
 * **The Daily Caller** (Bias: 4\)  
   * [Daily Caller Politics](http://dailycaller.com/section/politics/feed/)  

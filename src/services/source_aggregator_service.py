@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from src.core.config import settings
 from src.core.exceptions import SourceExtractionError
 from src.services.bias_resolution_service import BiasResolutionInput, BiasResolutionService
+from src.services.duplicate_detector import check_duplicate
 from src.services.rss_fallback_service import RssFallbackResult, RssFallbackService
 from src.tools.article_extractor import ArticleExtractor
 from src.tools.bias_classifier import BiasResult
@@ -37,10 +38,12 @@ class SourceCandidate:
 
 
 class SourceAggregatorService:
-    """Preflight sources before running CrewAI analysis."""
+    """Preflight sources before running CrewAI analysis.
 
-    MIN_SOURCES = 2
-    MAX_SOURCES = 5
+    Integrates balanced source planning, duplicate detection, and
+    coverage-aware stopping conditions.
+    """
+
     MIN_TEXT_LENGTH = 200
 
     def __init__(self) -> None:
@@ -51,6 +54,9 @@ class SourceAggregatorService:
             RssFallbackService() if settings.rss_seed_fallback_enabled else None
         )
         self._last_seed_context_note: str | None = None
+        self._missing_buckets: list[str] = []
+        self._probed_count: int = 0
+        self._duplicate_count: int = 0
 
     def gather_sources(self, description: str, url: str | None) -> list[SourceCandidate]:
         """Gather and preflight sources based on description and optional URL."""
@@ -115,9 +121,11 @@ class SourceAggregatorService:
         results = self._search_queries(queries)
 
         for result in results:
-            if len(sources) >= self.MAX_SOURCES:
+            if len(sources) >= settings.retained_source_max:
                 break
             if self._bias_spread_met(sources):
+                break
+            if self._probed_count >= settings.candidate_probe_limit:
                 break
 
             candidate_url = result.url
@@ -128,6 +136,7 @@ class SourceAggregatorService:
             if normalized_url in seen_urls or domain in seen_domains:
                 continue
 
+            self._probed_count += 1
             candidate = self._extract_url(candidate_url, require_success=False)
             if not candidate or not candidate.full_text:
                 continue
@@ -135,13 +144,37 @@ class SourceAggregatorService:
             if len(candidate.full_text) < self.MIN_TEXT_LENGTH:
                 continue
 
+            # Duplicate / syndication detection
+            existing_for_dedup = [
+                {
+                    "url": s.url,
+                    "title": s.title,
+                    "body_text": s.full_text[:500],
+                    "domain": s.domain,
+                }
+                for s in sources
+            ]
+            dup_result = check_duplicate(
+                candidate.url,
+                candidate.title,
+                candidate.full_text[:500],
+                candidate.domain,
+                existing_for_dedup,
+            )
+            if dup_result.is_duplicate:
+                self._duplicate_count += 1
+                logger.debug(
+                    "Skipping duplicate %s: %s", candidate.url, dup_result.reason
+                )
+                continue
+
             sources.append(candidate)
             seen_urls.add(normalized_url)
             seen_domains.add(domain)
 
-        if len(sources) < self.MIN_SOURCES:
+        if len(sources) < settings.retained_source_min:
             detail = (
-                f"Only {len(sources)} sources extracted; need at least {self.MIN_SOURCES}."
+                f"Only {len(sources)} sources extracted; need at least {settings.retained_source_min}."
             )
             if primary_error and not sources:
                 detail += (
@@ -205,6 +238,51 @@ class SourceAggregatorService:
             "right_count": right,
             "bias_spread_met": left > 0 and right > 0,
         }
+
+    def summarize_coverage(self, sources: list[SourceCandidate]) -> dict:
+        """Summarize coverage status including bucket details.
+
+        Returns structured status: coverage_satisfied, missing_buckets,
+        probed_count, retained_count, duplicate_count.
+        """
+        left = sum(
+            1 for s in sources
+            if s.bias_result and getattr(s.bias_result, "bias", 0) <= -2
+        )
+        center = sum(
+            1 for s in sources
+            if s.bias_result and abs(getattr(s.bias_result, "bias", 99)) <= 1
+        )
+        right = sum(
+            1 for s in sources
+            if s.bias_result and getattr(s.bias_result, "bias", 0) >= 2
+        )
+
+        missing: list[str] = []
+        if left == 0:
+            missing.append("left_side")
+        if center == 0:
+            missing.append("center")
+        if right == 0:
+            missing.append("right_side")
+
+        self._missing_buckets = missing
+
+        return {
+            "coverage_satisfied": len(missing) == 0,
+            "missing_buckets": missing,
+            "left_count": left,
+            "center_count": center,
+            "right_count": right,
+            "probed_count": self._probed_count,
+            "retained_count": len(sources),
+            "duplicate_count": self._duplicate_count,
+        }
+
+    @property
+    def missing_buckets(self) -> list[str]:
+        """Return list of required but unfilled bias buckets."""
+        return self._missing_buckets
     def _build_queries(
         self,
         description: str,
@@ -339,13 +417,21 @@ class SourceAggregatorService:
         return None
 
     def _bias_spread_met(self, sources: list[SourceCandidate]) -> bool:
-        left = any(
+        """Check if bias coverage requirements are met.
+
+        Uses explicit bucket group checks (left, center, right)
+        instead of the old any-left-any-right approach.
+        """
+        has_left = any(
             s.bias_result and getattr(s.bias_result, "bias", 0) <= -2 for s in sources
         )
-        right = any(
+        has_center = any(
+            s.bias_result and abs(getattr(s.bias_result, "bias", 99)) <= 1 for s in sources
+        )
+        has_right = any(
             s.bias_result and getattr(s.bias_result, "bias", 0) >= 2 for s in sources
         )
-        return left and right and len(sources) >= self.MIN_SOURCES
+        return has_left and has_center and has_right and len(sources) >= settings.retained_source_min
 
     def _slug_keywords(self, url: str) -> list[str]:
         try:

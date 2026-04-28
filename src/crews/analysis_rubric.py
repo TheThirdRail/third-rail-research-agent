@@ -17,12 +17,28 @@ Linguistic manipulation markers:
 - Euphemism/dysphemism or passive voice hiding agency ("mistakes were made").
 - Bandwagon cues ("everyone knows"), glittering generalities, empty virtue-word clusters.
 - Presupposition traps that smuggle disputed assumptions as given.
+- Selective quantification / denominator omission (big number without base rate).
+- Causal laundering: attributing causation through proxy associations.
+- Attribution laundering: citing "experts say" without naming the experts.
+- Passive-voice agency concealment: hiding who did an action.
+- Definitional retreat / motte-and-bailey: defending a mild claim after asserting a strong one.
+- Certainty inflation: presenting uncertain findings as definitive.
+- Emotional anchoring: leading with emotionally charged framing before neutral facts.
+- Adversarial labeling: describing opponents in pejorative terms as default.
+- Demonization-by-association: linking a subject to a disliked group without evidence.
+- Distinguish outlet voice from quoted voice: attribute manipulation to the outlet,
+  not to a quoted source unless the outlet endorses it.
 """
 
 LOGICAL_FALLACY_PATTERNS = """
 Logical fallacy patterns:
 - Ad hominem, straw man, false dichotomy, slippery slope, red herring, whataboutism.
 - Motte-and-bailey, equivocation, circular reasoning, no true Scotsman, Texas sharpshooter.
+- Guilt by association, poisoning the well, appeal to fear, hasty generalization.
+- Composition/division, moving the goalposts, appeal to authority without warrant.
+- Anecdotal overreach (one case treated as trend), suppressed evidence, non-sequitur.
+- False balance: presenting fringe views as equivalent to scientific/expert consensus.
+- Base-rate neglect: omitting how common/rare an event is when citing a count.
 - Distinguish disagreement from fallacy: flag only when argument structure matches.
 """
 
@@ -37,6 +53,7 @@ Media framing patterns:
 DOG_WHISTLE_CONTEXT_RULES = """
 Dog whistle and coded-term context rules:
 - Context-gated analysis only; do not classify by keyword alone.
+- Require TWO independent context signals before flagging coded language.
 - Distinguish literal/policy usage from coded in-group signaling.
 - Flag as "possible coded signal" when confidence is low or context is ambiguous.
 - Apply symmetry checks across ideological directions; avoid one-sided enforcement.

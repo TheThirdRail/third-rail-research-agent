@@ -17,6 +17,8 @@ export default function Dashboard() {
   const [analyzing, setAnalyzing] = useState(false);
   const [report, setReport] = useState<string | null>(null);
   const [isReportOpen, setIsReportOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sourceHint, setSourceHint] = useState<string | null>(null);
 
   const fetchAgents = async () => {
     try {
@@ -37,13 +39,24 @@ export default function Dashboard() {
 
   const handleAnalyze = async (description: string, url: string | null) => {
     setAnalyzing(true);
+    setError(null);
+    setSourceHint(null);
     try {
       const response = await analyzeStory({ description, url });
       setReport(response.report);
       setIsReportOpen(true);
+      if (response.source_count !== undefined && response.bias_spread_met !== undefined) {
+        const left = response.left_source_count ?? 0;
+        const right = response.right_source_count ?? 0;
+        setSourceHint(
+          `Sources: ${response.source_count} | Bias spread: ${
+            response.bias_spread_met ? "met" : "not met"
+          } (left ${left}, right ${right})`
+        );
+      }
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error ? err.message : "Failed to initiate research");
+      setError(err instanceof Error ? err.message : "Failed to initiate research");
     } finally {
       setAnalyzing(false);
     }
@@ -99,6 +112,17 @@ export default function Dashboard() {
         </header>
 
         {/* Header content... */}
+
+        {error && (
+          <div className="border border-red-400/40 bg-red-950/40 text-red-200 font-mono text-xs p-3 tracking-wide">
+            {error}
+          </div>
+        )}
+        {sourceHint && (
+          <div className="border border-neon-cyan/40 bg-midnight-purple/40 text-neon-cyan font-mono text-xs p-3 tracking-wide">
+            {sourceHint}
+          </div>
+        )}
 
         <ResearchInput onAnalyze={handleAnalyze} isLoading={analyzing} />
 

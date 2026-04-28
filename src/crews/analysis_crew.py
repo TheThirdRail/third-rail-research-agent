@@ -6,21 +6,36 @@ from src.agents import (
     create_bias_classifier_agent,
     create_fact_extractor_agent,
     create_report_writer_agent,
+    create_rhetorical_analyst_agent,
     create_source_aggregator_agent,
 )
+from src.crews.analysis_rubric import build_rhetoric_rubric
 
 
-def create_analysis_tasks(story_description: str, story_url: str | None = None) -> list[Task]:
+def create_analysis_tasks(
+    story_description: str,
+    story_url: str | None = None,
+    prefetched_sources: str | None = None,
+) -> list[Task]:
     """Create tasks for the analysis workflow.
 
     Args:
         story_description: Description of the story to analyze
         story_url: Optional URL of a source article
+        prefetched_sources: Optional prefetched source context block
 
     Returns:
         List of CrewAI tasks
     """
-    source_context = f"Starting URL: {story_url}" if story_url else "No starting URL provided."
+    source_context = (
+        f"Starting URL: {story_url}" if story_url else "No starting URL provided."
+    )
+    prefetched_context = (
+        f"\n\nPrefetched Sources:\n{prefetched_sources}\n"
+        if prefetched_sources
+        else ""
+    )
+    rhetoric_rubric = build_rhetoric_rubric()
 
     # Task 1: Find all sources covering this story
     source_task = Task(
@@ -28,6 +43,10 @@ def create_analysis_tasks(story_description: str, story_url: str | None = None) 
 
         Story: {story_description}
         {source_context}
+        {prefetched_context}
+
+        If prefetched sources are provided, you MUST use ONLY those sources and
+        MUST NOT search for additional sources.
 
         Steps:
         1. Search for news articles about this story
@@ -74,58 +93,128 @@ def create_analysis_tasks(story_description: str, story_url: str | None = None) 
         context=[source_task, bias_task],
     )
 
-    # Task 4: Write the final report
+    # Task 4: Detect rhetoric and manipulation patterns
+    rhetoric_task = Task(
+        description=f"""Analyze the source texts for rhetoric and manipulation patterns.
+
+        Use this compact rubric:
+        {rhetoric_rubric}
+
+        Required output schema:
+        ### Framing Tactics
+        ### Linguistic Manipulation / Loaded Terms
+        ### Logical Fallacies
+        ### Dog Whistles / Coded Terms (context-gated)
+        ### Fact-Opinion Boundary Cases
+
+        For each finding, include all fields:
+        - Finding label
+        - Evidence snippet or precise paraphrase
+        - Why it matches the rubric category
+        - Source citation marker(s), e.g. [^2]
+        - Confidence: high|medium|low
+
+        Rules:
+        - Do not classify by keyword alone; apply context checks.
+        - If confidence is low, label as possible signal, not definitive manipulation.
+        - If no high-confidence findings exist for a section, write:
+          "No high-confidence findings."
+        - Use only sources provided in context.""",
+        expected_output="Structured rhetoric analysis with citations and confidence per finding.",
+        agent=create_rhetorical_analyst_agent(),
+        context=[source_task, bias_task, fact_task],
+    )
+
+    # Task 5: Write the final report
     report_task = Task(
         description=f"""Write a comprehensive research report for this story:
 
         Story: {story_description}
+        {prefetched_context}
+
+        Use ONLY the sources provided in the context above. Do not add new sources.
 
         The report should include:
         1. Executive Summary (3-5 sentences)
-        2. Story Overview (what happened, key players)
-        3. Source Matrix (all sources with bias ratings)
+        2. Story Overview (what happened, key players) - 2-3 short paragraphs
+        3. Source Matrix (all sources with bias ratings) as a Markdown table
         4. Agreed Facts (confirmed across sources)
         5. Disputed Facts (reported differently by sides)
         6. Opinion Analysis (what each side is saying)
-        7. Narrative Analysis:
+        7. Framing & Context Omissions
+        8. Logical Fallacies
+        9. Linguistic Manipulation & Dog Whistles
+        10. Fact vs Opinion Ambiguities
+        11. Narrative Analysis:
            - Mainstream media narrative
            - Alternative/independent takes
            - Libertarian perspective angle
-        8. Recommended Approach (for a libertarian creator)
-        9. Video Outline (bullet points for video structure)
-        10. All Sources & Citations
+        12. Recommended Approach (for a libertarian creator)
+        13. Video Outline (bullet points for video structure)
+        14. All Sources & Citations (footnotes)
+
+        Section routing rules:
+        - Place findings in the most relevant section above when possible.
+        - If a finding does not cleanly fit an existing section, create:
+          "Additional Rhetorical Signals"
+        - If no high-confidence manipulation/fallacy findings exist, state that clearly.
+
+        Formatting requirements:
+        - Use Markdown headings and bullet lists.
+        - The Source Matrix MUST be a Markdown table with this schema:
+          | Source | Domain | URL | Bias (score+label) | Confidence | Key Framing / Claim |
+        - The Source cell MUST include source numbering like:
+          S1 [Headline text](https://example.com/article)
+        - The Source column MUST be a Markdown link using the headline text:
+          [Headline text](https://example.com/article)
+        - Every factual or opinionated statement must include a citation marker
+          using GFM footnotes, e.g. "The governor vetoed the bill[^3]."
+        - Every claim in Framing, Fallacies, Manipulation/Dog Whistles, and
+          Fact vs Opinion Ambiguities MUST include citation markers ([^n]).
+        - Citation markers MUST map to preflighted source URLs only.
+        - The "All Sources & Citations" section MUST list footnotes like:
+          [^1]: Source Name — https://example.com/article
+        - Provide moderate verbosity (add detail, but avoid excessive length).
+        - Ensure citations correspond to the sources referenced.
 
         Format as clean Markdown with clear sections.""",
         expected_output="A comprehensive Markdown report with all sections.",
         agent=create_report_writer_agent(),
-        context=[source_task, bias_task, fact_task],
+        context=[source_task, bias_task, fact_task, rhetoric_task],
     )
 
-    return [source_task, bias_task, fact_task, report_task]
+    return [source_task, bias_task, fact_task, rhetoric_task, report_task]
 
 
-def run_analysis(story_description: str, story_url: str | None = None) -> dict:
+def run_analysis(
+    story_description: str,
+    story_url: str | None = None,
+    prefetched_sources: str | None = None,
+) -> dict:
     """Run the full analysis workflow.
 
     Args:
         story_description: Description of the story
         story_url: Optional starting URL
+        prefetched_sources: Optional prefetched source context block
 
     Returns:
         Dictionary with analysis results
     """
-    tasks = create_analysis_tasks(story_description, story_url)
+    tasks = create_analysis_tasks(story_description, story_url, prefetched_sources)
 
     crew = Crew(
         agents=[
             create_source_aggregator_agent(),
             create_bias_classifier_agent(),
             create_fact_extractor_agent(),
+            create_rhetorical_analyst_agent(),
             create_report_writer_agent(),
         ],
         tasks=tasks,
         process=Process.sequential,
         verbose=True,
+        tracing=False,
     )
 
     result = crew.kickoff()

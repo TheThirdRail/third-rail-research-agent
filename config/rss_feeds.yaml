@@ -28,8 +28,18 @@ feeds:
 
   # Lean Left (-2)
   lean_left:
+    # NYT section feeds included for better seed-link recovery.
+    # HomePage feed can miss some US/politics stories that section feeds carry.
     - name: New York Times
       url: https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
+      bias: -2
+
+    - name: New York Times Politics
+      url: https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml
+      bias: -2
+
+    - name: New York Times U.S.
+      url: https://rss.nytimes.com/services/xml/rss/nyt/US.xml
       bias: -2
       
     - name: Washington Post
@@ -129,6 +139,52 @@ feeds:
       url: https://greenwald.substack.com/feed
       bias: 0
       category: independent
+
+  # Fringe / Conspiracy
+  fringe_conspiracy:
+    - name: InfoWars (Alex Jones Show)
+      url: https://rss.infowars.com/Alex.xml
+      bias: 4
+
+    - name: InfoWars (Hourly Audio)
+      url: https://rss.infowars.com/hourly/InfowarsHourlyAudio.xml
+      bias: 4
+
+    - name: The Corbett Report (Articles)
+      url: https://www.corbettreport.com/articlerss.xml
+      bias: 1
+
+    - name: The Corbett Report (News)
+      url: https://www.corbettreport.com/newrss.xml
+      bias: 1
+
+  # Religion / Spiritual
+  religion_spiritual:
+    - name: Catholic News Agency
+      url: https://www.catholicnewsagency.com/rss/news.xml
+      bias: 0
+
+    - name: USCCB News Releases
+      url: https://www.usccb.org/news/rss/index.cfm
+      bias: 0
+
+    - name: National Catholic Register
+      url: https://ncregister.com/feeds/general-news.xml
+      bias: 0
+
+    - name: National Catholic Reporter
+      url: http://ncronline.org/rss.xml
+      bias: 0
+
+  # Supernatural / Paranormal
+  supernatural:
+    - name: Mysterious Universe (Podcast)
+      url: https://mysteriousuniverse.org/feed/podcast
+      bias: 0
+
+    - name: Coast to Coast AM (Podcast)
+      url: https://rss.premiereradio.net/podcast/coast.xml
+      bias: 0
 
 # Topic-specific feeds
 topic_feeds:

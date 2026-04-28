@@ -29,14 +29,14 @@ class SetLimitResponse(BaseModel):
 
 
 @router.get("/budget", response_model=BudgetStatus)
-async def get_budget() -> BudgetStatus:
+def get_budget() -> BudgetStatus:
     """Get current budget status including spend and limit."""
     service = get_budget_service()
     return BudgetStatus(**service.get_status())
 
 
 @router.post("/budget/limit", response_model=SetLimitResponse)
-async def set_budget_limit(request: SetLimitRequest) -> SetLimitResponse:
+def set_budget_limit(request: SetLimitRequest) -> SetLimitResponse:
     """Set the daily budget limit.
 
     Set to 0.0 for "free only" mode.
@@ -47,7 +47,7 @@ async def set_budget_limit(request: SetLimitRequest) -> SetLimitResponse:
 
 
 @router.post("/budget/reset")
-async def reset_budget() -> dict:
+def reset_budget() -> dict:
     """Reset today's spending to zero (admin only)."""
     service = get_budget_service()
     service.reset_daily_spend()

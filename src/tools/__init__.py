@@ -29,6 +29,7 @@ from src.tools.web_search import (
     DuckDuckGoSearch,
     NewsSearchTool,
     SearchResult,
+    SearxngSearch,
     WebSearchTool,
 )
 from src.tools.youtube_research import (
@@ -44,6 +45,7 @@ __all__ = [
     "FeedItem",
     # Web Search
     "DuckDuckGoSearch",
+    "SearxngSearch",
     "WebSearchTool",
     "NewsSearchTool",
     "SearchResult",

@@ -6,6 +6,8 @@ export interface AgentConfig {
     model: string | null;
     temperature: number | null;
     budget_limit: number | null;
+    free_tier: boolean | null;
+    reasoning_effort: "none" | "low" | "medium" | "high" | null;
 }
 
 export interface AgentInfo {
@@ -31,7 +33,16 @@ export async function updateAgentConfig(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
     });
-    if (!res.ok) throw new Error("Failed to update config");
+    if (!res.ok) {
+        let detail = "Failed to update config";
+        try {
+            const error = await res.json();
+            if (error?.detail) detail = error.detail;
+        } catch {
+            // ignore JSON parse errors
+        }
+        throw new Error(detail);
+    }
     return res.json();
 }
 
@@ -42,14 +53,20 @@ export interface ModelInfo {
     output_cost_per_m: number;
 }
 
-export async function getModels(provider: string): Promise<ModelInfo[]> {
-    const res = await fetch(`${API_URL}/api/models?provider=${provider}`);
+export async function getModels(
+    provider: string,
+    refresh: boolean = false
+): Promise<ModelInfo[]> {
+    const params = new URLSearchParams({ provider });
+    if (refresh) params.set("refresh", "true");
+    const res = await fetch(`${API_URL}/api/models?${params.toString()}`);
     if (!res.ok) {
         console.error("Failed to fetch models", res.statusText);
         return [];
     }
     return res.json();
 }
+
 export interface AnalyzeRequest {
     description: string;
     url?: string | null;
@@ -59,6 +76,10 @@ export interface AnalyzeResponse {
     story_id: string;
     report: string;
     status: string;
+    source_count?: number;
+    bias_spread_met?: boolean;
+    left_source_count?: number;
+    right_source_count?: number;
 }
 
 export async function analyzeStory(request: AnalyzeRequest): Promise<AnalyzeResponse> {
@@ -72,4 +93,23 @@ export async function analyzeStory(request: AnalyzeRequest): Promise<AnalyzeResp
         throw new Error(error.detail || "Analysis failed");
     }
     return res.json();
+}
+
+export async function exportReportPdf(report_markdown: string): Promise<Blob> {
+    const res = await fetch(`${API_URL}/api/reports/pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ report_markdown }),
+    });
+    if (!res.ok) {
+        let detail = "Failed to export PDF";
+        try {
+            const error = await res.json();
+            if (error?.detail) detail = error.detail;
+        } catch {
+            // ignore JSON parse errors
+        }
+        throw new Error(detail);
+    }
+    return res.blob();
 }

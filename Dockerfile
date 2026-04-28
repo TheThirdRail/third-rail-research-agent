@@ -32,12 +32,19 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libxml2 \
     libxslt1.1 \
+    chromium \
+    chromium-driver \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Install Playwright browsers (Chromium) and dependencies
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN mkdir -p /ms-playwright && \
+    playwright install --with-deps chromium
 
 # Copy application code
 COPY src/ ./src/
@@ -50,7 +57,7 @@ RUN mkdir -p /app/data
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash appuser && \
-    chown -R appuser:appuser /app
+    chown -R appuser:appuser /app /ms-playwright
 USER appuser
 
 # Environment

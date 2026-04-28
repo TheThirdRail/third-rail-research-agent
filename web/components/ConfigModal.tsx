@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Save, Terminal, Loader2 } from "lucide-react";
 import { AgentConfig, AgentInfo, updateAgentConfig, getModels, ModelInfo } from "@/lib/api";
@@ -17,6 +17,11 @@ export function ConfigModal({ agent, isOpen, onClose, onSaved }: ConfigModalProp
     const [loading, setLoading] = useState(false);
     const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
     const [loadingModels, setLoadingModels] = useState(false);
+    const [modelSearch, setModelSearch] = useState("");
+    const selectedProvider = formData.provider || "";
+    const selectedModel = formData.model || "";
+    const showReasoningEffort =
+        selectedProvider === "openai" && /^(gpt-|o\d|o-|codex)/i.test(selectedModel);
 
     useEffect(() => {
         if (agent) {
@@ -24,27 +29,39 @@ export function ConfigModal({ agent, isOpen, onClose, onSaved }: ConfigModalProp
         }
     }, [agent]);
 
+    const loadModels = async (refresh = false) => {
+        if (!formData.provider) {
+            setAvailableModels([]);
+            return;
+        }
+
+        setLoadingModels(true);
+        try {
+            const models = await getModels(formData.provider, refresh);
+            setAvailableModels(models);
+        } catch (error) {
+            console.error("Failed to load models", error);
+            setAvailableModels([]);
+        } finally {
+            setLoadingModels(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchModels = async () => {
-            if (!formData.provider) {
-                setAvailableModels([]);
-                return;
-            }
-
-            setLoadingModels(true);
-            try {
-                const models = await getModels(formData.provider);
-                setAvailableModels(models);
-            } catch (error) {
-                console.error("Failed to load models", error);
-                setAvailableModels([]);
-            } finally {
-                setLoadingModels(false);
-            }
-        };
-
-        fetchModels();
+        loadModels(false);
     }, [formData.provider]);
+
+    const filteredModels = useMemo(() => {
+        let models = availableModels;
+        const term = modelSearch.trim().toLowerCase();
+        if (term) {
+            models = models.filter((m) => {
+                const label = (m.label || m.id || "").toLowerCase();
+                return label.includes(term) || m.id.toLowerCase().includes(term);
+            });
+        }
+        return models;
+    }, [availableModels, modelSearch]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -57,7 +74,7 @@ export function ConfigModal({ agent, isOpen, onClose, onSaved }: ConfigModalProp
             onClose();
         } catch (err) {
             console.error(err);
-            alert("Failed to save configuration");
+            alert(err instanceof Error ? err.message : "Failed to save configuration");
         } finally {
             setLoading(false);
         }
@@ -93,11 +110,22 @@ export function ConfigModal({ agent, isOpen, onClose, onSaved }: ConfigModalProp
                                     <label className="text-neon-cyan text-xs uppercase tracking-wider block">LLM Provider</label>
                                     <select
                                         value={formData.provider || ""}
-                                        onChange={(e) => setFormData({ ...formData, provider: e.target.value || null })}
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                provider: e.target.value || null,
+                                                model: null,
+                                                reasoning_effort:
+                                                    e.target.value === "openai"
+                                                        ? formData.reasoning_effort ?? null
+                                                        : null,
+                                            })
+                                        }
                                         className="w-full bg-void border border-white/20 text-white p-2 focus:border-neon-cyan focus:outline-none focus:shadow-[0_0_10px_rgba(0,243,255,0.2)]"
                                     >
                                         <option value="">(Default)</option>
                                         <option value="openrouter">OpenRouter</option>
+                                        <option value="lmstudio">LM Studio (Local)</option>
                                         <option value="ollama">Ollama (Local)</option>
                                         <option value="openai">OpenAI</option>
                                         <option value="anthropic">Anthropic</option>
@@ -110,26 +138,55 @@ export function ConfigModal({ agent, isOpen, onClose, onSaved }: ConfigModalProp
                                     </select>
                                 </div>
 
+                                <label className="flex items-center gap-2 text-xs text-white/70">
+                                    <input
+                                        type="checkbox"
+                                        checked={Boolean(formData.free_tier)}
+                                        onChange={(e) =>
+                                            setFormData({ ...formData, free_tier: e.target.checked })
+                                        }
+                                        className="accent-neon-cyan"
+                                    />
+                                    Free Tier API (enable backoff)
+                                </label>
+
                                 {/* Model */}
                                 <div className="space-y-1.5">
                                     <div className="flex justify-between items-center">
                                         <label className="text-neon-cyan text-xs uppercase tracking-wider block">Model Name</label>
-                                        {loadingModels && (
-                                            <span className="text-neon-purple text-xs flex items-center gap-1 animate-pulse">
-                                                <Loader2 className="w-3 h-3 animate-spin" />
-                                                Fetching prices...
-                                            </span>
-                                        )}
+                                        <div className="flex items-center gap-3">
+                                            {loadingModels && (
+                                                <span className="text-neon-purple text-xs flex items-center gap-1 animate-pulse">
+                                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                                    Fetching models...
+                                                </span>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => loadModels(true)}
+                                                className="text-xs text-white/70 hover:text-white uppercase tracking-wider"
+                                            >
+                                                Refresh
+                                            </button>
+                                        </div>
                                     </div>
 
-                                    {availableModels.length > 0 ? (
+                                    <input
+                                        type="text"
+                                        value={modelSearch}
+                                        onChange={(e) => setModelSearch(e.target.value)}
+                                        placeholder="Search models..."
+                                        className="w-full bg-void border border-white/20 text-white p-2 text-xs focus:border-neon-cyan focus:outline-none focus:shadow-[0_0_10px_rgba(0,243,255,0.2)]"
+                                    />
+
+                                    {filteredModels.length > 0 ? (
                                         <select
                                             value={formData.model || ""}
                                             onChange={(e) => setFormData({ ...formData, model: e.target.value || null })}
                                             className="w-full bg-void border border-white/20 text-white p-2 focus:border-neon-cyan focus:outline-none focus:shadow-[0_0_10px_rgba(0,243,255,0.2)]"
                                         >
                                             <option value="">Select a model...</option>
-                                            {availableModels.map((m) => (
+                                            {filteredModels.map((m) => (
                                                 <option key={m.id} value={m.id}>
                                                     {m.label}
                                                 </option>
@@ -158,6 +215,31 @@ export function ConfigModal({ agent, isOpen, onClose, onSaved }: ConfigModalProp
                                         />
                                     )}
                                 </div>
+
+                                {showReasoningEffort && (
+                                    <div className="space-y-1.5">
+                                        <label className="text-neon-cyan text-xs uppercase tracking-wider block">
+                                            Reasoning Effort
+                                        </label>
+                                        <select
+                                            value={formData.reasoning_effort || ""}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    reasoning_effort:
+                                                        (e.target.value as AgentConfig["reasoning_effort"]) || null,
+                                                })
+                                            }
+                                            className="w-full bg-void border border-white/20 text-white p-2 focus:border-neon-cyan focus:outline-none focus:shadow-[0_0_10px_rgba(0,243,255,0.2)]"
+                                        >
+                                            <option value="">Provider default</option>
+                                            <option value="none">None</option>
+                                            <option value="low">Low</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="high">High</option>
+                                        </select>
+                                    </div>
+                                )}
 
                                 {/* Temperature */}
                                 <div className="space-y-1.5">

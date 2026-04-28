@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -9,6 +10,14 @@ from typing import Any
 import httpx
 
 from src.core.config import settings
+from src.core.lmstudio_utils import (
+    lmstudio_model_endpoints,
+    resolve_lmstudio_api_key,
+)
+from src.core.model_normalization import (
+    normalize_model_for_provider,
+    normalize_provider_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,19 +33,26 @@ class ModelInfo:
     name: str
     provider: str
     is_free: bool = False
+    input_cost_per_m: float = 0.0
+    output_cost_per_m: float = 0.0
     context_length: int = 0
     description: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
+        display_name = self.name
+        if self.provider == "openrouter" and self.is_free:
+            display_name = f"{self.name} (Free)"
         return {
             "id": self.id,
             "name": self.name,
             "provider": self.provider,
             "is_free": self.is_free,
+            "input_cost_per_m": self.input_cost_per_m,
+            "output_cost_per_m": self.output_cost_per_m,
             "context_length": self.context_length,
             "description": self.description,
-            "display_name": f"{self.name} (Free)" if self.is_free else self.name,
+            "display_name": display_name,
         }
 
 
@@ -59,6 +75,11 @@ class ModelRegistry:
         self._cache: dict[str, CachedModels] = {}
         self._client: httpx.AsyncClient | None = None
 
+    @staticmethod
+    def _normalize_provider(provider: str) -> str:
+        """Normalize provider aliases to canonical names."""
+        return normalize_provider_name(provider) or "openrouter"
+
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client."""
         if self._client is None:
@@ -71,23 +92,31 @@ class ModelRegistry:
             await self._client.aclose()
             self._client = None
 
-    async def list_models(self, provider: str | None = None) -> list[ModelInfo]:
+    async def list_models(
+        self, provider: str | None = None, force_refresh: bool = False
+    ) -> list[ModelInfo]:
         """List all available models, optionally filtered by provider.
 
         Args:
             provider: Filter to specific provider, or None for all
+            force_refresh: Skip cache and refetch from provider APIs
 
         Returns:
             List of available models
         """
         if provider:
-            return await self._fetch_provider_models(provider)
+            return await self._fetch_provider_models(
+                self._normalize_provider(provider),
+                force_refresh=force_refresh,
+            )
 
         # Fetch from all configured providers
         all_models: list[ModelInfo] = []
         providers = self._get_configured_providers()
 
-        tasks = [self._fetch_provider_models(p) for p in providers]
+        tasks = [
+            self._fetch_provider_models(p, force_refresh=force_refresh) for p in providers
+        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for result in results:
@@ -112,6 +141,11 @@ class ModelRegistry:
             providers.append("groq")
         if settings.openai_api_key:
             providers.append("openai")
+        if self._lmstudio_base_url() and (
+            settings.lmstudio_fallback_enabled
+            or self._normalize_provider(settings.llm_provider) == "lmstudio"
+        ):
+            providers.append("lmstudio")
         if settings.xai_api_key:
             providers.append("grok")
         if settings.cerebras_api_key:
@@ -126,10 +160,17 @@ class ModelRegistry:
 
         return providers
 
-    async def _fetch_provider_models(self, provider: str) -> list[ModelInfo]:
+    async def _fetch_provider_models(
+        self, provider: str, force_refresh: bool = False
+    ) -> list[ModelInfo]:
         """Fetch models from a specific provider."""
+        provider = self._normalize_provider(provider)
         # Check cache first
-        if provider in self._cache and self._cache[provider].is_valid():
+        if (
+            not force_refresh
+            and provider in self._cache
+            and self._cache[provider].is_valid()
+        ):
             return self._cache[provider].models
 
         try:
@@ -154,12 +195,18 @@ class ModelRegistry:
                 return await self._fetch_mistral_models()
             case "groq":
                 return await self._fetch_groq_models()
+            case "grok":
+                return await self._fetch_grok_models()
             case "anthropic":
-                return self._get_anthropic_models()
+                return await self._fetch_anthropic_models()
             case "openai":
                 return await self._fetch_openai_models()
+            case "lmstudio":
+                return await self._fetch_lmstudio_models()
             case "cerebras":
                 return await self._fetch_cerebras_models()
+            case "sambanova":
+                return await self._fetch_sambanova_models()
             case "ollama":
                 return await self._fetch_ollama_models()
             case _:
@@ -175,20 +222,27 @@ class ModelRegistry:
         response.raise_for_status()
         data = response.json()
 
+        def _parse_price(value: Any) -> float:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return 0.0
+
         models = []
         for model in data.get("data", []):
             pricing = model.get("pricing", {})
+            input_cost = _parse_price(pricing.get("prompt")) * 1_000_000
+            output_cost = _parse_price(pricing.get("completion")) * 1_000_000
             # Free if both prompt and completion are 0 or "0"
-            is_free = (
-                str(pricing.get("prompt", "1")) == "0"
-                and str(pricing.get("completion", "1")) == "0"
-            )
+            is_free = input_cost == 0.0 and output_cost == 0.0
             models.append(
                 ModelInfo(
                     id=model["id"],
                     name=model.get("name", model["id"]),
                     provider="openrouter",
                     is_free=is_free,
+                    input_cost_per_m=input_cost,
+                    output_cost_per_m=output_cost,
                     context_length=model.get("context_length", 0),
                     description=model.get("description", ""),
                 )
@@ -197,26 +251,35 @@ class ModelRegistry:
         return models
 
     async def _fetch_gemini_models(self) -> list[ModelInfo]:
-        """Fetch models from Google Gemini API."""
+        """Fetch models from Google Gemini API (OpenAI-compatible endpoint)."""
+        api_key = settings.google_api_key or settings.gemini_api_key
+        if not api_key:
+            return []
+
         client = await self._get_client()
         response = await client.get(
-            f"https://generativelanguage.googleapis.com/v1beta/models?key={settings.google_api_key}"
+            "https://generativelanguage.googleapis.com/v1beta/openai/models",
+            headers={"Authorization": f"Bearer {api_key}"},
         )
         response.raise_for_status()
         data = response.json()
 
         models = []
-        for model in data.get("models", []):
-            name = model.get("name", "").replace("models/", "")
-            # All Gemini API models are free tier with rate limits
+        for model in data.get("data", []):
+            model_id = model.get("id")
+            if not model_id:
+                continue
+            normalized_id = normalize_model_for_provider("gemini", model_id)
+            if not normalized_id:
+                continue
             models.append(
                 ModelInfo(
-                    id=name,
-                    name=model.get("displayName", name),
+                    id=normalized_id,
+                    name=normalized_id,
                     provider="gemini",
-                    is_free=True,  # Gemini API is free with rate limits
-                    context_length=model.get("inputTokenLimit", 0),
-                    description=model.get("description", ""),
+                    is_free=False,
+                    context_length=0,
+                    description="",
                 )
             )
 
@@ -276,9 +339,37 @@ class ModelRegistry:
 
         return models
 
+    async def _fetch_grok_models(self) -> list[ModelInfo]:
+        """Fetch models from xAI (Grok) API."""
+        client = await self._get_client()
+        response = await client.get(
+            "https://api.x.ai/v1/models",
+            headers={"Authorization": f"Bearer {settings.xai_api_key}"},
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        models = []
+        for model in data.get("data", []):
+            model_id = model.get("id")
+            if not model_id:
+                continue
+            models.append(
+                ModelInfo(
+                    id=model_id,
+                    name=model.get("name", model_id),
+                    provider="grok",
+                    is_free=False,
+                    context_length=model.get("context_window", 0)
+                    or model.get("context_length", 0),
+                    description=model.get("description", ""),
+                )
+            )
+
+        return models
+
     def _get_anthropic_models(self) -> list[ModelInfo]:
-        """Get Anthropic models (no list API, hardcoded)."""
-        # Anthropic doesn't have a models list API
+        """Get Anthropic models (fallback list)."""
         return [
             ModelInfo(
                 id="claude-3-5-sonnet-20241022",
@@ -303,33 +394,75 @@ class ModelRegistry:
             ),
         ]
 
-    async def _fetch_openai_models(self) -> list[ModelInfo]:
-        """Fetch models from OpenAI API."""
+    async def _fetch_anthropic_models(self) -> list[ModelInfo]:
+        """Fetch models from Anthropic API."""
+        if not settings.anthropic_api_key:
+            return []
+
         client = await self._get_client()
         response = await client.get(
-            "https://api.openai.com/v1/models",
-            headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+            "https://api.anthropic.com/v1/models",
+            headers={
+                "x-api-key": settings.anthropic_api_key,
+                "anthropic-version": "2023-06-01",
+            },
         )
         response.raise_for_status()
         data = response.json()
 
-        # Filter to useful models
-        allowed_prefixes = ("gpt-4", "gpt-3.5", "o1", "o3")
         models = []
         for model in data.get("data", []):
-            model_id = model["id"]
-            if any(model_id.startswith(p) for p in allowed_prefixes):
-                models.append(
-                    ModelInfo(
-                        id=model_id,
-                        name=model_id,
-                        provider="openai",
-                        is_free=False,
-                        context_length=0,
-                    )
+            model_id = model.get("id")
+            if not model_id:
+                continue
+            models.append(
+                ModelInfo(
+                    id=model_id,
+                    name=model.get("display_name", model_id),
+                    provider="anthropic",
+                    is_free=False,
+                    context_length=0,
+                    description="",
                 )
+            )
 
         return models
+
+    async def _fetch_openai_models(self) -> list[ModelInfo]:
+        """Fetch models from OpenAI or an OpenAI-compatible API."""
+        client = await self._get_client()
+        base_url = (os.getenv("OPENAI_BASE_URL") or settings.openai_base_url).rstrip(
+            "/"
+        )
+        if not base_url:
+            base_url = "https://api.openai.com/v1"
+        api_key = os.getenv("OPENAI_API_KEY") or settings.openai_api_key
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+        response = await client.get(
+            f"{base_url}/models",
+            headers=headers,
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        models = []
+        for model in data.get("data", []):
+            model_id = model.get("id")
+            if not model_id:
+                continue
+            models.append(
+                ModelInfo(
+                    id=model_id,
+                    name=model.get("name", model_id),
+                    provider="openai",
+                    is_free=False,
+                    context_length=model.get("context_window", 0)
+                    or model.get("context_length", 0),
+                )
+            )
+
+        return sorted(models, key=lambda item: item.id)
 
     async def _fetch_cerebras_models(self) -> list[ModelInfo]:
         """Fetch models from Cerebras API."""
@@ -350,6 +483,106 @@ class ModelRegistry:
                     provider="cerebras",
                     is_free=True,  # 1M tokens/day free
                     context_length=model.get("context_window", 0),
+                )
+            )
+
+        return models
+
+    @staticmethod
+    def _lmstudio_base_url() -> str:
+        """Resolve LM Studio base URL from env/settings aliases."""
+        return (
+            os.getenv("LM_STUDIO_API_BASE")
+            or os.getenv("LM_STUDIO_BASE_URL")
+            or os.getenv("LMSTUDIO_BASE_URL")
+            or settings.lmstudio_base_url
+        )
+
+    @staticmethod
+    def _lmstudio_api_key() -> str:
+        """Resolve optional LM Studio API key from env/settings aliases."""
+        return resolve_lmstudio_api_key(
+            os.getenv("LM_STUDIO_API_KEY"),
+            os.getenv("LMSTUDIO_API_KEY"),
+            settings.lmstudio_api_key,
+        )
+
+    async def _fetch_lmstudio_models(self) -> list[ModelInfo]:
+        """Fetch models from local LM Studio OpenAI-compatible endpoint."""
+        client = await self._get_client()
+        base_url = self._lmstudio_base_url()
+        api_key = self._lmstudio_api_key()
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+        endpoints = lmstudio_model_endpoints(base_url)
+        last_error: Exception | None = None
+        for endpoint in endpoints:
+            try:
+                response = await client.get(endpoint, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+
+                if isinstance(data, dict):
+                    items = data.get("data", [])
+                elif isinstance(data, list):
+                    items = data
+                else:
+                    items = []
+
+                models: list[ModelInfo] = []
+                for item in items:
+                    model_id = item.get("id") or item.get("name")
+                    if not model_id:
+                        continue
+                    normalized_id = normalize_model_for_provider("lmstudio", model_id)
+                    if not normalized_id:
+                        continue
+                    models.append(
+                        ModelInfo(
+                            id=normalized_id,
+                            name=normalized_id,
+                            provider="lmstudio",
+                            is_free=True,
+                            context_length=0,
+                        )
+                    )
+                if models:
+                    return models
+            except Exception as exc:
+                last_error = exc
+                continue
+
+        if last_error:
+            logger.warning(f"LM Studio not available: {last_error}")
+        return []
+
+    async def _fetch_sambanova_models(self) -> list[ModelInfo]:
+        """Fetch models from SambaNova API.
+
+        NOTE: Context7 docs unavailable at implementation time; endpoint is best-effort.
+        """
+        client = await self._get_client()
+        response = await client.get(
+            "https://api.sambanova.ai/v1/models",
+            headers={"Authorization": f"Bearer {settings.sambanova_api_key}"},
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        models = []
+        for model in data.get("data", []):
+            model_id = model.get("id")
+            if not model_id:
+                continue
+            models.append(
+                ModelInfo(
+                    id=model_id,
+                    name=model.get("name", model_id),
+                    provider="sambanova",
+                    is_free=False,
+                    context_length=model.get("context_window", 0)
+                    or model.get("context_length", 0),
+                    description=model.get("description", ""),
                 )
             )
 

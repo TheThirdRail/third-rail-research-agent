@@ -1,11 +1,12 @@
-"""Service for fetching available LLM models and pricing."""
+"""Service for fetching available LLM models."""
 
 import logging
-from typing import Any
 
-import httpx
-from litellm import model_cost
 from pydantic import BaseModel
+
+from src.core.config import settings
+from src.core.model_registry import ModelInfo as RegistryModelInfo
+from src.core.model_registry import get_model_registry
 
 logger = logging.getLogger(__name__)
 
@@ -24,151 +25,71 @@ class ModelInfo(BaseModel):
 class ModelService:
     """Service to fetch models from various sources."""
 
+    OPENAI_FALLBACK_MODELS = (
+        "gpt-5.3-codex",
+        "gpt-5.5",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.4-nano",
+    )
+
     def __init__(self) -> None:
         """Initialize service."""
         pass
 
-    async def get_models(self, provider: str) -> list[ModelInfo]:
+    async def get_models(self, provider: str, refresh: bool = False) -> list[ModelInfo]:
         """Get models for a specific provider."""
         provider = provider.lower()
+        provider_alias = "grok" if provider in {"xai", "grok"} else provider
+        registry = get_model_registry()
 
         try:
-            if provider == "openrouter":
-                return await self._fetch_openrouter()
-            elif provider == "ollama":
-                return await self._fetch_ollama()
-            else:
-                return self._fetch_litellm(provider)
+            models = await registry.list_models(provider_alias, force_refresh=refresh)
         except Exception as e:
             logger.error(f"Failed to fetch models for {provider}: {e}")
-            return []
+            models = []
 
-    async def _fetch_openrouter(self) -> list[ModelInfo]:
-        """Fetch models from OpenRouter API."""
-        async with httpx.AsyncClient() as client:
-            response = await client.get("https://openrouter.ai/api/v1/models")
-            response.raise_for_status()
-            data = response.json()
+        if provider_alias == "openai" and not models:
+            models = self._fallback_openai_models()
+        return [self._to_model_info(model) for model in models]
 
-        models = []
-        for item in data.get("data", []):
-            # Pricing is per token usually, we want per Million
-            # OpenRouter gives 'prompt' and 'completion' pricing
-            pricing = item.get("pricing", {})
-            input_cost = float(pricing.get("prompt", 0)) * 1_000_000
-            output_cost = float(pricing.get("completion", 0)) * 1_000_000
+    @classmethod
+    def _fallback_openai_models(cls) -> list[RegistryModelInfo]:
+        """Current OpenAI/Codex model IDs when live discovery is unavailable."""
+        model_ids = list(cls.OPENAI_FALLBACK_MODELS)
+        selected = settings.selected_model.strip()
+        selected_is_openai_like = selected.startswith(("gpt-", "o"))
+        if selected and selected_is_openai_like and selected not in model_ids:
+            model_ids.insert(0, selected)
+        return [
+            RegistryModelInfo(id=model_id, name=model_id, provider="openai")
+            for model_id in model_ids
+        ]
 
-            # Format label
-            label = f"{item['name']} - ${input_cost:.2f}/${output_cost:.2f} (per 1M)"
-
-            models.append(
-                ModelInfo(
-                    id=item["id"],
-                    name=item["name"],
-                    provider="openrouter",
-                    input_cost_per_m=input_cost,
-                    output_cost_per_m=output_cost,
-                    label=label,
+    @staticmethod
+    def _to_model_info(model: RegistryModelInfo) -> ModelInfo:
+        """Map registry model to API response model."""
+        display_name = model.name or model.id
+        if model.provider == "openrouter":
+            input_cost = model.input_cost_per_m or 0.0
+            output_cost = model.output_cost_per_m or 0.0
+            if input_cost == 0.0 and output_cost == 0.0:
+                label = f"{display_name} — Free"
+            else:
+                def _fmt(cost: float) -> str:
+                    formatted = f"{cost:.4f}".rstrip("0").rstrip(".")
+                    return formatted or "0"
+                label = (
+                    f"{display_name} — ${_fmt(input_cost)}/${_fmt(output_cost)} "
+                    "per 1M (prompt/completion)"
                 )
-            )
-
-        # Sort by name
-        return sorted(models, key=lambda x: x.name)
-
-    async def _fetch_ollama(self) -> list[ModelInfo]:
-        """Fetch models from local Ollama instance."""
-        # Try docker internal DNS first, fallback to localhost if running locally
-        urls = ["http://ollama:11434/api/tags", "http://localhost:11434/api/tags"]
-
-        data: dict[str, Any] = {}
-
-        async with httpx.AsyncClient(timeout=2.0) as client:
-            for url in urls:
-                try:
-                    response = await client.get(url)
-                    if response.status_code == 200:
-                        data = response.json()
-                        break
-                except Exception:
-                    continue
-
-        if not data:
-            logger.warning("Could not connect to Ollama")
-            return []
-
-        models = []
-        for model in data.get("models", []):
-            name = model["name"]
-            # Ollama is free (local compute)
-            label = f"{name} - Free (Local)"
-
-            models.append(
-                ModelInfo(
-                    id=name,
-                    name=name,
-                    provider="ollama",
-                    input_cost_per_m=0.0,
-                    output_cost_per_m=0.0,
-                    label=label,
-                )
-            )
-
-        return sorted(models, key=lambda x: x.name)
-
-    def _fetch_litellm(self, provider: str) -> list[ModelInfo]:
-        """Fetch models from LiteLLM internal database."""
-        models = []
-
-        # litellm.model_cost keys are like 'gpt-4', 'claude-3-opus-20240229'
-        # We need to filter by provider heuristically or use known prefixes
-
-        # Map our provider names to LiteLLM prefixes/keys
-        provider_map = {
-            "openai": ["gpt-", "dall-e", "text-embedding"],
-            "anthropic": ["claude-"],
-            "gemini": ["gemini-"],
-            "groq": ["groq/"],  # LiteLLM often prefixes non-openai with provider/
-            "mistral": ["mistral/"],
-            "cerebras": ["cerebras/"],
-            "sambanova": ["sambanova/"],
-            "xai": ["xai/"],
-        }
-
-        prefixes = provider_map.get(provider, [])
-        if not prefixes and provider not in ["ollama", "openrouter"]:
-            # If unknown provider, try to match broadly or return all?
-            # Better to return empty than junk
-            return []
-
-        for model_id, info in model_cost.items():
-            # Check if model belongs to provider
-            # LiteLLM keys are messy. Some are 'gpt-4', some 'vertex_ai/gemini-pro'
-
-            is_match = False
-            for prefix in prefixes:
-                if model_id.startswith(prefix) or f"/{prefix}" in model_id:
-                    is_match = True
-                    break
-
-            # Special logic for simple providers like 'openai' checking mostly standard keys
-            if provider == "openai" and "gpt" in model_id and "/" not in model_id:
-                is_match = True
-
-            if is_match:
-                input_cost = info.get("input_cost_per_token", 0) * 1_000_000
-                output_cost = info.get("output_cost_per_token", 0) * 1_000_000
-
-                label = f"{model_id} - ${input_cost:.2f}/${output_cost:.2f}"
-
-                models.append(
-                    ModelInfo(
-                        id=model_id,
-                        name=model_id,
-                        provider=provider,
-                        input_cost_per_m=input_cost,
-                        output_cost_per_m=output_cost,
-                        label=label,
-                    )
-                )
-
-        return sorted(models, key=lambda x: x.name)
+        else:
+            label = display_name
+        return ModelInfo(
+            id=model.id,
+            name=model.name,
+            provider=model.provider,
+            input_cost_per_m=model.input_cost_per_m if model.provider == "openrouter" else 0.0,
+            output_cost_per_m=model.output_cost_per_m if model.provider == "openrouter" else 0.0,
+            label=label,
+        )

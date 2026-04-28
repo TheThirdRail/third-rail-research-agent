@@ -2,30 +2,110 @@
 
 from typing import Any
 
-from src.core.llm_provider import get_analysis_router, get_llm_router
+from crewai import LLM
+
+from src.core.config import settings
+from src.core.llm_provider_docker import (
+    LLMProvider,
+    get_analysis_router,
+    get_llm_router,
+)
+from src.core.model_normalization import normalize_model_for_provider
+
+_CREWAI_NATIVE_PROVIDERS = {
+    LLMProvider.OPENAI.value,
+    LLMProvider.ANTHROPIC.value,
+    LLMProvider.GEMINI.value,
+    "azure",
+    "azure_openai",
+    "bedrock",
+    "aws",
+}
 
 
 def get_llm_config(agent_name: str | None = None) -> dict[str, Any]:
     """Get LLM configuration for CrewAI agents.
 
     Uses the unified LLMRouter to support multiple providers:
-    OpenRouter, Gemini, Anthropic, Groq, OpenAI, Grok, Cerebras, SambaNova, Ollama
+    OpenRouter, Gemini, Anthropic, Groq, OpenAI, LM Studio, Grok,
+    Cerebras, SambaNova, Mistral, and Ollama.
 
     Args:
-        agent_name: Optional name of the agent to get specific config for
+        agent_name: Optional name of the agent to get specific config for.
 
     Returns:
-        CrewAI-compatible LLM configuration dict
+        CrewAI-compatible LLM configuration dict.
     """
     router = get_llm_router(agent_name=agent_name)
     return router.get_crewai_config()
+
+
+def _provider_uses_crewai_litellm(primary_provider: str) -> bool:
+    """Return True when CrewAI routes the provider through LiteLLM."""
+    return primary_provider.lower() not in _CREWAI_NATIVE_PROVIDERS
+
+
+def _build_lmstudio_fallbacks(primary_provider: str) -> list[str]:
+    """Build LiteLLM fallback list targeting LM Studio for transient failures."""
+    if not settings.lmstudio_fallback_enabled:
+        return []
+    if primary_provider == LLMProvider.LMSTUDIO.value:
+        return []
+    if not _provider_uses_crewai_litellm(primary_provider):
+        return []
+
+    fallback_model = normalize_model_for_provider(
+        LLMProvider.LMSTUDIO.value, settings.lmstudio_fallback_model
+    )
+    if not fallback_model:
+        return []
+    return [f"lm_studio/{fallback_model}"]
+
+
+def build_crewai_llm(agent_name: str | None = None) -> LLM:
+    """Build a CrewAI LLM object with provider credentials and local fallbacks.
+
+    This ensures CrewAI receives base_url/api_base/api_key and can apply
+    LiteLLM-level fallback behavior.
+    """
+    router = get_llm_router(agent_name=agent_name)
+    llm_config = router.get_crewai_config()
+
+    llm_kwargs: dict[str, Any] = {
+        "model": llm_config["model"],
+        "timeout": 120,
+        "max_tokens": 4096,
+        "temperature": (
+            router.temperature_override if router.temperature_override is not None else 0.7
+        ),
+        "max_retries": 2,
+    }
+
+    api_key = llm_config.get("api_key")
+    if api_key:
+        llm_kwargs["api_key"] = api_key
+
+    base_url = llm_config.get("base_url")
+    if base_url:
+        llm_kwargs["base_url"] = base_url
+        llm_kwargs["api_base"] = base_url
+
+    reasoning_effort = llm_config.get("reasoning_effort")
+    if reasoning_effort:
+        llm_kwargs["reasoning_effort"] = reasoning_effort
+
+    fallbacks = _build_lmstudio_fallbacks(router.provider.value)
+    if fallbacks:
+        llm_kwargs["fallbacks"] = fallbacks
+
+    return LLM(**llm_kwargs)
 
 
 def get_analysis_llm_config() -> dict[str, Any]:
     """Get LLM config for analysis tasks (may use different model).
 
     Returns:
-        CrewAI-compatible LLM configuration for analysis tasks
+        CrewAI-compatible LLM configuration for analysis tasks.
     """
     router = get_analysis_router()
     return router.get_crewai_config()
@@ -82,6 +162,13 @@ AGENT_ROLES = {
         "backstory": """You are a fact-checker trained to identify what is verifiable
         versus what is interpretation. You clearly separate objective facts that
         can be confirmed from subjective opinions and analysis.""",
+    },
+    "rhetorical_analyst": {
+        "role": "Rhetorical Manipulation Analyst",
+        "goal": "Detect framing tactics, fallacies, loaded rhetoric, and coded political language",
+        "backstory": """You are a discourse analyst focused on argument quality and
+        media rhetoric. You identify manipulation patterns using evidence-first,
+        context-gated reasoning. You avoid overreach and label uncertainty clearly.""",
     },
     "narrative_analyzer": {
         "role": "Narrative Analyst",

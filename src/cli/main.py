@@ -275,13 +275,151 @@ def profile_show() -> None:
         console.print(f"[bold red]Error:[/bold red] {e}")
 
 
+@cli.group(name="codex-oauth")
+def codex_oauth() -> None:
+    """Diagnose optional local Codex OAuth testing."""
+    pass
+
+
+@codex_oauth.command(name="status")
+def codex_oauth_status() -> None:
+    """Show Codex OAuth testing status without exposing credentials."""
+    from src.core.codex_oauth import cli_adapter
+    from src.core.codex_oauth.bridge import diagnose_bridge
+
+    bridge = diagnose_bridge(settings)
+    cli_path = cli_adapter.find_codex(settings.codex_cli_command)
+
+    table = Table(title="Codex OAuth Testing Status")
+    table.add_column("Check", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Enabled", str(settings.codex_oauth_testing_enabled))
+    table.add_row("Mode", settings.codex_oauth_mode)
+    table.add_row(
+        "OPENAI_BASE_URL configured",
+        str(bridge["openai_base_url_configured"]),
+    )
+    table.add_row("Bridge URL local", str(bridge["openai_base_url_local"]))
+    table.add_row("Codex CLI exists", str(bool(cli_path)))
+    table.add_row("Public API blocked", str(not settings.codex_allow_public_api))
+    console.print(table)
+
+
+@codex_oauth.command(name="diagnose")
+def codex_oauth_diagnose() -> None:
+    """Run Codex OAuth testing diagnostics."""
+    from src.core.codex_oauth import cli_adapter
+    from src.core.codex_oauth.bridge import diagnose_bridge
+    from src.core.codex_oauth.safety import redact_secrets
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    if not settings.codex_oauth_testing_enabled:
+        console.print("[yellow]Codex OAuth testing is disabled.[/yellow]")
+        return
+
+    if settings.codex_allow_public_api:
+        warnings.append("CODEX_ALLOW_PUBLIC_API=true; do not expose this publicly.")
+    if not settings.codex_require_localhost:
+        warnings.append("CODEX_REQUIRE_LOCALHOST=false; localhost enforcement is off.")
+
+    if settings.codex_oauth_mode == "openai_compatible_bridge":
+        bridge = diagnose_bridge(settings)
+        errors.extend(bridge["errors"])
+        warnings.extend(bridge["warnings"])
+    elif settings.codex_oauth_mode == "codex_cli":
+        status = cli_adapter.status(settings)
+        if not status.exists:
+            errors.append(status.message)
+        elif not status.login_ok:
+            errors.append(
+                "Codex CLI is available but login status failed. Run `codex login`."
+            )
+            if status.message:
+                warnings.append(status.message)
+    else:
+        errors.append("CODEX_OAUTH_MODE must be disabled, openai_compatible_bridge, or codex_cli.")
+
+    if errors:
+        console.print("[bold red]Codex OAuth diagnostics failed:[/bold red]")
+        for error in errors:
+            console.print(f"  - {redact_secrets(error)}")
+    else:
+        console.print("[bold green]Codex OAuth diagnostics passed.[/bold green]")
+
+    if warnings:
+        console.print("[yellow]Warnings:[/yellow]")
+        for warning in warnings:
+            console.print(f"  - {redact_secrets(warning)}")
+
+    if errors:
+        raise click.Abort() from None
+
+
+@codex_oauth.command(name="test")
+@click.argument("prompt")
+def codex_oauth_test(prompt: str) -> None:
+    """Send a tiny test prompt through the selected Codex OAuth mode."""
+    from src.core.codex_oauth import cli_adapter
+    from src.core.codex_oauth.bridge import validate_bridge_mode
+    from src.core.codex_oauth.safety import (
+        CodexOAuthConfigError,
+        redact_secrets,
+        validate_prompt_length,
+    )
+
+    try:
+        if not settings.codex_oauth_testing_enabled:
+            raise CodexOAuthConfigError("Codex OAuth testing is disabled.")
+
+        validate_prompt_length(prompt, settings.codex_max_prompt_chars)
+
+        if settings.codex_oauth_mode == "openai_compatible_bridge":
+            from src.core.llm_provider_docker import LLMRouter
+
+            validate_bridge_mode(settings, require_settings_provider=True)
+            router = LLMRouter(provider="openai")
+            response = router.complete(
+                [{"role": "user", "content": prompt}],
+                temperature=0,
+                max_tokens=80,
+            )
+        elif settings.codex_oauth_mode == "codex_cli":
+            response = cli_adapter.run_prompt(prompt, settings)
+        else:
+            raise CodexOAuthConfigError(
+                "CODEX_OAUTH_MODE must be openai_compatible_bridge or codex_cli."
+            )
+
+        console.print(f"[bold green]Success![/bold green]\n{response[:1000]}")
+    except Exception as e:
+        console.print(f"[bold red]Failed:[/bold red] {redact_secrets(e)}")
+        raise click.Abort() from None
+
+
+@codex_oauth.command(name="bridge")
+@click.option("--host", default="127.0.0.1", show_default=True)
+@click.option("--port", default=8787, type=int, show_default=True)
+def codex_oauth_bridge(host: str, port: int) -> None:
+    """Start the local OpenAI-compatible Codex OAuth bridge."""
+    import uvicorn
+
+    from src.core.codex_oauth.openai_bridge import create_app
+
+    console.print(
+        f"[bold green]Starting Codex OAuth bridge[/bold green] http://{host}:{port}/v1"
+    )
+    uvicorn.run(create_app(settings), host=host, port=port)
+
+
 @cli.command(name="test-llm")
 @click.option(
     "--provider", "-p", default=None, help="Provider to test (overrides LLM_PROVIDER)"
 )
 def test_llm(provider: str | None) -> None:
     """Test LLM connection and configuration."""
-    from src.core.llm_provider import LLMRouter
+    from src.core.llm_provider_docker import LLMRouter
 
     try:
         router = LLMRouter(provider=provider)
@@ -337,6 +475,7 @@ def init() -> None:
         "anthropic": settings.anthropic_api_key,
         "groq": settings.groq_api_key,
         "openai": settings.openai_api_key,
+        "lmstudio": "local",  # Optional key, local endpoint
         "grok": settings.xai_api_key,
         "cerebras": settings.cerebras_api_key,
         "sambanova": settings.sambanova_api_key,

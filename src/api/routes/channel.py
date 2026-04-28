@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from src.core.config import settings
 from src.tools.channel_profile_loader import channel_loader
@@ -37,7 +38,7 @@ class ChannelUploadResponse(BaseModel):
 
 
 @router.get("/profile", response_model=ChannelProfileResponse)
-async def get_channel_profile() -> ChannelProfileResponse:
+def get_channel_profile() -> ChannelProfileResponse:
     """Get the current active channel profile."""
     try:
         scope = channel_loader.load(settings.channel_profile_path)
@@ -90,18 +91,18 @@ async def upload_channel_profile(file: UploadFile = File(...)) -> ChannelUploadR
         if format_hint in {"yaml", "yml"}:
             format_hint = "yaml"
 
-        scope = channel_loader.load_from_string(content_str, format_hint)
+        def _parse_and_save():
+            scope = channel_loader.load_from_string(content_str, format_hint)
+            output_path = settings.config_dir / "channel_profile.yaml"
+            import yaml
 
-        # Save to config directory
-        output_path = settings.config_dir / "channel_profile.yaml"
+            yaml_content = yaml.safe_dump(
+                scope.to_dict(), default_flow_style=False, allow_unicode=True
+            )
+            output_path.write_text(yaml_content, encoding="utf-8")
+            return scope
 
-        # Convert to YAML and save
-        import yaml
-
-        yaml_content = yaml.safe_dump(
-            scope.to_dict(), default_flow_style=False, allow_unicode=True
-        )
-        output_path.write_text(yaml_content, encoding="utf-8")
+        scope = await run_in_threadpool(_parse_and_save)
 
         logger.info(f"Channel profile uploaded: {scope.name}")
 

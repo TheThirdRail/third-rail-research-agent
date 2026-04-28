@@ -43,7 +43,30 @@ class RateLimitError(ResearchAgentError):
     pass
 
 
+class RateLimitExceededError(RateLimitError):
+    """Rate limit exceeded and retries exhausted."""
+
+    pass
+
+
 class BudgetExceededError(ResearchAgentError):
     """Budget limit reached for the current period."""
 
     pass
+
+
+def is_upstream_rate_limit_error(exc: Exception) -> bool:
+    """Best-effort detection for provider rate-limit failures."""
+    message = str(exc).lower()
+    class_name = exc.__class__.__name__.lower()
+    markers = (
+        "ratelimiterror",
+        "rate limit",
+        "rate_limited",
+        "resource_exhausted",
+        "too many requests",
+        "429",
+    )
+    if any(marker in message for marker in markers):
+        return True
+    return "ratelimit" in class_name

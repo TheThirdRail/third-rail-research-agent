@@ -42,7 +42,16 @@ LLM_PROVIDER=openrouter
 OPENROUTER_API_KEY=your_key_here
 ```
 
-**Free-tier providers:** OpenRouter ✅, Gemini ✅, Groq ✅, Cerebras ✅, Mistral ✅, Ollama ✅
+**Free-tier providers:** OpenRouter ✅, Gemini ✅, Groq ✅, Cerebras ✅, Mistral ✅, LM Studio ✅, Ollama ✅
+
+For zero-cost local testing, LM Studio is recommended over Ollama:
+
+```env
+LLM_PROVIDER=lmstudio
+LM_STUDIO_API_BASE=http://localhost:1234
+LM_STUDIO_FALLBACK_ENABLED=true
+LM_STUDIO_FALLBACK_MODEL=qwen2.5-7b-instruct
+```
 
 ### 3. Run
 
@@ -82,13 +91,56 @@ research-agent profile upload -f my-channel.md
 research-agent profile show
 ```
 
+## Optional Codex OAuth Testing
+
+Codex OAuth testing is optional and local-only. It lets this app talk to a locally authenticated Codex/OAuth workflow while developing. Do not paste ChatGPT cookies, browser session tokens, copied bearer tokens, or refresh tokens into this project. Do not expose Codex-backed access publicly; for hosted or multi-user deployments, use normal API-key providers instead.
+
+Bridge mode reuses the existing OpenAI-compatible provider path:
+
+```env
+LLM_PROVIDER=openai
+OPENAI_BASE_URL=http://host.docker.internal:8787/v1
+OPENAI_API_KEY=local-placeholder
+SELECTED_MODEL=gpt-5.3-codex
+CODEX_OAUTH_TESTING_ENABLED=true
+CODEX_OAUTH_MODE=openai_compatible_bridge
+CODEX_REQUIRE_LOCALHOST=true
+CODEX_ALLOW_PUBLIC_API=false
+```
+
+Start the host bridge before running the Docker backend:
+
+```powershell
+research-agent codex-oauth bridge --host 127.0.0.1 --port 8787
+```
+
+The bridge provides `GET /health`, `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/responses`.
+
+If you run the backend directly on Windows instead of Docker, use `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`.
+
+CLI mode uses the official `codex` command after you log in outside the app:
+
+```powershell
+codex login
+research-agent codex-oauth status
+research-agent codex-oauth diagnose
+research-agent codex-oauth test "Say hello from Codex OAuth in one sentence."
+```
+
+Turn it off with:
+
+```env
+CODEX_OAUTH_TESTING_ENABLED=false
+CODEX_OAUTH_MODE=disabled
+```
+
 ## Docker Deployment
 
 ```bash
 # Standard deployment
 docker compose up --build -d
 
-# With local Ollama
+# With local Ollama profile (optional)
 docker compose --profile local-llm up --build -d
 ```
 
@@ -99,6 +151,8 @@ docker compose --profile local-llm up --build -d
 | Backend API | <http://localhost:8000> | FastAPI + CrewAI |
 | Frontend UI | <http://localhost:3000> | Next.js (coming soon) |
 | Ollama | <http://localhost:11434> | Local LLM (optional) |
+
+LM Studio runs on host by default and is reached from backend via `LM_STUDIO_API_BASE`.
 
 ## API Endpoints
 

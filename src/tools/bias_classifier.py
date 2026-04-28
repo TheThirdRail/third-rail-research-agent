@@ -23,6 +23,8 @@ class BiasResult:
     method: str  # dataset, llm, manual
     factual_rating: str | None
     category: str | None  # libertarian, independent, etc.
+    source: str | None = None
+    source_url: str | None = None
 
 
 # Bias labels for 9-point scale
@@ -77,6 +79,8 @@ class LocalBiasDatabase:
                 method="dataset",
                 factual_rating=source.get("factual"),
                 category=source.get("category"),
+                source=source.get("source"),
+                source_url=source.get("source_url"),
             )
 
         return None
@@ -113,11 +117,7 @@ class BiasClassifier:
         if result:
             return result
 
-        # For unknown sources, use heuristic based on text if available
-        if article_text:
-            return self._heuristic_classify(domain, article_text)
-
-        # Unknown source with no text
+        # Unknown source: do not guess by default
         return BiasResult(
             domain=domain,
             bias=0,
@@ -126,6 +126,8 @@ class BiasClassifier:
             method="unknown",
             factual_rating=None,
             category=None,
+            source=None,
+            source_url=None,
         )
 
     def _heuristic_classify(self, domain: str, text: str) -> BiasResult:
@@ -143,7 +145,7 @@ class BiasClassifier:
 
     def _llm_classify(self, domain: str, text: str) -> BiasResult:
         """Use LLM for bias classification."""
-        from src.core.llm_provider import get_llm_router
+        from src.core.llm_provider_docker import get_llm_router
 
         router = get_llm_router()
 
@@ -276,6 +278,11 @@ Method: {result.method}
 
         if result.category:
             output += f"Category: {result.category}\n"
+
+        if result.source:
+            output += f"Source: {result.source}\n"
+        if result.source_url:
+            output += f"Source URL: {result.source_url}\n"
 
         # Add interpretation
         if result.bias < -2:

@@ -33,6 +33,13 @@ out/
 .env.local
 .env.*.local
 *.local
+.tokens/
+.auth/
+.codex-auth/
+codex-token.json
+codex-session.json
+*.secret
+*.secrets
 
 # Logs
 *.log

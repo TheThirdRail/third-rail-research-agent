@@ -6,5 +6,6 @@ providing a clean interface for both CLI and API consumers.
 
 from src.services.analysis_service import AnalysisService
 from src.services.discovery_service import DiscoveryService
+from src.services.rss_fallback_service import RssFallbackService
 
-__all__ = ["AnalysisService", "DiscoveryService"]
+__all__ = ["AnalysisService", "DiscoveryService", "RssFallbackService"]

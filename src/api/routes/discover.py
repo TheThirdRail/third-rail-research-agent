@@ -22,7 +22,7 @@ class DiscoverResponse(BaseModel):
 
 
 @router.post("/discover", response_model=DiscoverResponse)
-async def discover_stories(request: DiscoverRequest) -> DiscoverResponse:
+def discover_stories(request: DiscoverRequest) -> DiscoverResponse:
     """Discover relevant stories based on topics.
 
     If no topics are provided, uses the channel profile.

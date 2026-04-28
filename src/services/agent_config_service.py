@@ -24,6 +24,9 @@ class AgentConfigService:
         model: str | None = None,
         temperature: float | None = None,
         budget_limit: float | None = None,
+        free_tier: bool | None = None,
+        reasoning_effort: str | None = None,
+        clear_reasoning_effort: bool = False,
     ) -> AgentConfiguration:
         """Set or update configuration for an agent."""
         config = self.get_config(agent_name)
@@ -39,6 +42,12 @@ class AgentConfigService:
             config.temperature = temperature
         if budget_limit is not None:
             config.budget_limit = budget_limit
+        if free_tier is not None:
+            config.free_tier = free_tier
+        if reasoning_effort is not None:
+            config.reasoning_effort = reasoning_effort
+        elif clear_reasoning_effort:
+            config.reasoning_effort = None
 
         self.db.commit()
         self.db.refresh(config)

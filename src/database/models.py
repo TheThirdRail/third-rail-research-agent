@@ -204,6 +204,8 @@ class AgentConfiguration(Base):
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
     budget_limit: Mapped[float | None] = mapped_column(Float, nullable=True)
+    free_tier: Mapped[bool] = mapped_column(Boolean, default=False)
+    reasoning_effort: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(

@@ -1,6 +1,6 @@
 # ===========================================
 # Research Agent - Docker Compose
-# Three-service architecture: backend + frontend + ollama (optional)
+# Three-service architecture: backend + frontend + optional local LLM runtime
 # ===========================================
 
 services:
@@ -18,25 +18,46 @@ services:
     environment:
       # Provider Selection
       - LLM_PROVIDER=${LLM_PROVIDER:-openrouter}
+      - SELECTED_MODEL=${SELECTED_MODEL:-}
+      - ANALYSIS_MODEL=${ANALYSIS_MODEL:-}
       # API Keys (loaded from .env)
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY}
-      - SAMBANOVA_API_KEY=${SAMBANOVA_API_KEY}
-      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
-      - XAI_API_KEY=${XAI_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY:-}
+      - SAMBANOVA_API_KEY=${SAMBANOVA_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
       # Local LLM
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - LM_STUDIO_API_BASE=${LM_STUDIO_API_BASE:-http://host.docker.internal:1234/v1}
+      - LM_STUDIO_API_KEY=${LM_STUDIO_API_KEY:-lm-studio}
+      - LM_STUDIO_FALLBACK_ENABLED=${LM_STUDIO_FALLBACK_ENABLED:-true}
+      - LM_STUDIO_FALLBACK_MODEL=${LM_STUDIO_FALLBACK_MODEL:-qwen2.5-7b-instruct}
+      # Optional Codex OAuth bridge testing
+      - CODEX_OAUTH_TESTING_ENABLED=${CODEX_OAUTH_TESTING_ENABLED:-false}
+      - CODEX_OAUTH_MODE=${CODEX_OAUTH_MODE:-disabled}
+      - CODEX_CLI_COMMAND=${CODEX_CLI_COMMAND:-codex}
+      - CODEX_REQUIRE_LOCALHOST=${CODEX_REQUIRE_LOCALHOST:-true}
+      - CODEX_ALLOW_PUBLIC_API=${CODEX_ALLOW_PUBLIC_API:-false}
+      - CODEX_MAX_PROMPT_CHARS=${CODEX_MAX_PROMPT_CHARS:-30000}
+      - CODEX_TIMEOUT_SECONDS=${CODEX_TIMEOUT_SECONDS:-300}
+      # Web Search
+      - SEARXNG_BASE_URL=${SEARXNG_BASE_URL:-}
+      - SEARXNG_API_KEY=${SEARXNG_API_KEY:-}
       # Database
       - DATABASE_URL=sqlite:///data/research_agent.db
       # App Settings
       - APP_ENV=${APP_ENV:-production}
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CREWAI_TRACING_ENABLED=false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
@@ -61,7 +82,7 @@ services:
       - backend
     restart: unless-stopped
 
-  # Ollama (Optional local LLM)
+  # Ollama (Optional local LLM; LM Studio can be used from host via LM_STUDIO_API_BASE)
   ollama:
     image: ollama/ollama:latest
     container_name: research-agent-ollama

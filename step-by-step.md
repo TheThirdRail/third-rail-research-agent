@@ -174,6 +174,87 @@ curl http://localhost:8000/api/models
 
 ---
 
+## Optional Codex OAuth Testing
+
+Codex OAuth testing is optional and local-only. It is intended to let this app talk to a locally authenticated Codex/OAuth workflow while developing. Do not paste ChatGPT cookies, browser session tokens, copied bearer tokens, or refresh tokens into this project. Do not expose Codex-backed access publicly.
+
+Bridge mode uses a separate local OpenAI-compatible Codex/OAuth bridge:
+
+```env
+LLM_PROVIDER=openai
+OPENAI_BASE_URL=http://host.docker.internal:8787/v1
+OPENAI_API_KEY=local-placeholder
+SELECTED_MODEL=gpt-5.3-codex
+CODEX_OAUTH_TESTING_ENABLED=true
+CODEX_OAUTH_MODE=openai_compatible_bridge
+CODEX_REQUIRE_LOCALHOST=true
+CODEX_ALLOW_PUBLIC_API=false
+```
+
+Start the bridge on the host before running the Docker backend:
+
+```powershell
+research-agent codex-oauth bridge --host 127.0.0.1 --port 8787
+```
+
+The bridge provides `GET /health`, `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/responses`.
+
+If the backend runs directly on Windows instead of Docker, use `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`.
+
+CLI mode uses the official Codex CLI after you log in outside this app:
+
+```powershell
+codex login
+research-agent codex-oauth status
+research-agent codex-oauth diagnose
+research-agent codex-oauth test "Say hello from Codex OAuth in one sentence."
+```
+
+Turn it off with:
+
+```env
+CODEX_OAUTH_TESTING_ENABLED=false
+CODEX_OAUTH_MODE=disabled
+```
+
+# Codex OAuth Testing Notes
+
+## Implemented mode
+
+Bridge mode and CLI mode.
+
+## How to enable
+
+For bridge mode, run `research-agent codex-oauth bridge --host 127.0.0.1 --port 8787`, then set `LLM_PROVIDER=openai`, `OPENAI_BASE_URL=http://host.docker.internal:8787/v1`, `OPENAI_API_KEY=local-placeholder`, `SELECTED_MODEL=gpt-5.3-codex`, `CODEX_OAUTH_TESTING_ENABLED=true`, and `CODEX_OAUTH_MODE=openai_compatible_bridge`.
+
+For CLI mode, run `codex login`, then set `CODEX_OAUTH_TESTING_ENABLED=true` and `CODEX_OAUTH_MODE=codex_cli`.
+
+## How to test
+
+```powershell
+research-agent codex-oauth status
+research-agent codex-oauth diagnose
+research-agent codex-oauth test "Say hello from Codex OAuth in one sentence."
+research-agent test-llm --provider openai
+```
+
+## How to disable
+
+```env
+CODEX_OAUTH_TESTING_ENABLED=false
+CODEX_OAUTH_MODE=disabled
+```
+
+## Limitations
+
+Bridge mode depends on the official `codex exec` command being installed and logged in on the host running `research-agent codex-oauth bridge`.
+
+## Safety guardrails
+
+Bridge URLs are local-only by default, `0.0.0.0` is blocked, prompt length is capped, subprocess calls use `shell=False`, diagnostics redact secret-looking strings, and the app never reads Codex token files or asks for browser/session tokens.
+
+---
+
 ## Configuration Reference
 
 | Environment Variable | Description | Required |

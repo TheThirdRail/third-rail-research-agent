@@ -8,193 +8,265 @@ sources:
     bias: 0
     factual: high
     name: Reuters
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "apnews.com":
     bias: 0
     factual: high
     name: Associated Press
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "c-span.org":
     bias: 0
     factual: high
     name: C-SPAN
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "thehill.com":
     bias: 0
     factual: mostly_factual
     name: The Hill
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
 
   # === SLIGHT LEFT (-1) ===
   "npr.org":
     bias: -1
     factual: high
     name: NPR
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "bbc.com":
     bias: -1
     factual: high
     name: BBC
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "bbc.co.uk":
     bias: -1
     factual: high
     name: BBC
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "pbs.org":
     bias: -1
     factual: high
     name: PBS
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
 
   # === LEAN LEFT (-2) ===
   "nytimes.com":
     bias: -2
     factual: high
     name: New York Times
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "washingtonpost.com":
     bias: -2
     factual: high
     name: Washington Post
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "cnn.com":
     bias: -2
     factual: mixed
     name: CNN
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "theguardian.com":
     bias: -2
     factual: mostly_factual
     name: The Guardian
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "politico.com":
     bias: -2
     factual: mostly_factual
     name: Politico
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
 
   # === LEFT (-3) ===
   "msnbc.com":
     bias: -3
     factual: mixed
     name: MSNBC
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "huffpost.com":
     bias: -3
     factual: mostly_factual
     name: HuffPost
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "vox.com":
     bias: -3
     factual: mostly_factual
     name: Vox
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "slate.com":
     bias: -3
     factual: mostly_factual
     name: Slate
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
 
   # === FAR LEFT (-4) ===
   "jacobin.com":
     bias: -4
     factual: mostly_factual
     name: Jacobin
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "truthout.org":
     bias: -4
     factual: mostly_factual
     name: TruthOut
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "commondreams.org":
     bias: -4
     factual: mostly_factual
     name: Common Dreams
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
 
   # === SLIGHT RIGHT (+1) ===
   "realclearpolitics.com":
     bias: 1
     factual: mostly_factual
     name: RealClearPolitics
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "axios.com":
     bias: 1
     factual: high
     name: Axios
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
 
   # === LEAN RIGHT (+2) ===
   "wsj.com":
     bias: 2
     factual: mostly_factual
     name: Wall Street Journal
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "nypost.com":
     bias: 2
     factual: mixed
     name: New York Post
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "washingtonexaminer.com":
     bias: 2
     factual: mostly_factual
     name: Washington Examiner
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
 
   # === RIGHT (+3) ===
   "foxnews.com":
     bias: 3
     factual: mixed
     name: Fox News
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "dailywire.com":
     bias: 3
     factual: mostly_factual
     name: Daily Wire
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "nationalreview.com":
     bias: 3
     factual: mostly_factual
     name: National Review
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "theblaze.com":
     bias: 3
     factual: mixed
     name: The Blaze
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
 
   # === FAR RIGHT (+4) ===
   "breitbart.com":
     bias: 4
     factual: mixed
     name: Breitbart
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "thegatewaypundit.com":
     bias: 4
     factual: low
     name: Gateway Pundit
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     
   "infowars.com":
     bias: 4
     factual: very_low
     name: InfoWars
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
 
   # === LIBERTARIAN (special category) ===
   "reason.com":
     bias: 0
     factual: mostly_factual
     name: Reason
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     category: libertarian
     
   "mises.org":
     bias: 0
     factual: mostly_factual
     name: Mises Institute
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     category: libertarian
     
   "fee.org":
     bias: 1
     factual: mostly_factual
     name: FEE
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     category: libertarian
     
   "antiwar.com":
     bias: 0
     factual: mostly_factual
     name: Antiwar.com
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     category: libertarian
 
   # === INDEPENDENT / ANTI-ESTABLISHMENT ===
@@ -202,24 +274,32 @@ sources:
     bias: -2
     factual: high
     name: The Intercept
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     category: independent
     
   "zerohedge.com":
     bias: 2
     factual: mixed
     name: Zero Hedge
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     category: independent
     
   "taibbi.substack.com":
     bias: 0
     factual: mostly_factual
     name: Matt Taibbi
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     category: independent
     
   "greenwald.substack.com":
     bias: 0
     factual: mostly_factual
     name: Glenn Greenwald
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     category: independent
 
   # === ALTERNATIVE MEDIA / PODCASTS ===
@@ -227,18 +307,24 @@ sources:
     bias: 0
     factual: mixed
     name: Joe Rogan
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     category: alternative
     
   "timcast.com":
     bias: 2
     factual: mixed
     name: Tim Pool
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     category: alternative
     
   "breakingpoints.com":
     bias: 0
     factual: mostly_factual
     name: Breaking Points
+    source: AllSides
+    source_url: https://www.allsides.com/media-bias
     category: alternative
 
 # Factual rating scale

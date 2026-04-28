@@ -1,35 +1,16 @@
-import sys
 import os
+
+os.environ["DEBUG"] = "true"
+
 import pytest
-from unittest.mock import MagicMock
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-# --- MOCKING START ---
-# We verify logic without needing heavy dependencies
-MOCKED_MODULES = [
-    "crewai",
-    "crewai_tools",
-    "duckduckgo_search",
-    "trafilatura",
-    "newspaper",
-    "feedparser",
-    "yt_dlp",
-    "lancedb",
-    "chromadb",
-    "litellm",
-    "pydantic_settings",
-]
-
-# Apply mocks to sys.modules
-for mod_name in MOCKED_MODULES:
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = MagicMock()
-
-# Setup CrewAI mocks
-mock_crewai = MagicMock()
-mock_crewai.__path__ = []
-sys.modules["crewai"] = mock_crewai
-sys.modules["crewai.tools"] = MagicMock()
-sys.modules["crewai.tools.base_tool"] = MagicMock()
+from src.agents import profile_reader
+from src.agents import config as agents_config
+from src.core.config import settings
+from src.database import session as db_session
+from src.services.agent_config_service import AgentConfigService
 
 
 class MockAgent:
@@ -38,55 +19,73 @@ class MockAgent:
         self.llm = llm
 
 
-mock_crewai.Agent = MockAgent
+@pytest.fixture()
+def temp_db(monkeypatch, tmp_path):
+    db_path = tmp_path / "test_agent_flow.db"
+    monkeypatch.setattr(settings, "database_url", f"sqlite:///{db_path}", raising=False)
 
-# Mock Settings
-mock_config_module = MagicMock()
-mock_settings = MagicMock()
-mock_settings.database_url = "sqlite:///./test_agent_flow.db"
-mock_settings.debug = False
-mock_settings.llm_provider = "ollama"
-mock_settings.selected_model = "llama3"
-mock_settings.config_dir = MagicMock()
-mock_settings.config_dir.__truediv__.return_value = "dummy_path"
-mock_config_module.settings = mock_settings
-sys.modules["src.core.config"] = mock_config_module
+    engine = create_engine(
+        settings.database_url,
+        connect_args={"check_same_thread": False},
+    )
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# --- END MOCKS ---
+    monkeypatch.setattr(db_session, "engine", engine)
+    monkeypatch.setattr(db_session, "SessionLocal", SessionLocal)
 
-from src.database.session import init_db, get_session
-from src.services.agent_config_service import AgentConfigService
-from src.agents.profile_reader import create_profile_reader_agent
-
-
-@pytest.fixture(scope="module", autouse=True)
-def setup_db():
-    if os.path.exists("test_agent_flow.db"):
-        os.remove("test_agent_flow.db")
-    init_db()
+    db_session.init_db()
     yield
-    if os.path.exists("test_agent_flow.db"):
-        try:
-            os.remove("test_agent_flow.db")
-        except PermissionError:
-            pass
+    engine.dispose()
 
 
-def test_agent_config_flow():
+def test_agent_config_flow(monkeypatch, temp_db):
     """Verify that agent configuration is loaded from DB and applied to Agent."""
-    session = get_session()
+    monkeypatch.setattr(profile_reader, "Agent", MockAgent)
+    monkeypatch.setattr(
+        profile_reader,
+        "build_crewai_llm",
+        lambda agent_name=None: "ollama/test-model-v1",
+    )
+
+    session = db_session.get_session()
     service = AgentConfigService(session)
 
     agent_name = "profile_reader"
     test_model = "ollama/test-model-v1"
 
-    # Set config
     service.set_config(agent_name=agent_name, model=test_model, provider="ollama")
 
-    # Create agent
-    agent = create_profile_reader_agent()
+    agent = profile_reader.create_profile_reader_agent()
 
-    # Verify
     assert "test-model-v1" in str(agent.llm), f"Expected 'test-model-v1' in {agent.llm}"
+
+    session.close()
+
+
+def test_agent_config_service_persists_reasoning_effort(temp_db):
+    session = db_session.get_session()
+    service = AgentConfigService(session)
+
+    service.set_config(
+        agent_name="profile_reader",
+        provider="openai",
+        model="gpt-5.4",
+        reasoning_effort="high",
+    )
+
+    config = service.get_config("profile_reader")
+
+    assert config is not None
+    assert config.reasoning_effort == "high"
+
+    service.set_config(
+        agent_name="profile_reader",
+        clear_reasoning_effort=True,
+    )
+
+    config = service.get_config("profile_reader")
+
+    assert config is not None
+    assert config.reasoning_effort is None
 
     session.close()

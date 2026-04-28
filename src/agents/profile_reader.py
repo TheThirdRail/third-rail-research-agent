@@ -2,7 +2,7 @@
 
 from crewai import Agent
 
-from src.agents.config import AGENT_ROLES, get_llm_config
+from src.agents.config import AGENT_ROLES, build_crewai_llm
 from src.core.config import settings
 from src.tools.channel_profile_loader import load_channel_profile
 
@@ -14,14 +14,13 @@ def create_profile_reader_agent() -> Agent:
     including topics, worldview, and content preferences.
     """
     config = AGENT_ROLES["profile_reader"]
-    llm_config = get_llm_config(agent_name="profile_reader")
 
     return Agent(
         role=config["role"],
         goal=config["goal"],
         backstory=config["backstory"],
         tools=[],  # Profile loaded directly, no tools needed
-        llm=llm_config.get("model"),
+        llm=build_crewai_llm(agent_name="profile_reader"),
         verbose=True,
         allow_delegation=False,
     )

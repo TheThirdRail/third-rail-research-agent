@@ -10,14 +10,24 @@ from urllib.parse import urlparse
 
 from src.core.config import settings
 from src.core.exceptions import SourceExtractionError
-from src.services.bias_resolution_service import BiasResolutionInput, BiasResolutionService
+from src.schemas.story_packet import StoryPacket
+from src.services.balanced_source_planner import BalancedSourcePlanner, SourcePlan
+from src.services.bias_resolution_service import (
+    BiasResolutionInput,
+    BiasResolutionService,
+)
 from src.services.duplicate_detector import check_duplicate
+from src.services.relevance_scorer_service import RelevanceScorerService
 from src.services.rss_fallback_service import RssFallbackResult, RssFallbackService
+from src.services.source_scoring import ScoredCandidate, score_candidate
 from src.tools.article_extractor import ArticleExtractor
 from src.tools.bias_classifier import BiasResult
 from src.tools.web_search import DuckDuckGoSearch, SearchResult, SearxngSearch
 
 logger = logging.getLogger(__name__)
+
+SOURCE_CONTEXT_EXCERPT_CHARS = 900
+SOURCE_CONTEXT_MAX_CHARS = 7000
 
 
 @dataclass
@@ -35,6 +45,9 @@ class SourceCandidate:
     extractor_method: str | None = None
     http_status: int | None = None
     bias_result: BiasResult | None = None
+    relevance_score: float | None = None
+    source_score: float | None = None
+    bucket_label: str | None = None
 
 
 class SourceAggregatorService:
@@ -49,6 +62,8 @@ class SourceAggregatorService:
     def __init__(self) -> None:
         self._extractor = ArticleExtractor()
         self._bias_resolver = BiasResolutionService()
+        self._planner = BalancedSourcePlanner()
+        self._relevance_scorer = RelevanceScorerService()
         self._searcher = self._init_searcher()
         self._rss_fallback = (
             RssFallbackService() if settings.rss_seed_fallback_enabled else None
@@ -57,11 +72,22 @@ class SourceAggregatorService:
         self._missing_buckets: list[str] = []
         self._probed_count: int = 0
         self._duplicate_count: int = 0
+        self._last_plan: SourcePlan | None = None
 
-    def gather_sources(self, description: str, url: str | None) -> list[SourceCandidate]:
+    def gather_sources(
+        self,
+        description: str,
+        url: str | None,
+        story_packet: StoryPacket | None = None,
+    ) -> list[SourceCandidate]:
         """Gather and preflight sources based on description and optional URL."""
         if not description.strip() and not url:
             raise SourceExtractionError("Story description or URL is required.")
+
+        self._missing_buckets = []
+        self._probed_count = 0
+        self._duplicate_count = 0
+        self._last_plan = None
 
         sources: list[SourceCandidate] = []
         seen_urls: set[str] = set()
@@ -111,71 +137,35 @@ class SourceAggregatorService:
                         "- RSS metadata fallback: not found\n"
                     )
 
+        seed_bias = self._seed_bias(sources)
+        seed_domain = sources[0].domain if sources else self._extract_domain(url or "")
+        plan = self._planner.plan(seed_bias=seed_bias, seed_domain=seed_domain)
+        self._last_plan = plan
+
         queries = self._build_queries(
             description,
             url,
             sources,
             rss_title=rss_hint.title if rss_hint else None,
             rss_summary=rss_hint.summary if rss_hint else None,
+            story_packet=story_packet,
         )
-        results = self._search_queries(queries)
+        results = self._search_queries(queries, plan)
+        scored_candidates = self._preflight_search_results(
+            results=results,
+            sources=sources,
+            seen_urls=seen_urls,
+            seen_domains=seen_domains,
+            story_packet=story_packet,
+            plan=plan,
+        )
 
-        for result in results:
-            if len(sources) >= settings.retained_source_max:
-                break
-            if self._bias_spread_met(sources):
-                break
-            if self._probed_count >= settings.candidate_probe_limit:
-                break
-
-            candidate_url = result.url
-            if not candidate_url.startswith("http"):
-                continue
-            normalized_url = self._normalize_url(candidate_url)
-            domain = self._extract_domain(candidate_url)
-            if normalized_url in seen_urls or domain in seen_domains:
-                continue
-
-            self._probed_count += 1
-            candidate = self._extract_url(candidate_url, require_success=False)
-            if not candidate or not candidate.full_text:
-                continue
-
-            if len(candidate.full_text) < self.MIN_TEXT_LENGTH:
-                continue
-
-            # Duplicate / syndication detection
-            existing_for_dedup = [
-                {
-                    "url": s.url,
-                    "title": s.title,
-                    "body_text": s.full_text[:500],
-                    "domain": s.domain,
-                }
-                for s in sources
-            ]
-            dup_result = check_duplicate(
-                candidate.url,
-                candidate.title,
-                candidate.full_text[:500],
-                candidate.domain,
-                existing_for_dedup,
-            )
-            if dup_result.is_duplicate:
-                self._duplicate_count += 1
-                logger.debug(
-                    "Skipping duplicate %s: %s", candidate.url, dup_result.reason
-                )
-                continue
-
-            sources.append(candidate)
-            seen_urls.add(normalized_url)
-            seen_domains.add(domain)
+        self._select_scored_candidates(
+            scored_candidates, sources, seen_urls, seen_domains, plan
+        )
 
         if len(sources) < settings.retained_source_min:
-            detail = (
-                f"Only {len(sources)} sources extracted; need at least {settings.retained_source_min}."
-            )
+            detail = f"Only {len(sources)} sources extracted; need at least {settings.retained_source_min}."
             if primary_error and not sources:
                 detail += (
                     " Primary URL extraction failed: "
@@ -188,23 +178,25 @@ class SourceAggregatorService:
                 )
             elif self._rss_fallback and url:
                 detail += " RSS fallback did not find matching entry."
-            raise SourceExtractionError(
-                detail
-            )
+            raise SourceExtractionError(detail)
 
         return sources
 
     def format_sources_context(self, sources: list[SourceCandidate]) -> str:
         """Format sources into a context block for CrewAI tasks."""
-        lines = ["PREFETCHED SOURCES (Use ONLY these URLs):\n"]
+        lines = [
+            "PREFETCHED SOURCES (Use ONLY these URLs).",
+            "Use the excerpts as grounding; do not request or paste full article text.",
+            "",
+        ]
         if self._last_seed_context_note:
-            lines.append(self._last_seed_context_note.strip())
+            lines.append(self._last_seed_context_note.strip()[:500])
         for i, src in enumerate(sources, 1):
             bias = src.bias_result
             bias_line = "Unknown"
             if bias:
                 bias_line = f"{bias.bias} ({bias.bias_label}) via {bias.method}"
-            excerpt = (src.full_text or "")[:2000].strip()
+            excerpt = self._compact_text(src.full_text, SOURCE_CONTEXT_EXCERPT_CHARS)
             lines.append(
                 "\n".join(
                     [
@@ -219,9 +211,14 @@ class SourceAggregatorService:
                     ]
                 )
             )
-        return "\n\n".join(lines)
+        context = "\n\n".join(lines)
+        if len(context) <= SOURCE_CONTEXT_MAX_CHARS:
+            return context
+        return context[:SOURCE_CONTEXT_MAX_CHARS].rstrip() + "\n\n[Source context truncated]"
 
-    def summarize_bias_spread(self, sources: list[SourceCandidate]) -> dict[str, int | bool]:
+    def summarize_bias_spread(
+        self, sources: list[SourceCandidate]
+    ) -> dict[str, int | bool]:
         """Summarize left/right counts and whether bias spread is met."""
         left = sum(
             1
@@ -246,25 +243,28 @@ class SourceAggregatorService:
         probed_count, retained_count, duplicate_count.
         """
         left = sum(
-            1 for s in sources
+            1
+            for s in sources
             if s.bias_result and getattr(s.bias_result, "bias", 0) <= -2
         )
         center = sum(
-            1 for s in sources
+            1
+            for s in sources
             if s.bias_result and abs(getattr(s.bias_result, "bias", 99)) <= 1
         )
         right = sum(
-            1 for s in sources
+            1
+            for s in sources
             if s.bias_result and getattr(s.bias_result, "bias", 0) >= 2
         )
 
-        missing: list[str] = []
-        if left == 0:
-            missing.append("left_side")
-        if center == 0:
-            missing.append("center")
-        if right == 0:
-            missing.append("right_side")
+        required_labels = (
+            self._last_plan.required_labels
+            if self._last_plan
+            else ["left_side", "center", "right_side"]
+        )
+        filled_labels = {self._bucket_label(s) for s in sources}
+        missing = [label for label in required_labels if label not in filled_labels]
 
         self._missing_buckets = missing
 
@@ -283,6 +283,7 @@ class SourceAggregatorService:
     def missing_buckets(self) -> list[str]:
         """Return list of required but unfilled bias buckets."""
         return self._missing_buckets
+
     def _build_queries(
         self,
         description: str,
@@ -290,8 +291,14 @@ class SourceAggregatorService:
         sources: list[SourceCandidate],
         rss_title: str | None = None,
         rss_summary: str | None = None,
+        story_packet: StoryPacket | None = None,
     ) -> list[str]:
         queries = []
+        if story_packet:
+            queries.extend(story_packet.query_pack)
+            if story_packet.canonical_headline:
+                queries.append(f'"{story_packet.canonical_headline}"')
+
         description = description.strip()
         if description:
             queries.append(description)
@@ -327,22 +334,228 @@ class SourceAggregatorService:
                 ordered.append(q)
         return ordered[:4]
 
-    def _search_queries(self, queries: list[str]) -> list[SearchResult]:
+    def _search_queries(
+        self,
+        queries: list[str],
+        plan: SourcePlan | None = None,
+    ) -> list[SearchResult]:
         results: list[SearchResult] = []
+        seen_urls: set[str] = set()
+
+        def add_results(found: list[SearchResult]) -> None:
+            for result in found:
+                normalized = self._normalize_url(result.url)
+                if normalized in seen_urls:
+                    continue
+                seen_urls.add(normalized)
+                results.append(result)
+
         for query in queries:
+            if plan:
+                for step in plan.search_plan:
+                    phase = step.get("phase")
+                    domains = step.get("domains") or []
+                    if phase in {"rss_curated", "site_search"}:
+                        for domain in domains:
+                            site_query = f"site:{domain} {query}"
+                            try:
+                                if phase == "rss_curated":
+                                    found = self._searcher.news_search(
+                                        site_query,
+                                        max_results=2,
+                                        time_range=self._search_time_range(),
+                                    )
+                                else:
+                                    found = self._searcher.web_search(
+                                        site_query,
+                                        max_results=2,
+                                    )
+                                add_results(found)
+                            except Exception as exc:
+                                logger.warning(
+                                    "Search failed for '%s': %s", site_query, exc
+                                )
+                    elif phase == "open_web":
+                        try:
+                            found = self._searcher.news_search(
+                                query,
+                                max_results=12,
+                                time_range=self._search_time_range(),
+                            )
+                            add_results(found)
+                            if len(found) < 4:
+                                fallback = self._searcher.web_search(
+                                    query, max_results=8
+                                )
+                                add_results(fallback)
+                        except Exception as exc:
+                            logger.warning("Search failed for '%s': %s", query, exc)
+
+                    if len(results) >= settings.candidate_probe_limit * 3:
+                        break
+                if len(results) >= settings.candidate_probe_limit * 3:
+                    break
+                continue
+
             try:
-                found = self._searcher.news_search(query, max_results=12, time_range="m")
-                results.extend(found)
+                found = self._searcher.news_search(
+                    query,
+                    max_results=12,
+                    time_range=self._search_time_range(),
+                )
+                add_results(found)
                 if len(found) < 4:
                     fallback = self._searcher.web_search(query, max_results=8)
-                    results.extend(fallback)
+                    add_results(fallback)
             except Exception as exc:
                 logger.warning("Search failed for '%s': %s", query, exc)
         return results
 
-    def _extract_url(
-        self, url: str, require_success: bool = False
-    ) -> SourceCandidate:
+    def _preflight_search_results(
+        self,
+        *,
+        results: list[SearchResult],
+        sources: list[SourceCandidate],
+        seen_urls: set[str],
+        seen_domains: set[str],
+        story_packet: StoryPacket | None,
+        plan: SourcePlan,
+    ) -> list[tuple[ScoredCandidate, SourceCandidate]]:
+        scored_candidates: list[tuple[ScoredCandidate, SourceCandidate]] = []
+        candidate_urls = set(seen_urls)
+        candidate_domains = set(seen_domains)
+
+        for result in results:
+            if self._probed_count >= settings.candidate_probe_limit:
+                break
+
+            candidate_url = result.url
+            if not candidate_url.startswith("http"):
+                continue
+            normalized_url = self._normalize_url(candidate_url)
+            domain = self._extract_domain(candidate_url)
+            if normalized_url in candidate_urls or domain in candidate_domains:
+                continue
+
+            self._probed_count += 1
+            candidate = self._extract_url(candidate_url, require_success=False)
+            if not candidate or not candidate.full_text:
+                continue
+            if len(candidate.full_text) < self.MIN_TEXT_LENGTH:
+                continue
+
+            relevance_total = 0.5
+            if story_packet:
+                relevance = self._relevance_scorer.score(
+                    candidate_title=candidate.title,
+                    candidate_text=candidate.full_text,
+                    candidate_date=candidate.published_date,
+                    story_packet=story_packet,
+                    seen_domains=candidate_domains,
+                    candidate_domain=candidate.domain,
+                )
+                relevance_total = relevance.total
+                candidate.relevance_score = relevance.total
+                if relevance.rejection_reason:
+                    logger.debug(
+                        "Skipping low-relevance source %s: %s",
+                        candidate.url,
+                        relevance.rejection_reason,
+                    )
+                    continue
+
+            existing_for_dedup = [
+                {
+                    "url": s.url,
+                    "title": s.title,
+                    "body_text": s.full_text[:500],
+                    "domain": s.domain,
+                }
+                for s in sources
+            ]
+            dup_result = check_duplicate(
+                candidate.url,
+                candidate.title,
+                candidate.full_text[:500],
+                candidate.domain,
+                existing_for_dedup,
+            )
+            if dup_result.is_duplicate:
+                self._duplicate_count += 1
+                logger.debug(
+                    "Skipping duplicate %s: %s", candidate.url, dup_result.reason
+                )
+                continue
+
+            bucket_label = self._bucket_label(candidate)
+            candidate.bucket_label = bucket_label
+            score = score_candidate(
+                url=candidate.url,
+                domain=candidate.domain,
+                title=candidate.title,
+                bias=getattr(candidate.bias_result, "bias", 0)
+                if candidate.bias_result
+                else 0,
+                bucket_label=bucket_label,
+                similarity=relevance_total,
+                bucket_is_empty=self._bucket_is_empty(bucket_label, sources, plan),
+                domain_already_present=candidate.domain in seen_domains,
+                is_duplicate=False,
+                published_date=candidate.published_date,
+                reference_date=(
+                    story_packet.time_window_start
+                    if story_packet and story_packet.time_window_start
+                    else None
+                ),
+            )
+            candidate.source_score = score.total_score
+            scored_candidates.append((score, candidate))
+            candidate_urls.add(normalized_url)
+            candidate_domains.add(domain)
+
+        return scored_candidates
+
+    def _select_scored_candidates(
+        self,
+        scored_candidates: list[tuple[ScoredCandidate, SourceCandidate]],
+        sources: list[SourceCandidate],
+        seen_urls: set[str],
+        seen_domains: set[str],
+        plan: SourcePlan,
+    ) -> None:
+        remaining = sorted(
+            scored_candidates,
+            key=lambda item: item[0].total_score,
+            reverse=True,
+        )
+
+        while remaining and len(sources) < settings.retained_source_max:
+            missing = set(self._missing_required_labels(sources, plan))
+            if not missing and len(sources) >= settings.retained_source_min:
+                break
+
+            pool = [
+                item
+                for item in remaining
+                if not missing or item[1].bucket_label in missing
+            ] or remaining
+            selected_score, selected = max(
+                pool,
+                key=lambda item: (
+                    item[1].bucket_label in missing,
+                    item[0].total_score,
+                ),
+            )
+            remaining.remove((selected_score, selected))
+
+            normalized_url = self._normalize_url(selected.url)
+            if normalized_url in seen_urls or selected.domain in seen_domains:
+                continue
+            sources.append(selected)
+            seen_urls.add(normalized_url)
+            seen_domains.add(selected.domain)
+
+    def _extract_url(self, url: str, require_success: bool = False) -> SourceCandidate:
         article = self._extractor.extract(url)
         if not article.success or len(article.text) < self.MIN_TEXT_LENGTH:
             if require_success:
@@ -394,7 +607,50 @@ class SourceAggregatorService:
             extra_article = self._find_additional_article(domain, url, text)
             return [extra_article] if extra_article else []
 
-        return self._bias_resolver.resolve(input_data, extra_texts_provider=_extra_provider)
+        return self._bias_resolver.resolve(
+            input_data, extra_texts_provider=_extra_provider
+        )
+
+    def _seed_bias(self, sources: list[SourceCandidate]) -> int | None:
+        for source in sources:
+            if source.bias_result:
+                return getattr(source.bias_result, "bias", None)
+        return None
+
+    def _bucket_label(self, source: SourceCandidate) -> str:
+        if source.bucket_label:
+            return source.bucket_label
+        if source.bias_result:
+            return self._planner.classify_bias_to_bucket(
+                getattr(source.bias_result, "bias", 0)
+            )
+        return "center"
+
+    def _bucket_is_empty(
+        self,
+        bucket_label: str,
+        sources: list[SourceCandidate],
+        plan: SourcePlan,
+    ) -> bool:
+        return bucket_label in self._missing_required_labels(sources, plan)
+
+    def _missing_required_labels(
+        self,
+        sources: list[SourceCandidate],
+        plan: SourcePlan,
+    ) -> list[str]:
+        filled = {self._bucket_label(source) for source in sources}
+        return [label for label in plan.required_labels if label not in filled]
+
+    def _search_time_range(self) -> str:
+        days = getattr(settings, "search_time_window_days", 7)
+        if not isinstance(days, int):
+            days = 7
+        if days <= 1:
+            return "d"
+        if days <= 7:
+            return "w"
+        return "m"
 
     def _find_additional_article(self, domain: str, url: str, text: str) -> str | None:
         keywords = self._extract_keywords(text)
@@ -426,12 +682,18 @@ class SourceAggregatorService:
             s.bias_result and getattr(s.bias_result, "bias", 0) <= -2 for s in sources
         )
         has_center = any(
-            s.bias_result and abs(getattr(s.bias_result, "bias", 99)) <= 1 for s in sources
+            s.bias_result and abs(getattr(s.bias_result, "bias", 99)) <= 1
+            for s in sources
         )
         has_right = any(
             s.bias_result and getattr(s.bias_result, "bias", 0) >= 2 for s in sources
         )
-        return has_left and has_center and has_right and len(sources) >= settings.retained_source_min
+        return (
+            has_left
+            and has_center
+            and has_right
+            and len(sources) >= settings.retained_source_min
+        )
 
     def _slug_keywords(self, url: str) -> list[str]:
         try:
@@ -480,3 +742,9 @@ class SourceAggregatorService:
             return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{path}"
         except Exception:
             return url.lower().rstrip("/")
+
+    def _compact_text(self, text: str, max_chars: int) -> str:
+        compacted = re.sub(r"\s+", " ", text or "").strip()
+        if len(compacted) <= max_chars:
+            return compacted
+        return compacted[:max_chars].rstrip() + "..."

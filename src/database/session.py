@@ -1,7 +1,7 @@
 """Database session management."""
 
-from collections.abc import Generator
 import logging
+from collections.abc import Generator
 from pathlib import Path
 
 from sqlalchemy import create_engine, inspect, text
@@ -15,6 +15,21 @@ from src.core.model_normalization import (
 from src.database.models import AgentConfiguration, Base
 
 logger = logging.getLogger(__name__)
+
+HARDENING_COLUMNS: tuple[tuple[str, str, str, str | None], ...] = (
+    ("stories", "parsed_metadata", "TEXT", "'{}'"),
+    ("sources", "bias_provenance", "VARCHAR(50)", "'unknown'"),
+    ("sources", "is_curated_source", "BOOLEAN", "0"),
+    ("sources", "bias_category", "VARCHAR(50)", None),
+    ("analyses", "structured_claims", "TEXT", "'{}'"),
+    ("analyses", "coverage_asymmetry", "TEXT", "'{}'"),
+    ("analyses", "narrative_json", "TEXT", "'{}'"),
+    ("channel_profiles", "owner_user_id", "VARCHAR(36)", None),
+    ("channel_profiles", "raw_content", "TEXT", "''"),
+    ("channel_profiles", "format", "VARCHAR(20)", "'yaml'"),
+    ("channel_profiles", "parsed_json", "TEXT", "'{}'"),
+    ("channel_profiles", "version", "INTEGER", "1"),
+)
 
 
 def get_database_url() -> str:
@@ -46,6 +61,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def init_db() -> None:
     """Initialize database tables."""
     Base.metadata.create_all(bind=engine)
+    ensure_hardening_schema(engine)
     ensure_agent_config_schema(engine)
     ensure_agent_config_rows(engine)
     backfill_agent_config_models(engine)
@@ -75,18 +91,22 @@ def ensure_agent_config_rows(target_engine) -> None:
 
         template = by_name.get("fact_extractor") or by_name.get("report_writer")
 
-        default_provider = normalize_provider_name(
-            getattr(template, "provider", None)
-        ) or normalize_provider_name(settings.llm_provider) or "openrouter"
+        default_provider = (
+            normalize_provider_name(getattr(template, "provider", None))
+            or normalize_provider_name(settings.llm_provider)
+            or "openrouter"
+        )
 
         default_model_raw = getattr(template, "model", None) or _default_fallback_model(
             default_provider
         )
-        default_model = normalize_model_for_provider(default_provider, default_model_raw)
+        default_model = normalize_model_for_provider(
+            default_provider, default_model_raw
+        )
         default_free_tier = bool(getattr(template, "free_tier", False))
 
         created = 0
-        for agent_name in AGENT_ROLES.keys():
+        for agent_name in AGENT_ROLES:
             if agent_name in by_name:
                 continue
             session.add(
@@ -117,7 +137,9 @@ def ensure_agent_config_schema(target_engine) -> None:
         inspector = inspect(target_engine)
         if "agent_configurations" not in inspector.get_table_names():
             return
-        columns = {column["name"] for column in inspector.get_columns("agent_configurations")}
+        columns = {
+            column["name"] for column in inspector.get_columns("agent_configurations")
+        }
         if "free_tier" not in columns:
             with target_engine.begin() as conn:
                 conn.execute(
@@ -137,6 +159,37 @@ def ensure_agent_config_schema(target_engine) -> None:
     except Exception:
         # Avoid failing startup on migration issues
         return
+
+
+def ensure_hardening_schema(target_engine) -> None:
+    """Ensure existing SQLite databases have hardening-era columns.
+
+    SQLAlchemy ``create_all`` creates missing tables but does not alter tables
+    that already exist, so older local/Docker SQLite files need a light,
+    idempotent schema sync at startup.
+    """
+    try:
+        inspector = inspect(target_engine)
+        tables = set(inspector.get_table_names())
+        for table, column, sql_type, default in HARDENING_COLUMNS:
+            if table not in tables:
+                continue
+            columns = {col["name"] for col in inspector.get_columns(table)}
+            if column in columns:
+                continue
+
+            default_clause = f" DEFAULT {default}" if default is not None else ""
+            not_null_clause = " NOT NULL" if default is not None else ""
+            with target_engine.begin() as conn:
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table} ADD COLUMN {column} "
+                        f"{sql_type}{not_null_clause}{default_clause}"
+                    )
+                )
+            inspector.clear_cache()
+    except Exception:
+        logger.warning("Failed to sync hardening database schema", exc_info=True)
 
 
 def backfill_agent_config_models(target_engine) -> None:

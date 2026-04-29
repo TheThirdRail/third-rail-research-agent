@@ -118,16 +118,16 @@
 
 ---
 
-## Remaining — Integration (Next Session)
+## Integration Complete
 
-### Not Yet Wired
+### Final Wiring
 - [x] Insert StoryParserService into `AnalysisService.analyze()` pipeline
-- [ ] Insert RelevanceScorerService into `SourceAggregatorService.gather_sources()`
-- [ ] Wire BalancedSourcePlanner into `SourceAggregatorService.gather_sources()`
+- [x] Insert RelevanceScorerService into `SourceAggregatorService.gather_sources()`
+- [x] Wire BalancedSourcePlanner into `SourceAggregatorService.gather_sources()`
 - [x] Wire ReportRenderer as post-processor in `AnalysisService`
 - [x] Add DB migration for new columns (using SQLite migration script)
 - [x] Add unit tests for all new services
-- [ ] Integration test: end-to-end with seed URL → deterministic report
+- [x] Integration test: end-to-end with seed URL → deterministic report
 
 ---
 

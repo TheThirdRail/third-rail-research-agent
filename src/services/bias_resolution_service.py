@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Callable, Iterable
 
 from src.core.llm_provider_docker import get_llm_router
 from src.services.allsides_client import AllSidesClient
@@ -38,8 +38,8 @@ class BiasResolutionService:
     ) -> BiasResult:
         """Resolve bias for a source with fallbacks."""
         # 1) Local dataset lookup
-        result = self._classifier.classify(input_data.domain, input_data.article_text)
-        if result.method != "unknown":
+        result = self._classifier.local_db.lookup(input_data.domain)
+        if result:
             return result
 
         # 2) AllSides lookup

@@ -8,8 +8,8 @@ import json
 import logging
 from typing import Any
 
-from src.crews import run_analysis
 from src.core.exceptions import SourceExtractionError
+from src.crews import run_analysis
 from src.database import AnalysisCRUD, SourceCRUD, StoryCRUD, get_session
 from src.services.report_renderer import ReportRenderer, ReportSections, SourceRecord
 from src.services.report_validator import (
@@ -73,7 +73,11 @@ class AnalysisService:
         )
 
         # ── Stage 2: Source gathering with coverage enforcement ─────
-        sources = self._source_aggregator.gather_sources(description, url)
+        sources = self._source_aggregator.gather_sources(
+            description,
+            url,
+            story_packet=story_packet,
+        )
         coverage = self._source_aggregator.summarize_coverage(sources)
         sources_context = self._source_aggregator.format_sources_context(sources)
 
@@ -92,7 +96,7 @@ class AnalysisService:
         )
 
         # Persist parsed metadata
-        story.parsed_metadata = json.dumps(story_packet.model_dump())
+        story.parsed_metadata = story_packet.model_dump_json()
         self._session.commit()
 
         try:
@@ -109,7 +113,9 @@ class AnalysisService:
                     published_date=src.published_date,
                     political_bias=getattr(bias, "bias", 0) if bias else 0,
                     bias_confidence=getattr(bias, "confidence", 0.0) if bias else 0.0,
-                    bias_method=getattr(bias, "method", "unknown") if bias else "unknown",
+                    bias_method=getattr(bias, "method", "unknown")
+                    if bias
+                    else "unknown",
                 )
 
             # ── Stage 5: Run CrewAI analysis ────────────────────────
@@ -131,10 +137,10 @@ class AnalysisService:
             if all_warnings:
                 logger.warning("Report warnings: %s", "; ".join(all_warnings))
 
-                        # ── Stage 7: Deterministic rendering ────────────────────
+            # ── Stage 7: Deterministic rendering ────────────────────
             source_records = [
                 SourceRecord(
-                    source_id=f"S{i+1}",
+                    source_id=f"S{i + 1}",
                     title=src.title,
                     domain=src.domain,
                     url=src.url,

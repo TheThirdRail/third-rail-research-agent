@@ -54,10 +54,13 @@ class LocalBiasDatabase:
         self._legacy_sources: dict[str, dict] = {}
         try:
             from src.services.source_registry import get_source_registry
+
             self._registry = get_source_registry()
         except Exception:
             # Fallback to legacy file if registry not available
-            self.config_path = config_path or str(settings.config_dir / "bias_sources.yaml")
+            self.config_path = config_path or str(
+                settings.config_dir / "bias_sources.yaml"
+            )
             self._legacy_sources = self._load_sources()
 
     def _load_sources(self) -> dict[str, dict]:
@@ -134,43 +137,19 @@ class BiasClassifier:
     def classify(self, url_or_domain: str, article_text: str = "") -> BiasResult:
         """Classify bias of a source.
 
-        Routes through BiasResolutionService for the full cascade:
-        curated registry → AllSides → LLM → heuristic.
-        Falls back to local-only lookup if service unavailable.
+        Uses the local curated registry first. Unknown domains can be inferred
+        from article text as a fallback; richer AllSides/LLM cascade behavior
+        lives in BiasResolutionService to avoid recursive resolution.
         """
         domain = self._extract_domain(url_or_domain)
 
-        # Try local database first (fast path)
         result = self.local_db.lookup(domain)
         if result:
             return result
 
-        # Route through BiasResolutionService for full cascade
-        try:
-            from src.services.bias_resolution_service import BiasResolutionService
-
-            service = BiasResolutionService()
-            resolved = service.resolve(domain)
-            if resolved and resolved.bias_label != "Unknown":
-                return BiasResult(
-                    domain=resolved.domain,
-                    bias=resolved.bias,
-                    bias_label=resolved.bias_label,
-                    confidence=resolved.confidence,
-                    method=resolved.method,
-                    factual_rating=resolved.factual_rating,
-                    category=resolved.category,
-                    source=resolved.source,
-                    source_url=resolved.source_url,
-                )
-        except Exception as e:
-            logger.warning("BiasResolutionService unavailable: %s", e)
-
-        # Last resort: heuristic if text available
         if article_text:
             return self._heuristic_classify(domain, article_text)
 
-        # Return unknown only if all paths exhausted
         return BiasResult(
             domain=domain,
             bias=0,

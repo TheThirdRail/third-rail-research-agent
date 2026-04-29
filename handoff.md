@@ -16,31 +16,22 @@ We have made significant progress on hardening the Research Agent architecture. 
 
 ## What Needs to be Completed (Next Steps)
 
-The following items remain on the integration checklist and are the primary focus for the next session.
+The integration checklist is now complete.
 
-### 1. Wire `BalancedSourcePlanner` into `SourceAggregatorService`
-Currently, `gather_sources()` fetches results and appends them based on a greedy loop with simple threshold breaks (`retained_source_max`, `_bias_spread_met`).
-**Task:**
-- Initialize `BalancedSourcePlanner` inside `SourceAggregatorService`.
-- Call `planner.plan(seed_bias)` to determine the `required_buckets` and `optional_buckets`.
-- Instead of just checking if a bias spread is met loosely, use the planner's structured output to drive the discovery loop.
-- Use the newly built `score_candidate` logic from `src/services/source_scoring.py` to rank candidate URLs based on bucket needs, duplicate penalties, factuality, and freshness, rather than just appending the first valid links found.
+### Completed This Session
 
-### 2. Wire `RelevanceScorerService` into `SourceAggregatorService`
-Currently, candidate URLs are checked for text length and duplicates, but not deeply evaluated for story relevance.
-**Task:**
-- Inside the `gather_sources()` discovery loop (or as a batch processing step), initialize `RelevanceScorerService`.
-- Use the `StoryPacket` (which is now generated at the beginning of `AnalysisService.analyze()`) to score candidates via `scorer.score()`.
-- Reject candidates that fall below the relevance threshold (e.g., mismatching entities/events). 
-- *Note:* You will need to pass the `StoryPacket` down from `AnalysisService.analyze()` into `SourceAggregatorService.gather_sources()`.
+1. **Balanced Source Planner Wiring:** `SourceAggregatorService.gather_sources()` now creates a seed-aware `BalancedSourcePlanner` plan, searches curated bucket targets before broad open-web fallback, scores candidates with `score_candidate()`, and selects sources to fill missing required buckets.
+2. **Relevance Scorer Wiring:** `AnalysisService.analyze()` passes the parsed `StoryPacket` into `gather_sources()`. The aggregator now uses `RelevanceScorerService` to reject wrong-entity/wrong-event candidates before final source selection.
+3. **End-to-End Integration Test:** Added `tests/test_end_to_end_analysis.py`, covering seed URL analysis through story parsing, planned source aggregation, relevance filtering, deterministic report rendering, Source Matrix generation, and footnotes.
+4. **Bias Resolution Cleanup:** Removed a recursive `BiasClassifier` → `BiasResolutionService` fallback path and made `BiasResolutionService` use the local registry lookup directly before AllSides/LLM/heuristic fallbacks.
+5. **Serialization Fix:** Persisted `StoryPacket` metadata with `model_dump_json()` so parsed datetime windows serialize correctly.
 
-### 3. End-to-End Integration Testing
-Once the above wiring is complete, the entire pipeline needs to be verified end-to-end.
-**Task:**
-- Create an integration test (e.g., `tests/test_end_to_end_analysis.py`).
-- Provide a seed URL and description.
-- Assert that the pipeline correctly parses the story, uses the planner to find diverse sources, filters out irrelevant hits via the relevance scorer, runs the crew, and produces a final `ReportRenderer` markdown string that contains the `Source Matrix` and deterministic footnotes.
+### Verification
 
-### 4. Code Cleanup & Finalization
-- Review the codebase for any remaining obsolete fallback logic (e.g., old YAML loading mechanisms that might have been missed).
-- Review `model-lock-in.md` and decide on the timeline for finalizing the model selection (currently deferred).
+- `python -m pytest tests -q` → 152 passed.
+- Touched-file Ruff check passed.
+- Repo-wide Ruff check still reports older unrelated lint/style findings outside this change set.
+
+### Remaining Deferred Item
+
+- `model-lock-in.md` remains intentionally deferred; no runtime model decision was made in this pass.

@@ -53,10 +53,11 @@ def create_analysis_tasks(
         1. Search for news articles about this story
         2. Find sources from left, center, and right-leaning outlets
         3. Include libertarian and independent sources if available
-        4. Extract the full article text from each source
+        4. Return concise, source-numbered evidence excerpts only.
 
-        Return a list of sources with their URLs and domains.""",
-        expected_output="A list of 5-15 news sources covering the story with URLs and extracted text.",
+        Return a compact source manifest with source IDs, URLs, domains, bias,
+        and short evidence excerpts. Do not paste full article text.""",
+        expected_output="A compact list of preflighted sources with URLs, domains, bias, and short excerpts.",
         agent=create_source_aggregator_agent(),
     )
 
@@ -157,9 +158,8 @@ def create_analysis_tasks(
         description=f"""Write a comprehensive research report for this story:
 
         Story: {story_description}
-        {prefetched_context}
 
-        Use ONLY the sources provided in the context above. Do not add new sources.
+        Use ONLY the source manifest from the previous tasks. Do not add new sources.
 
         The report should include:
         1. Executive Summary (3-5 sentences)

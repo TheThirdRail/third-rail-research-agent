@@ -18,3 +18,5 @@ def test_report_prompt_includes_table_and_citations():
     assert "Fact vs Opinion Ambiguities" in content
     assert "Additional Rhetorical Signals" in content
     assert "moderate verbosity" in content
+    assert "Do not paste full article text" in content
+    assert content.count("{prefetched_context}") == 1

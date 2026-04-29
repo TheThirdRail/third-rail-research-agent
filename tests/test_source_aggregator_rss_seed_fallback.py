@@ -1,7 +1,11 @@
 from datetime import datetime
+from unittest.mock import patch
 
 from src.services.rss_fallback_service import RssFallbackResult
-from src.services.source_aggregator_service import SourceAggregatorService, SourceCandidate
+from src.services.source_aggregator_service import (
+    SourceAggregatorService,
+    SourceCandidate,
+)
 from src.tools.web_search import SearchResult
 
 
@@ -97,10 +101,19 @@ def test_seed_blocked_uses_rss_metadata_for_query_enrichment(monkeypatch):
     service = SourceAggregatorService()
     service._rss_fallback = DummyRssFallback()
 
-    sources = service.gather_sources(
-        description="Xi phone call taiwan",
-        url="https://www.nytimes.com/2026/02/04/us/politics/xi-phone-call-taiwan.html",
-    )
+    with patch("src.services.source_aggregator_service.settings") as mock_settings:
+        mock_settings.retained_source_min = 2
+        mock_settings.retained_source_max = 5
+        mock_settings.candidate_probe_limit = 15
+        mock_settings.search_time_window_days = 7
+        mock_settings.rss_seed_fallback_enabled = True
+        mock_settings.searxng_base_url = ""
+        mock_settings.searxng_api_key = ""
+
+        sources = service.gather_sources(
+            description="Xi phone call taiwan",
+            url="https://www.nytimes.com/2026/02/04/us/politics/xi-phone-call-taiwan.html",
+        )
 
     assert len(sources) >= 2
     assert any("Xi Presses Trump on Taiwan" in query for query in searcher.queries)

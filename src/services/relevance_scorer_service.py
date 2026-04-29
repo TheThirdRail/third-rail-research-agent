@@ -7,7 +7,6 @@ against a parsed story packet. Hybrid deterministic + model stage.
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -19,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RelevanceScore:
     """Relevance score breakdown for a candidate article."""
+
     total: float
     entity_overlap: float
     event_overlap: float
@@ -96,7 +96,7 @@ class RelevanceScorerService:
         if packet.time_window_start <= date <= packet.time_window_end:
             return 1.0
         # Penalize by distance from window
-        from datetime import timedelta
+
         window_size = (packet.time_window_end - packet.time_window_start).days or 7
         if date < packet.time_window_start:
             gap = (packet.time_window_start - date).days
@@ -121,9 +121,15 @@ class RelevanceScorerService:
         return 0.2 if domain in seen else 1.0
 
     def _check_rejection(
-        self, total: float, entity: float, event: float,
-        text: str, packet: StoryPacket,
+        self,
+        total: float,
+        entity: float,
+        event: float,
+        text: str,
+        packet: StoryPacket,
     ) -> str | None:
+        if packet.actors and packet.action_verbs and entity < 0.1 and event < 0.1:
+            return "same_topic_wrong_entities_and_event"
         if total < self.REJECTION_THRESHOLD:
             if entity < 0.1:
                 return "same_topic_wrong_entities"

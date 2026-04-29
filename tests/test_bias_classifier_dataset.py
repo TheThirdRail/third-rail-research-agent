@@ -6,13 +6,13 @@ def test_bias_dataset_includes_source_fields():
     result = classifier.classify("reuters.com")
 
     assert result.method == "dataset"
-    assert result.source == "AllSides"
+    assert result.source == "source_registry"
     assert result.source_url is not None
 
 
-def test_unknown_source_does_not_guess_bias():
+def test_unknown_source_uses_text_fallback():
     classifier = BiasClassifier()
     result = classifier.classify("unknown-example.com", article_text="Some text")
 
-    assert result.method == "unknown"
-    assert result.confidence == 0.0
+    assert result.method in {"heuristic", "llm"}
+    assert result.confidence > 0.0

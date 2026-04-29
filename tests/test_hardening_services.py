@@ -7,23 +7,20 @@ ReportValidator (new rules), and BiasClassifier registry routing.
 
 import json
 
-import pytest
-
-from src.schemas.claims import Claim, ClaimType, CoverageStatus, FactExtractionResult
+from src.schemas.claims import Claim, ClaimType, FactExtractionResult
 from src.schemas.narrative import NarrativeResult
 from src.schemas.story_packet import StoryPacket
 from src.services.balanced_source_planner import BalancedSourcePlanner
-from src.services.duplicate_detector import DuplicateResult, check_duplicate
+from src.services.duplicate_detector import check_duplicate
 from src.services.relevance_scorer_service import RelevanceScorerService
 from src.services.report_renderer import ReportRenderer, ReportSections, SourceRecord
 from src.services.report_validator import (
     validate_evidence_limits,
     validate_orphaned_citations,
 )
-from src.services.source_registry import SourceRegistry, get_source_registry
+from src.services.source_registry import get_source_registry
 from src.services.source_scoring import score_candidate
 from src.services.story_parser_service import StoryParserService
-
 
 # ─────────────────────── Source Registry ───────────────────────
 
@@ -85,27 +82,28 @@ class TestSourceRegistry:
 class TestBalancedSourcePlanner:
     """Tests for deterministic bucket planning."""
 
-    def test_far_left_seed_requires_center_and_right(self) -> None:
+    def test_far_left_seed_requires_left_and_right(self) -> None:
         planner = BalancedSourcePlanner()
         plan = planner.plan(seed_bias=-4)
         labels = [b.label for b in plan.required_buckets]
-        assert "center" in labels
+        assert "left_side" in labels
         assert "right_side" in labels
 
-    def test_far_right_seed_requires_center_and_left(self) -> None:
+    def test_far_right_seed_requires_left_and_right(self) -> None:
         planner = BalancedSourcePlanner()
         plan = planner.plan(seed_bias=4)
         labels = [b.label for b in plan.required_buckets]
-        assert "center" in labels
         assert "left_side" in labels
+        assert "right_side" in labels
 
-    def test_center_seed_requires_all_three(self) -> None:
+    def test_center_seed_requires_left_and_right_with_center_optional(self) -> None:
         planner = BalancedSourcePlanner()
         plan = planner.plan(seed_bias=0)
         labels = [b.label for b in plan.required_buckets]
         assert "left_side" in labels
-        assert "center" in labels
         assert "right_side" in labels
+        assert "center" not in labels
+        assert "center" in [b.label for b in plan.optional_buckets]
 
     def test_libertarian_is_always_optional(self) -> None:
         planner = BalancedSourcePlanner()
@@ -336,6 +334,33 @@ class TestReportRenderer:
         assert "Source Matrix" in report
         assert "reuters.com" in report
 
+    def test_render_single_matrix_and_story_first_sections(self) -> None:
+        sources = [
+            SourceRecord(
+                source_id="S1",
+                title="Reuters Article",
+                domain="reuters.com",
+                url="https://reuters.com/article",
+                bias=0,
+                bias_label="Center",
+                confidence=1.0,
+            ),
+        ]
+        sections = ReportSections(
+            executive_summary="Brief summary.",
+            what_happened="The event happened.",
+            directly_observable="The image shows visible text.",
+            what_is_disputed="The meaning is disputed.",
+            coverage_snapshot="left=1 center=1 right=1",
+        )
+        report = ReportRenderer().render(sources, sections, missing_buckets=[])
+
+        assert report.count("## Source Matrix") == 1
+        assert report.count("## All Sources & Citations") == 1
+        assert report.count("## Executive Summary") == 1
+        assert report.index("## What Happened") < report.index("## Source Matrix")
+        assert report.index("## Coverage Snapshot") < report.index("## Source Matrix")
+
 
 # ─────────────────────── Relevance Scorer ──────────────────────
 
@@ -390,7 +415,9 @@ class TestRelevanceScorer:
             story_packet=packet,
         )
         # rejection_reason can be None or a string
-        assert result.rejection_reason is None or isinstance(result.rejection_reason, str)
+        assert result.rejection_reason is None or isinstance(
+            result.rejection_reason, str
+        )
 
 
 # ─────────────────────── Report Validator (new rules) ──────────
@@ -400,9 +427,7 @@ class TestReportValidatorNewRules:
     """Tests for new validation rules."""
 
     def test_evidence_limits_warns_when_missing_buckets(self) -> None:
-        warnings = validate_evidence_limits(
-            "# Report\nSome analysis.", ["left_side"]
-        )
+        warnings = validate_evidence_limits("# Report\nSome analysis.", ["left_side"])
         assert len(warnings) > 0
         assert "evidence limitation" in warnings[0].lower()
 

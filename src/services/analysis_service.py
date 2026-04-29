@@ -11,14 +11,17 @@ from typing import Any
 from src.core.exceptions import SourceExtractionError
 from src.crews import run_analysis
 from src.database import AnalysisCRUD, SourceCRUD, StoryCRUD, get_session
-from src.services.report_renderer import ReportRenderer, ReportSections, SourceRecord
+from src.schemas.analysis_report_sections import AnalysisReportSections
+from src.services.report_renderer import ReportRenderer, SourceRecord
 from src.services.report_validator import (
     validate_evidence_limits,
     validate_orphaned_citations,
     validate_report_sources,
+    validate_structured_section_payload,
 )
 from src.services.source_aggregator_service import SourceAggregatorService
 from src.services.story_parser_service import StoryParserService
+from src.services.visual_evidence_service import VisualEvidenceService
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,7 @@ class AnalysisService:
         self._source_aggregator = SourceAggregatorService()
         self._story_parser = StoryParserService()
         self._report_renderer = ReportRenderer()
+        self._visual_evidence = VisualEvidenceService()
 
     def analyze(
         self,
@@ -80,6 +84,10 @@ class AnalysisService:
         )
         coverage = self._source_aggregator.summarize_coverage(sources)
         sources_context = self._source_aggregator.format_sources_context(sources)
+        visual_bundle = self._visual_evidence.analyze(
+            self._source_aggregator.collect_media_pointers(sources)
+        )
+        visual_context = visual_bundle.to_context_block()
 
         logger.info(
             "Sources gathered: retained=%d, probed=%d, coverage_ok=%s, missing=%s",
@@ -119,21 +127,26 @@ class AnalysisService:
                 )
 
             # ── Stage 5: Run CrewAI analysis ────────────────────────
-            result = run_analysis(description, url, prefetched_sources=sources_context)
-            crew_report = result.get("report", "")
-
-            # ── Stage 6: Validate ───────────────────────────────────
-            allowed_urls = [s.url for s in sources]
-            try:
-                validate_report_sources(crew_report, allowed_urls)
-            except SourceExtractionError as val_err:
-                logger.warning("Report validation issue: %s", val_err)
-
-            evidence_warnings = validate_evidence_limits(
-                crew_report, coverage.get("missing_buckets", [])
+            result = run_analysis(
+                description,
+                url,
+                prefetched_sources=sources_context,
+                visual_evidence_context=visual_context,
             )
+            crew_report = result.get("report", "")
+            structured_sections = AnalysisReportSections.from_crew_payload(
+                result,
+                fallback_summary=description,
+            )
+            if not structured_sections.coverage_snapshot:
+                structured_sections.coverage_snapshot = self._coverage_snapshot(
+                    coverage
+                )
+
+            # ── Stage 6: Validate structured crew output ─────────────
+            allowed_urls = [s.url for s in sources]
             citation_warnings = validate_orphaned_citations(crew_report)
-            all_warnings = evidence_warnings + citation_warnings
+            all_warnings = citation_warnings
             if all_warnings:
                 logger.warning("Report warnings: %s", "; ".join(all_warnings))
 
@@ -158,17 +171,19 @@ class AnalysisService:
                 )
                 for i, src in enumerate(sources)
             ]
-            # Build sections from the crew report (pass-through for now;
-            # full structured output_pydantic will replace this once model
-            # lock-in is resolved)
-            sections = ReportSections(
-                executive_summary=crew_report,
-            )
+            sections = structured_sections.to_renderer_sections()
+            sections.evidence_limitations.extend(visual_bundle.limitations)
+            validate_structured_section_payload(sections)
             report = self._report_renderer.render(
                 sources=source_records,
                 sections=sections,
                 missing_buckets=coverage.get("missing_buckets", []),
             )
+            validate_report_sources(report, allowed_urls)
+            evidence_warnings = validate_evidence_limits(
+                report, coverage.get("missing_buckets", [])
+            )
+            all_warnings.extend(evidence_warnings)
 
             # ── Stage 8: Persist analysis ───────────────────────────
             story.status = "analyzed"
@@ -194,6 +209,7 @@ class AnalysisService:
                 "right_source_count": int(coverage.get("right_count", 0)),
                 "probed_count": int(coverage.get("probed_count", 0)),
                 "warnings": all_warnings,
+                "visual_evidence_count": len(visual_bundle.records),
             }
         except SourceExtractionError:
             story.status = "failed"
@@ -223,3 +239,24 @@ class AnalysisService:
             "report": story.analysis.full_report_md,
             "created_at": story.analysis.created_at.isoformat(),
         }
+
+    @staticmethod
+    def _coverage_snapshot(coverage: dict[str, Any]) -> str:
+        exact_counts = coverage.get("exact_bias_counts") or {}
+        exact_parts = [
+            f"{bias:+d}: {count}"
+            for bias, count in sorted(
+                exact_counts.items(), key=lambda item: int(item[0])
+            )
+        ]
+        missing = coverage.get("missing_buckets") or []
+        missing_text = ", ".join(missing) if missing else "none"
+        exact_text = ", ".join(exact_parts) if exact_parts else "unavailable"
+        return (
+            f"Retained {coverage.get('retained_count', 0)} sources after probing "
+            f"{coverage.get('probed_count', 0)} candidates. "
+            f"Grouped counts: left={coverage.get('left_count', 0)}, "
+            f"center={coverage.get('center_count', 0)}, "
+            f"right={coverage.get('right_count', 0)}. "
+            f"Exact-bias counts: {exact_text}. Missing required buckets: {missing_text}."
+        )

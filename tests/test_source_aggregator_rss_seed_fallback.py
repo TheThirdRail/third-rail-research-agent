@@ -52,6 +52,11 @@ class DummyRssFallback:
         return None
 
 
+class NoopRssRetriever:
+    def search(self, query: str, *, domains: list[str], max_results: int = 8):
+        return []
+
+
 def test_seed_blocked_uses_rss_metadata_for_query_enrichment(monkeypatch):
     searcher = DummySearcher()
 
@@ -100,6 +105,7 @@ def test_seed_blocked_uses_rss_metadata_for_query_enrichment(monkeypatch):
 
     service = SourceAggregatorService()
     service._rss_fallback = DummyRssFallback()
+    service._rss_retriever = NoopRssRetriever()
 
     with patch("src.services.source_aggregator_service.settings") as mock_settings:
         mock_settings.retained_source_min = 2
@@ -109,6 +115,10 @@ def test_seed_blocked_uses_rss_metadata_for_query_enrichment(monkeypatch):
         mock_settings.rss_seed_fallback_enabled = True
         mock_settings.searxng_base_url = ""
         mock_settings.searxng_api_key = ""
+        mock_settings.strict_bucket_enforcement = False
+        mock_settings.max_per_exact_bias = 10
+        mock_settings.max_per_bucket_group = 10
+        mock_settings.allow_same_bias_backfill = True
 
         sources = service.gather_sources(
             description="Xi phone call taiwan",

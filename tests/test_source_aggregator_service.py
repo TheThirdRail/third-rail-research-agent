@@ -10,6 +10,11 @@ from src.tools.bias_classifier import BiasResult
 from src.tools.web_search import SearchResult
 
 
+class NoopRssRetriever:
+    def search(self, query: str, *, domains: list[str], max_results: int = 8):
+        return []
+
+
 def test_gather_sources_continues_when_seed_url_unextractable(monkeypatch):
     class DummySearcher:
         def news_search(self, query: str, max_results: int = 10, time_range: str = "m"):
@@ -82,8 +87,13 @@ def test_gather_sources_continues_when_seed_url_unextractable(monkeypatch):
         mock_settings.rss_seed_fallback_enabled = True
         mock_settings.searxng_base_url = ""
         mock_settings.searxng_api_key = ""
+        mock_settings.strict_bucket_enforcement = False
+        mock_settings.max_per_exact_bias = 10
+        mock_settings.max_per_bucket_group = 10
+        mock_settings.allow_same_bias_backfill = True
 
         service = SourceAggregatorService()
+        service._rss_retriever = NoopRssRetriever()
         sources = service.gather_sources(
             description="Xi phone call taiwan",
             url="https://www.nytimes.com/2026/02/04/us/politics/xi-phone-call-taiwan.html",
@@ -199,6 +209,7 @@ def test_gather_sources_uses_planner_and_relevance_scorer(monkeypatch):
     )
 
     service = SourceAggregatorService()
+    service._rss_retriever = NoopRssRetriever()
     sources = service.gather_sources(
         description="President Joe Biden signed executive order on AI safety",
         url="https://reuters.com/seed",

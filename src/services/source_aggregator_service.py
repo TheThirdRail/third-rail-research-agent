@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from src.core.config import settings
 from src.core.exceptions import SourceExtractionError
 from src.schemas.story_packet import StoryPacket
+from src.schemas.visual_evidence import MediaPointer
 from src.services.balanced_source_planner import BalancedSourcePlanner, SourcePlan
 from src.services.bias_resolution_service import (
     BiasResolutionInput,
@@ -19,6 +20,7 @@ from src.services.bias_resolution_service import (
 from src.services.duplicate_detector import check_duplicate
 from src.services.relevance_scorer_service import RelevanceScorerService
 from src.services.rss_fallback_service import RssFallbackResult, RssFallbackService
+from src.services.rss_retrieval_service import RssRetrievalService
 from src.services.source_scoring import ScoredCandidate, score_candidate
 from src.tools.article_extractor import ArticleExtractor
 from src.tools.bias_classifier import BiasResult
@@ -48,6 +50,11 @@ class SourceCandidate:
     relevance_score: float | None = None
     source_score: float | None = None
     bucket_label: str | None = None
+    coverage_type: str | None = None
+    og_image_url: str | None = None
+    embedded_post_urls: tuple[str, ...] = ()
+    image_alt_text: tuple[str, ...] = ()
+    media_captions: tuple[str, ...] = ()
 
 
 class SourceAggregatorService:
@@ -65,6 +72,7 @@ class SourceAggregatorService:
         self._planner = BalancedSourcePlanner()
         self._relevance_scorer = RelevanceScorerService()
         self._searcher = self._init_searcher()
+        self._rss_retriever = RssRetrievalService()
         self._rss_fallback = (
             RssFallbackService() if settings.rss_seed_fallback_enabled else None
         )
@@ -164,6 +172,16 @@ class SourceAggregatorService:
             scored_candidates, sources, seen_urls, seen_domains, plan
         )
 
+        self._missing_buckets = self._missing_required_labels(sources, plan)
+        if (
+            self._setting_bool("strict_bucket_enforcement", True)
+            and self._missing_buckets
+        ):
+            raise SourceExtractionError(
+                "Missing required ideological coverage: "
+                + ", ".join(self._missing_buckets)
+            )
+
         if len(sources) < settings.retained_source_min:
             detail = f"Only {len(sources)} sources extracted; need at least {settings.retained_source_min}."
             if primary_error and not sources:
@@ -205,6 +223,7 @@ class SourceAggregatorService:
                         f"Domain: {src.domain}",
                         f"URL: {src.url}",
                         f"Bias: {bias_line}",
+                        self._format_media_context(src),
                         "Text Excerpt:",
                         excerpt,
                         "-" * 40,
@@ -214,7 +233,40 @@ class SourceAggregatorService:
         context = "\n\n".join(lines)
         if len(context) <= SOURCE_CONTEXT_MAX_CHARS:
             return context
-        return context[:SOURCE_CONTEXT_MAX_CHARS].rstrip() + "\n\n[Source context truncated]"
+        return (
+            context[:SOURCE_CONTEXT_MAX_CHARS].rstrip()
+            + "\n\n[Source context truncated]"
+        )
+
+    def collect_media_pointers(
+        self,
+        sources: list[SourceCandidate],
+    ) -> list[MediaPointer]:
+        """Collect media pointers from extracted sources for visual evidence."""
+        pointers: list[MediaPointer] = []
+        for source in sources:
+            if source.og_image_url:
+                pointers.append(
+                    MediaPointer(
+                        source_url=source.url,
+                        media_url=source.og_image_url,
+                        media_type="image",
+                        alt_text="; ".join(source.image_alt_text[:3]),
+                        caption="; ".join(source.media_captions[:3]),
+                    )
+                )
+            for post_url in source.embedded_post_urls:
+                pointers.append(
+                    MediaPointer(
+                        source_url=source.url,
+                        media_url=post_url,
+                        media_type="social_post",
+                        platform=self._platform_from_url(post_url),
+                        alt_text="; ".join(source.image_alt_text[:3]),
+                        caption="; ".join(source.media_captions[:3]),
+                    )
+                )
+        return pointers[:10]
 
     def summarize_bias_spread(
         self, sources: list[SourceCandidate]
@@ -223,12 +275,12 @@ class SourceAggregatorService:
         left = sum(
             1
             for s in sources
-            if s.bias_result and getattr(s.bias_result, "bias", 0) <= -2
+            if s.bias_result and getattr(s.bias_result, "bias", 0) <= -1
         )
         right = sum(
             1
             for s in sources
-            if s.bias_result and getattr(s.bias_result, "bias", 0) >= 2
+            if s.bias_result and getattr(s.bias_result, "bias", 0) >= 1
         )
         return {
             "left_count": left,
@@ -245,17 +297,17 @@ class SourceAggregatorService:
         left = sum(
             1
             for s in sources
-            if s.bias_result and getattr(s.bias_result, "bias", 0) <= -2
+            if s.bias_result and getattr(s.bias_result, "bias", 0) <= -1
         )
         center = sum(
             1
             for s in sources
-            if s.bias_result and abs(getattr(s.bias_result, "bias", 99)) <= 1
+            if s.bias_result and getattr(s.bias_result, "bias", 99) == 0
         )
         right = sum(
             1
             for s in sources
-            if s.bias_result and getattr(s.bias_result, "bias", 0) >= 2
+            if s.bias_result and getattr(s.bias_result, "bias", 0) >= 1
         )
 
         required_labels = (
@@ -274,6 +326,8 @@ class SourceAggregatorService:
             "left_count": left,
             "center_count": center,
             "right_count": right,
+            "exact_bias_counts": self._exact_bias_counts(sources),
+            "bucket_counts": self._bucket_counts(sources),
             "probed_count": self._probed_count,
             "retained_count": len(sources),
             "duplicate_count": self._duplicate_count,
@@ -355,21 +409,28 @@ class SourceAggregatorService:
                 for step in plan.search_plan:
                     phase = step.get("phase")
                     domains = step.get("domains") or []
-                    if phase in {"rss_curated", "site_search"}:
+                    if phase == "rss":
+                        if not self._setting_bool("analysis_rss_first_enabled", True):
+                            continue
+                        try:
+                            found = self._rss_retriever.search(
+                                query,
+                                domains=list(domains),
+                                max_results=8,
+                            )
+                            add_results(found)
+                        except Exception as exc:
+                            logger.warning(
+                                "RSS retrieval failed for '%s': %s", query, exc
+                            )
+                    elif phase == "site_search":
                         for domain in domains:
                             site_query = f"site:{domain} {query}"
                             try:
-                                if phase == "rss_curated":
-                                    found = self._searcher.news_search(
-                                        site_query,
-                                        max_results=2,
-                                        time_range=self._search_time_range(),
-                                    )
-                                else:
-                                    found = self._searcher.web_search(
-                                        site_query,
-                                        max_results=2,
-                                    )
+                                found = self._searcher.web_search(
+                                    site_query,
+                                    max_results=2,
+                                )
                                 add_results(found)
                             except Exception as exc:
                                 logger.warning(
@@ -456,6 +517,7 @@ class SourceAggregatorService:
                 )
                 relevance_total = relevance.total
                 candidate.relevance_score = relevance.total
+                candidate.coverage_type = relevance.coverage_type
                 if relevance.rejection_reason:
                     logger.debug(
                         "Skipping low-relevance source %s: %s",
@@ -538,9 +600,30 @@ class SourceAggregatorService:
                 item
                 for item in remaining
                 if not missing or item[1].bucket_label in missing
-            ] or remaining
+            ]
+            if (
+                missing
+                and not pool
+                and not self._setting_bool(
+                    "allow_same_bias_backfill",
+                    False,
+                )
+            ):
+                break
+            if not pool:
+                pool = remaining
+
+            policy_pool = [
+                item
+                for item in pool
+                if self._candidate_allowed_by_policy(item[1], sources)
+            ]
+            if not policy_pool:
+                if missing:
+                    break
+                break
             selected_score, selected = max(
-                pool,
+                policy_pool,
                 key=lambda item: (
                     item[1].bucket_label in missing,
                     item[0].total_score,
@@ -574,6 +657,10 @@ class SourceAggregatorService:
                 extractor_method=article.extractor_method,
                 http_status=article.http_status,
                 bias_result=None,
+                og_image_url=article.og_image_url,
+                embedded_post_urls=article.embedded_post_urls,
+                image_alt_text=article.image_alt_text,
+                media_captions=article.media_captions,
             )
 
         bias_result = self._resolve_bias(article.domain, url, article.text)
@@ -590,6 +677,10 @@ class SourceAggregatorService:
             extractor_method=article.extractor_method,
             http_status=article.http_status,
             bias_result=bias_result,
+            og_image_url=article.og_image_url,
+            embedded_post_urls=article.embedded_post_urls,
+            image_alt_text=article.image_alt_text,
+            media_captions=article.media_captions,
         )
 
     def _resolve_bias(self, domain: str, url: str, text: str):
@@ -642,6 +733,56 @@ class SourceAggregatorService:
         filled = {self._bucket_label(source) for source in sources}
         return [label for label in plan.required_labels if label not in filled]
 
+    def _candidate_allowed_by_policy(
+        self,
+        candidate: SourceCandidate,
+        sources: list[SourceCandidate],
+    ) -> bool:
+        bias = self._candidate_bias(candidate)
+        exact_limit = self._setting_int("max_per_exact_bias", 1)
+        if (
+            exact_limit >= 0
+            and self._exact_bias_counts(sources).get(bias, 0) >= exact_limit
+        ):
+            return False
+
+        bucket_limit = self._setting_int("max_per_bucket_group", 2)
+        bucket = self._bucket_label(candidate)
+        return not (
+            bucket_limit >= 0
+            and self._bucket_counts(sources).get(bucket, 0) >= bucket_limit
+        )
+
+    def _exact_bias_counts(self, sources: list[SourceCandidate]) -> dict[int, int]:
+        counts: dict[int, int] = {}
+        for source in sources:
+            bias = self._candidate_bias(source)
+            counts[bias] = counts.get(bias, 0) + 1
+        return counts
+
+    def _bucket_counts(self, sources: list[SourceCandidate]) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for source in sources:
+            label = self._bucket_label(source)
+            counts[label] = counts.get(label, 0) + 1
+        return counts
+
+    @staticmethod
+    def _candidate_bias(source: SourceCandidate) -> int:
+        if source.bias_result:
+            return int(getattr(source.bias_result, "bias", 0))
+        return 0
+
+    @staticmethod
+    def _setting_bool(name: str, default: bool) -> bool:
+        value = getattr(settings, name, default)
+        return value if isinstance(value, bool) else default
+
+    @staticmethod
+    def _setting_int(name: str, default: int) -> int:
+        value = getattr(settings, name, default)
+        return value if isinstance(value, int) else default
+
     def _search_time_range(self) -> str:
         days = getattr(settings, "search_time_window_days", 7)
         if not isinstance(days, int):
@@ -679,14 +820,13 @@ class SourceAggregatorService:
         instead of the old any-left-any-right approach.
         """
         has_left = any(
-            s.bias_result and getattr(s.bias_result, "bias", 0) <= -2 for s in sources
+            s.bias_result and getattr(s.bias_result, "bias", 0) <= -1 for s in sources
         )
         has_center = any(
-            s.bias_result and abs(getattr(s.bias_result, "bias", 99)) <= 1
-            for s in sources
+            s.bias_result and getattr(s.bias_result, "bias", 99) == 0 for s in sources
         )
         has_right = any(
-            s.bias_result and getattr(s.bias_result, "bias", 0) >= 2 for s in sources
+            s.bias_result and getattr(s.bias_result, "bias", 0) >= 1 for s in sources
         )
         return (
             has_left
@@ -748,3 +888,34 @@ class SourceAggregatorService:
         if len(compacted) <= max_chars:
             return compacted
         return compacted[:max_chars].rstrip() + "..."
+
+    def _format_media_context(self, source: SourceCandidate) -> str:
+        details: list[str] = []
+        if source.og_image_url:
+            details.append(f"OG image: {source.og_image_url}")
+        if source.embedded_post_urls:
+            details.append(
+                "Embedded posts: " + ", ".join(source.embedded_post_urls[:3])
+            )
+        if source.image_alt_text:
+            details.append("Image alt text: " + "; ".join(source.image_alt_text[:3]))
+        if source.media_captions:
+            details.append("Media captions: " + "; ".join(source.media_captions[:3]))
+        return "Media: " + " | ".join(details) if details else "Media: none captured"
+
+    @staticmethod
+    def _platform_from_url(url: str) -> str:
+        lowered = url.lower()
+        if "x.com/" in lowered or "twitter.com/" in lowered:
+            return "x"
+        if "instagram.com/" in lowered:
+            return "instagram"
+        if "facebook.com/" in lowered:
+            return "facebook"
+        if "threads.net/" in lowered:
+            return "threads"
+        if "tiktok.com/" in lowered:
+            return "tiktok"
+        if "truthsocial.com/" in lowered:
+            return "truthsocial"
+        return ""

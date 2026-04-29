@@ -11,12 +11,14 @@ from src.agents import (
     create_source_aggregator_agent,
 )
 from src.crews.analysis_rubric import build_rhetoric_rubric
+from src.schemas.analysis_report_sections import AnalysisReportSections
 
 
 def create_analysis_tasks(
     story_description: str,
     story_url: str | None = None,
     prefetched_sources: str | None = None,
+    visual_evidence_context: str | None = None,
 ) -> list[Task]:
     """Create tasks for the analysis workflow.
 
@@ -32,11 +34,17 @@ def create_analysis_tasks(
         f"Starting URL: {story_url}" if story_url else "No starting URL provided."
     )
     prefetched_context = (
-        f"\n\nPrefetched Sources:\n{prefetched_sources}\n"
-        if prefetched_sources
+        f"\n\nPrefetched Sources:\n{prefetched_sources}\n" if prefetched_sources else ""
+    )
+    visual_context = (
+        f"\n\nObservable Visual Evidence:\n{visual_evidence_context}\n"
+        if visual_evidence_context
         else ""
     )
     rhetoric_rubric = build_rhetoric_rubric()
+    source_agent = create_source_aggregator_agent(
+        prefetched_mode=bool(prefetched_sources)
+    )
 
     # Task 1: Find all sources covering this story
     source_task = Task(
@@ -45,6 +53,7 @@ def create_analysis_tasks(
         Story: {story_description}
         {source_context}
         {prefetched_context}
+        {visual_context}
 
         If prefetched sources are provided, you MUST use ONLY those sources and
         MUST NOT search for additional sources.
@@ -58,7 +67,7 @@ def create_analysis_tasks(
         Return a compact source manifest with source IDs, URLs, domains, bias,
         and short evidence excerpts. Do not paste full article text.""",
         expected_output="A compact list of preflighted sources with URLs, domains, bias, and short excerpts.",
-        agent=create_source_aggregator_agent(),
+        agent=source_agent,
     )
 
     # Task 2: Classify bias of each source
@@ -85,6 +94,10 @@ def create_analysis_tasks(
         2. Identify editorial opinions and interpretations
         3. Note which facts appear in multiple sources
         4. Note which facts only appear in left-leaning or right-leaning sources
+
+        Use the visual evidence context as observable evidence only; do not infer
+        intent, legality, or motive from image contents unless a source attributes
+        that interpretation.
 
         Create three lists:
         - Agreed facts (appear across perspectives)
@@ -127,7 +140,7 @@ def create_analysis_tasks(
         context=[source_task, bias_task, fact_task],
     )
 
-        # Task 5: Narrative analysis
+    # Task 5: Narrative analysis
     narrative_task = Task(
         description=f"""Analyze the narrative patterns across all sources for this story:
 
@@ -161,62 +174,53 @@ def create_analysis_tasks(
 
         Use ONLY the source manifest from the previous tasks. Do not add new sources.
 
-        The report should include:
-        1. Executive Summary (3-5 sentences)
-        2. Story Overview (what happened, key players) - 2-3 short paragraphs
-        3. Source Matrix (all sources with bias ratings) as a Markdown table
-        4. Agreed Facts (confirmed across sources)
-        5. Disputed Facts (reported differently by sides)
-        6. Opinion Analysis (what each side is saying)
-        7. Framing & Context Omissions
-        8. Logical Fallacies
-        9. Linguistic Manipulation & Dog Whistles
-        10. Fact vs Opinion Ambiguities
-        11. Narrative Analysis:
-           - Mainstream media narrative
-           - Alternative/independent takes
-           - Libertarian perspective angle
-        12. Recommended Approach (for a libertarian creator)
-        13. Video Outline (bullet points for video structure)
-        14. All Sources & Citations (footnotes)
+        Return ONLY valid JSON matching this schema:
+        {{
+          "executive_summary": "3-5 neutral sentences",
+          "what_happened": "story-first event narrative",
+          "directly_observable": "only directly visible/observable facts",
+          "what_is_disputed": "what sources dispute or interpret differently",
+          "coverage_snapshot": "brief coverage/bucket summary if available",
+          "agreed_facts": "facts confirmed across sources",
+          "opinion_analysis": "what each side is saying",
+          "framing_omissions": "framing and context omissions",
+          "logical_fallacies": "high-confidence fallacy findings or none",
+          "linguistic_manipulation": "loaded terms/coded language or none",
+          "fact_opinion_ambiguities": "boundary cases",
+          "mainstream_narrative": "dominant narrative",
+          "alternative_takes": "independent/alternative narrative patterns",
+          "creator_angles": ["2-3 evidence-grounded creator angles"],
+          "recommended_approach": "creator-facing approach",
+          "video_outline": "concise outline",
+          "evidence_limitations": ["limitations, missing perspectives, or visual failures"]
+        }}
 
-        Section routing rules:
-        - Place findings in the most relevant section above when possible.
-        - If a finding does not cleanly fit an existing section, create:
-          "Additional Rhetorical Signals"
-        - If no high-confidence manipulation/fallacy findings exist, state that clearly.
-
-        Formatting requirements:
-        - Use Markdown headings and bullet lists.
-        - The Source Matrix MUST be a Markdown table with this schema:
-          | Source | Domain | URL | Bias (score+label) | Confidence | Key Framing / Claim |
-        - The Source cell MUST include source numbering like:
-          S1 [Headline text](https://example.com/article)
-        - The Source column MUST be a Markdown link using the headline text:
-          [Headline text](https://example.com/article)
-        - Every factual or opinionated statement must include a citation marker
-          using GFM footnotes, e.g. "The governor vetoed the bill[^3]."
-        - Every claim in Framing, Fallacies, Manipulation/Dog Whistles, and
-          Fact vs Opinion Ambiguities MUST include citation markers ([^n]).
-        - Citation markers MUST map to preflighted source URLs only.
-        - The "All Sources & Citations" section MUST list footnotes like:
-          [^1]: Source Name — https://example.com/article
-        - Provide moderate verbosity (add detail, but avoid excessive length).
-        - Ensure citations correspond to the sources referenced.
-
-        Format as clean Markdown with clear sections.""",
-        expected_output="A comprehensive Markdown report with all sections.",
+        Rules:
+        - Do not include Markdown headings.
+        - Do not include a Source Matrix or All Sources & Citations.
+        - The deterministic renderer will add layout, matrix, and citations.
+        - Keep observable visual content separate from interpretation and legal characterization.
+        - Every substantive claim should reference source IDs like S1/S2 in the text.""",
+        expected_output="Valid JSON matching AnalysisReportSections fields; no Markdown headings.",
         agent=create_report_writer_agent(),
         context=[source_task, bias_task, fact_task, rhetoric_task, narrative_task],
     )
 
-    return [source_task, bias_task, fact_task, rhetoric_task, narrative_task, report_task]
+    return [
+        source_task,
+        bias_task,
+        fact_task,
+        rhetoric_task,
+        narrative_task,
+        report_task,
+    ]
 
 
 def run_analysis(
     story_description: str,
     story_url: str | None = None,
     prefetched_sources: str | None = None,
+    visual_evidence_context: str | None = None,
 ) -> dict:
     """Run the full analysis workflow.
 
@@ -228,11 +232,16 @@ def run_analysis(
     Returns:
         Dictionary with analysis results
     """
-    tasks = create_analysis_tasks(story_description, story_url, prefetched_sources)
+    tasks = create_analysis_tasks(
+        story_description,
+        story_url,
+        prefetched_sources,
+        visual_evidence_context,
+    )
 
     crew = Crew(
         agents=[
-            create_source_aggregator_agent(),
+            create_source_aggregator_agent(prefetched_mode=bool(prefetched_sources)),
             create_bias_classifier_agent(),
             create_fact_extractor_agent(),
             create_rhetorical_analyst_agent(),
@@ -246,9 +255,15 @@ def run_analysis(
     )
 
     result = crew.kickoff()
+    raw_report = str(result)
+    sections = AnalysisReportSections.from_crew_payload(
+        {"report": raw_report},
+        fallback_summary=story_description,
+    )
 
     return {
-        "report": str(result),
+        "report": raw_report,
+        "sections": sections.model_dump(),
         "story_description": story_description,
         "story_url": story_url,
     }

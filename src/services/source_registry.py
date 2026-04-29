@@ -18,9 +18,9 @@ from src.core.config import settings
 logger = logging.getLogger(__name__)
 
 # Bias bucket group boundaries
-LEFT_SIDE = {-4, -3, -2}
-CENTER_SIDE = {-1, 0, 1}
-RIGHT_SIDE = {2, 3, 4}
+LEFT_SIDE = {-4, -3, -2, -1}
+CENTER_SIDE = {0}
+RIGHT_SIDE = {1, 2, 3, 4}
 
 
 @dataclass(frozen=True)
@@ -80,11 +80,13 @@ class SourceRegistry:
         """Get all outlets in a specific category."""
         return list(self._by_category.get(category.lower(), []))
 
-    def get_by_bucket_group(
-        self, group: str
-    ) -> list[RegistryEntry]:
+    def get_by_bucket_group(self, group: str) -> list[RegistryEntry]:
         """Get outlets for a bucket group: 'left_side', 'center_side', 'right_side'."""
-        bias_set = {"left_side": LEFT_SIDE, "center_side": CENTER_SIDE, "right_side": RIGHT_SIDE}.get(group, set())
+        bias_set = {
+            "left_side": LEFT_SIDE,
+            "center_side": CENTER_SIDE,
+            "right_side": RIGHT_SIDE,
+        }.get(group, set())
         results: list[RegistryEntry] = []
         for bias_val in bias_set:
             results.extend(self._by_bias.get(bias_val, []))
@@ -94,9 +96,7 @@ class SourceRegistry:
         """Get all outlets allowed in analysis."""
         return [e for e in self._entries if e.allow_in_analysis]
 
-    def get_domains_for_bias_range(
-        self, min_bias: int, max_bias: int
-    ) -> list[str]:
+    def get_domains_for_bias_range(self, min_bias: int, max_bias: int) -> list[str]:
         """Get domains for outlets within a bias range (inclusive)."""
         return [
             e.domain
@@ -104,9 +104,7 @@ class SourceRegistry:
             if min_bias <= e.bias <= max_bias and e.allow_in_analysis
         ]
 
-    def get_rss_feeds_for_category(
-        self, category: str
-    ) -> list[dict[str, object]]:
+    def get_rss_feeds_for_category(self, category: str) -> list[dict[str, object]]:
         """Get RSS feed configs for a category, matching rss_feeds.yaml format."""
         feeds: list[dict[str, object]] = []
         for entry in self.get_by_category(category):

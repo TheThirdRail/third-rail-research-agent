@@ -76,7 +76,9 @@ def build_crewai_llm(agent_name: str | None = None) -> LLM:
         "timeout": 120,
         "max_tokens": 4096,
         "temperature": (
-            router.temperature_override if router.temperature_override is not None else 0.7
+            router.temperature_override
+            if router.temperature_override is not None
+            else 0.7
         ),
         "max_retries": 2,
     }
@@ -176,6 +178,13 @@ AGENT_ROLES = {
         "backstory": """You study how different outlets frame the same story. You
         can identify the dominant mainstream narrative and contrast it with
         alternative perspectives from independent media.""",
+    },
+    "visual_evidence": {
+        "role": "Visual Evidence Analyst",
+        "goal": "Describe only directly observable media evidence without interpretation",
+        "backstory": """You inspect images and social-post media carefully. You
+        separate visible text, symbols, and objects from inferred intent,
+        political meaning, and legal characterization.""",
     },
     "report_writer": {
         "role": "Research Report Writer",

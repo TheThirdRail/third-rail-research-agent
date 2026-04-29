@@ -7,7 +7,7 @@ from src.tools.article_extractor import ArticleExtractorTool
 from src.tools.web_search import WebSearchTool
 
 
-def create_source_aggregator_agent() -> Agent:
+def create_source_aggregator_agent(prefetched_mode: bool = False) -> Agent:
     """Create the source aggregator agent.
 
     This agent finds and extracts all available sources
@@ -19,7 +19,7 @@ def create_source_aggregator_agent() -> Agent:
         role=config["role"],
         goal=config["goal"],
         backstory=config["backstory"],
-        tools=[WebSearchTool(), ArticleExtractorTool()],
+        tools=[] if prefetched_mode else [WebSearchTool(), ArticleExtractorTool()],
         llm=build_crewai_llm(agent_name="source_aggregator"),
         verbose=True,
         allow_delegation=False,

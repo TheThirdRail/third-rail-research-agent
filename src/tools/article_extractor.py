@@ -6,6 +6,8 @@ import logging
 from collections.abc import Awaitable
 from dataclasses import dataclass
 from datetime import datetime
+from html import unescape
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -37,6 +39,72 @@ _BLOCKED_SIGNATURES = (
 )
 
 
+class _MediaHTMLParser(HTMLParser):
+    """Small metadata parser for media pointers in article HTML."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.image_urls: list[str] = []
+        self.post_urls: list[str] = []
+        self.alt_texts: list[str] = []
+        self.captions: list[str] = []
+        self._in_figcaption = False
+        self._caption_parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr = {key.lower(): value or "" for key, value in attrs}
+        if tag == "meta":
+            key = (attr.get("property") or attr.get("name") or "").lower()
+            content = attr.get("content", "").strip()
+            if key in {"og:image", "twitter:image"} and content:
+                self.image_urls.append(content)
+        elif tag == "img":
+            src = attr.get("src", "").strip()
+            alt = attr.get("alt", "").strip()
+            if src:
+                self.image_urls.append(src)
+            if alt:
+                self.alt_texts.append(unescape(alt))
+        elif tag in {"a", "blockquote", "iframe"}:
+            href = (
+                attr.get("href") or attr.get("cite") or attr.get("src") or ""
+            ).strip()
+            if self._is_social_url(href):
+                self.post_urls.append(href)
+        elif tag == "figcaption":
+            self._in_figcaption = True
+            self._caption_parts = []
+
+    def handle_data(self, data: str) -> None:
+        if self._in_figcaption:
+            self._caption_parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "figcaption" and self._in_figcaption:
+            caption = " ".join(
+                part.strip() for part in self._caption_parts if part.strip()
+            )
+            if caption:
+                self.captions.append(unescape(caption))
+            self._in_figcaption = False
+            self._caption_parts = []
+
+    @staticmethod
+    def _is_social_url(url: str) -> bool:
+        return any(
+            host in url.lower()
+            for host in (
+                "twitter.com/",
+                "x.com/",
+                "instagram.com/",
+                "facebook.com/",
+                "threads.net/",
+                "tiktok.com/",
+                "truthsocial.com/",
+            )
+        )
+
+
 def _log_extractor_version_once() -> None:
     global _VERSION_LOGGED
     if _VERSION_LOGGED:
@@ -60,6 +128,10 @@ class ExtractedArticle:
     error_code: str | None = None
     http_status: int | None = None
     extractor_method: str | None = None
+    og_image_url: str | None = None
+    embedded_post_urls: tuple[str, ...] = ()
+    image_alt_text: tuple[str, ...] = ()
+    media_captions: tuple[str, ...] = ()
 
 
 class ArticleExtractor:
@@ -132,6 +204,7 @@ class ArticleExtractor:
             output_format="txt",
         )
         metadata = trafilatura.extract_metadata(html_content)
+        media = self._extract_media_metadata(html_content)
 
         title = (metadata.title if metadata else "") or (title_hint or "")
         author = metadata.author if metadata else None
@@ -161,6 +234,10 @@ class ArticleExtractor:
             error_code=None,
             http_status=http_status,
             extractor_method=method,
+            og_image_url=media["og_image_url"],
+            embedded_post_urls=tuple(media["embedded_post_urls"]),
+            image_alt_text=tuple(media["image_alt_text"]),
+            media_captions=tuple(media["media_captions"]),
         )
 
     def extract_trafilatura(self, url: str) -> ExtractedArticle:
@@ -230,12 +307,15 @@ class ArticleExtractor:
                 error=None,
                 error_code=None,
                 extractor_method="newspaper4k",
+                og_image_url=article.top_image or None,
             )
 
         except Exception as exc:
             logger.warning("Newspaper4k failed for %s: %s", url, exc)
             msg = str(exc)
-            code = ERROR_HTTP_403 if "status code 403" in msg.lower() else ERROR_EXCEPTION
+            code = (
+                ERROR_HTTP_403 if "status code 403" in msg.lower() else ERROR_EXCEPTION
+            )
             status = 403 if code == ERROR_HTTP_403 else None
             return self._failure(
                 url=url,
@@ -283,7 +363,9 @@ class ArticleExtractor:
                 browser = playwright.chromium.launch(args=["--no-sandbox"])
                 try:
                     page = browser.new_page()
-                    response = page.goto(url, wait_until="domcontentloaded", timeout=25000)
+                    response = page.goto(
+                        url, wait_until="domcontentloaded", timeout=25000
+                    )
                     if response is not None:
                         status = response.status
                     title = page.title() or ""
@@ -366,7 +448,9 @@ class ArticleExtractor:
             ]
         return user_agents
 
-    def _extract_selenium_sync(self, url: str, user_agent: str | None) -> ExtractedArticle:
+    def _extract_selenium_sync(
+        self, url: str, user_agent: str | None
+    ) -> ExtractedArticle:
         """Extract page using Selenium Chrome driver."""
         try:
             from selenium import webdriver
@@ -399,7 +483,9 @@ class ArticleExtractor:
         driver = None
         try:
             chromedriver = self._chromedriver_location()
-            service = Service(executable_path=chromedriver) if chromedriver else Service()
+            service = (
+                Service(executable_path=chromedriver) if chromedriver else Service()
+            )
             driver = webdriver.Chrome(service=service, options=options)
             driver.set_page_load_timeout(settings.selenium_timeout_seconds)
             driver.get(url)
@@ -608,6 +694,31 @@ class ArticleExtractor:
 
         return result
 
+    def _extract_media_metadata(self, html_content: str) -> dict[str, object]:
+        parser = _MediaHTMLParser()
+        with contextlib.suppress(Exception):
+            parser.feed(html_content or "")
+
+        image_urls = self._dedupe(parser.image_urls)
+        return {
+            "og_image_url": image_urls[0] if image_urls else None,
+            "embedded_post_urls": self._dedupe(parser.post_urls)[:10],
+            "image_alt_text": self._dedupe(parser.alt_texts)[:10],
+            "media_captions": self._dedupe(parser.captions)[:10],
+        }
+
+    @staticmethod
+    def _dedupe(values: list[str]) -> list[str]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for value in values:
+            normalized = value.strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            ordered.append(normalized)
+        return ordered
+
     async def extract_async(self, url: str) -> ExtractedArticle:
         """Extract article with automatic fallback (async-safe)."""
         _log_extractor_version_once()
@@ -656,7 +767,9 @@ class ArticleExtractorTool(BaseTool):
     def _format_article_output(article: ExtractedArticle, url: str) -> str:
         if not article.success:
             error_code = f" [{article.error_code}]" if article.error_code else ""
-            method = f" via {article.extractor_method}" if article.extractor_method else ""
+            method = (
+                f" via {article.extractor_method}" if article.extractor_method else ""
+            )
             return f"Failed to extract article from {url}{method}{error_code}: {article.error}"
 
         date_str = article.date.strftime("%Y-%m-%d") if article.date else "Unknown"
@@ -668,7 +781,7 @@ Source: {article.domain}
 Author: {author_str}
 Date: {date_str}
 URL: {article.url}
-Method: {article.extractor_method or 'unknown'}
+Method: {article.extractor_method or "unknown"}
 
 === FULL TEXT ===
 {article.text[:10000]}

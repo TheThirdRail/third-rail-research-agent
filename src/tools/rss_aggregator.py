@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import feedparser
+import httpx
 import yaml
 from crewai.tools.base_tool import BaseTool
 
@@ -102,11 +103,24 @@ class RSSAggregator:
         max_items: int = 10,
         bias: int = 0,
         source_name: str = "Unknown",
+        timeout_seconds: int | None = None,
     ) -> list[FeedItem]:
         """Fetch items from a single RSS feed."""
         items = []
         try:
-            parsed = feedparser.parse(feed_url)
+            timeout = (
+                timeout_seconds
+                if timeout_seconds is not None
+                else settings.analysis_rss_timeout_seconds
+            )
+            response = httpx.get(
+                feed_url,
+                timeout=timeout,
+                follow_redirects=True,
+                headers={"User-Agent": "ResearchAgent/1.0"},
+            )
+            response.raise_for_status()
+            parsed = feedparser.parse(response.content)
 
             for entry in parsed.entries[:max_items]:
                 title = entry.get("title", "")

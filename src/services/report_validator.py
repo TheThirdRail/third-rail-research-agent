@@ -3,10 +3,23 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from collections.abc import Iterable
 from urllib.parse import urlparse
 
 from src.core.exceptions import SourceExtractionError
+
+_CORE_SECTION_PATTERNS: dict[str, re.Pattern[str]] = {
+    "Executive Summary": re.compile(
+        r"^#{1,6}\s*(?:\d+\.?\s*)?executive summary\b", re.IGNORECASE
+    ),
+    "Source Matrix": re.compile(
+        r"^#{1,6}\s*(?:\d+\.?\s*)?source matrix\b", re.IGNORECASE
+    ),
+    "All Sources & Citations": re.compile(
+        r"^#{1,6}\s*(?:\d+\.?\s*)?all sources\s*&\s*citations\b",
+        re.IGNORECASE,
+    ),
+}
 
 
 def validate_report_sources(report_markdown: str, allowed_urls: Iterable[str]) -> None:
@@ -14,6 +27,8 @@ def validate_report_sources(report_markdown: str, allowed_urls: Iterable[str]) -
 
     Raises SourceExtractionError if any URL is outside the allowed set.
     """
+    validate_unique_core_sections(report_markdown)
+
     normalized_allowed = {_normalize_url(url) for url in allowed_urls if url}
     extracted_urls = _extract_source_matrix_urls(report_markdown)
 
@@ -42,6 +57,47 @@ def validate_report_sources(report_markdown: str, allowed_urls: Iterable[str]) -
         )
 
 
+def validate_unique_core_sections(report_markdown: str) -> None:
+    """Ensure renderer-owned core sections occur at most once."""
+    counts = _core_section_counts(report_markdown)
+    duplicates = [name for name, count in counts.items() if count > 1]
+    if duplicates:
+        raise SourceExtractionError(
+            "Report includes duplicate renderer-owned sections: "
+            + ", ".join(duplicates)
+        )
+
+
+def validate_structured_section_payload(sections: object) -> None:
+    """Reject section content that already contains renderer-owned headings."""
+    if hasattr(sections, "model_dump"):
+        data = sections.model_dump()
+    elif hasattr(sections, "__dict__"):
+        data = vars(sections)
+    elif isinstance(sections, dict):
+        data = sections
+    else:
+        return
+
+    violations: list[str] = []
+    for field_name, value in data.items():
+        values: list[str] = []
+        if isinstance(value, str):
+            values = [value]
+        elif isinstance(value, list):
+            values = [item for item in value if isinstance(item, str)]
+        for text in values:
+            for section_name, pattern in _CORE_SECTION_PATTERNS.items():
+                if any(pattern.match(line.strip()) for line in text.splitlines()):
+                    violations.append(f"{field_name} contains {section_name}")
+
+    if violations:
+        raise SourceExtractionError(
+            "Structured report sections must not include renderer-owned headings: "
+            + "; ".join(violations[:5])
+        )
+
+
 def _extract_source_matrix_urls(report_markdown: str) -> list[str]:
     lines = report_markdown.splitlines()
     start_idx = None
@@ -63,6 +119,16 @@ def _extract_source_matrix_urls(report_markdown: str) -> list[str]:
     section = "\n".join(lines[start_idx:end_idx])
     urls = re.findall(r"\[[^\]]+\]\((https?://[^)]+)\)", section)
     return urls
+
+
+def _core_section_counts(report_markdown: str) -> dict[str, int]:
+    counts = dict.fromkeys(_CORE_SECTION_PATTERNS, 0)
+    for raw_line in report_markdown.splitlines():
+        line = raw_line.strip()
+        for name, pattern in _CORE_SECTION_PATTERNS.items():
+            if pattern.match(line):
+                counts[name] += 1
+    return counts
 
 
 def _extract_footnote_urls(report_markdown: str) -> list[str]:
@@ -96,12 +162,11 @@ def validate_evidence_limits(
     """
     warnings: list[str] = []
 
-    if missing_buckets:
-        if "evidence limitation" not in report_markdown.lower():
-            warnings.append(
-                f"Report is missing evidence limitations banner. "
-                f"Missing buckets: {', '.join(missing_buckets)}"
-            )
+    if missing_buckets and "evidence limitation" not in report_markdown.lower():
+        warnings.append(
+            f"Report is missing evidence limitations banner. "
+            f"Missing buckets: {', '.join(missing_buckets)}"
+        )
 
     return warnings
 

@@ -113,9 +113,20 @@ def test_end_to_end_seed_url_produces_deterministic_report(monkeypatch, tmp_path
     )
     monkeypatch.setattr(SourceAggregatorService, "_extract_url", fake_extract_url)
     monkeypatch.setattr(
+        "src.services.rss_retrieval_service.RssRetrievalService.search",
+        lambda self, query, *, domains, max_results=8: [],
+    )
+    monkeypatch.setattr(
         "src.services.analysis_service.run_analysis",
-        lambda description, url=None, prefetched_sources=None: {
-            "report": "Crew summary based only on prefetched sources.",
+        lambda description,
+        url=None,
+        prefetched_sources=None,
+        visual_evidence_context=None: {
+            "sections": {
+                "executive_summary": "Crew summary based only on prefetched sources.",
+                "what_happened": "President Joe Biden signed an executive order.",
+            },
+            "report": "",
             "story_description": description,
             "story_url": url,
         },

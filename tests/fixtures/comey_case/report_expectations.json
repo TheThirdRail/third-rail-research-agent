@@ -1,0 +1,17 @@
+{
+  "exactly_one_headings": [
+    "## Executive Summary",
+    "## Source Matrix",
+    "## All Sources & Citations"
+  ],
+  "missing_required_bucket": "right_side",
+  "story_first_headings": [
+    "## What Happened",
+    "## What Is Directly Observable",
+    "## What Is Disputed",
+    "## Coverage Snapshot",
+    "## Source Matrix"
+  ],
+  "observable_terms": ["8647", "seashells"],
+  "contextual_domain_rejected": "commondreams.org"
+}

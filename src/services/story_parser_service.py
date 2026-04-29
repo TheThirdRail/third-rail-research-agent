@@ -52,10 +52,25 @@ class StoryParserService:
         headline = rss_title or self._extract_headline(description)
         actors = self._extract_actors(combined)
         verbs = self._extract_action_verbs(combined)
+        distinctive_terms = self._extract_distinctive_terms(combined, seed_url)
+        visual_descriptors = self._extract_visual_descriptors(combined)
         location = self._extract_location(combined)
         time_start, time_end = self._extract_time_window(combined)
-        must_have = self._extract_must_have(headline, actors, verbs)
-        queries = self._build_query_pack(headline, actors, verbs, seed_url)
+        must_have = self._extract_must_have(
+            headline,
+            actors,
+            verbs,
+            distinctive_terms,
+            visual_descriptors,
+        )
+        queries = self._build_query_pack(
+            headline,
+            actors,
+            verbs,
+            seed_url,
+            distinctive_terms,
+            visual_descriptors,
+        )
 
         packet = StoryPacket(
             canonical_headline=headline,
@@ -65,14 +80,20 @@ class StoryParserService:
             time_window_start=time_start,
             time_window_end=time_end,
             aliases=[],
+            distinctive_terms=distinctive_terms,
+            visual_descriptors=visual_descriptors,
             must_have_terms=must_have,
             must_not_have_terms=[],
             query_pack=queries,
             disambiguation_notes="",
         )
 
-        logger.info("Parsed story: headline=%r, actors=%d, queries=%d",
-                     headline[:60], len(actors), len(queries))
+        logger.info(
+            "Parsed story: headline=%r, actors=%d, queries=%d",
+            headline[:60],
+            len(actors),
+            len(queries),
+        )
         return packet
 
     def _extract_headline(self, description: str) -> str:
@@ -122,6 +143,58 @@ class StoryParserService:
             verbs.extend(found)
         return list(dict.fromkeys(verbs))[:5]
 
+    def _extract_distinctive_terms(
+        self,
+        text: str,
+        seed_url: str | None,
+    ) -> list[str]:
+        """Extract distinctive tokens that should constrain retrieval."""
+        terms: list[str] = []
+        terms.extend(re.findall(r"[\"']([A-Za-z0-9]{2,12})[\"']", text))
+        terms.extend(re.findall(r"\b[A-Z0-9]{3,8}\b", text))
+
+        platforms = {
+            "X": r"\bX\b|\bTwitter\b",
+            "Instagram": r"\bInstagram\b",
+            "Truth Social": r"\bTruth\s+Social\b",
+            "TikTok": r"\bTikTok\b",
+            "Facebook": r"\bFacebook\b",
+        }
+        for label, pattern in platforms.items():
+            if re.search(pattern, text, re.IGNORECASE):
+                terms.append(label)
+
+        if seed_url:
+            host = urlparse(seed_url).netloc.lower()
+            if "x.com" in host or "twitter.com" in host:
+                terms.append("X")
+            elif "instagram.com" in host:
+                terms.append("Instagram")
+
+        return self._dedupe_terms(terms)[:8]
+
+    def _extract_visual_descriptors(self, text: str) -> list[str]:
+        descriptors = [
+            "photo",
+            "image",
+            "picture",
+            "screenshot",
+            "seashell",
+            "seashells",
+            "shells",
+            "post",
+            "social post",
+            "caption",
+            "number",
+            "symbols",
+        ]
+        found = [
+            descriptor
+            for descriptor in descriptors
+            if re.search(rf"\b{re.escape(descriptor)}\b", text, re.IGNORECASE)
+        ]
+        return self._dedupe_terms(found)[:6]
+
     def _extract_location(self, text: str) -> str:
         """Extract primary geographic location if mentioned."""
         # Look for common location patterns
@@ -144,7 +217,10 @@ class StoryParserService:
                     for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%m/%d/%y", "%m-%d-%y"):
                         try:
                             parsed = datetime.strptime(match, fmt)
-                            return (parsed - timedelta(days=3), parsed + timedelta(days=3))
+                            return (
+                                parsed - timedelta(days=3),
+                                parsed + timedelta(days=3),
+                            )
                         except ValueError:
                             continue
                 except Exception:
@@ -154,7 +230,12 @@ class StoryParserService:
         return (now - timedelta(days=7), now + timedelta(days=1))
 
     def _extract_must_have(
-        self, headline: str, actors: list[str], verbs: list[str]
+        self,
+        _headline: str,
+        actors: list[str],
+        verbs: list[str],
+        distinctive_terms: list[str],
+        visual_descriptors: list[str],
     ) -> list[str]:
         """Build must-have terms from key story elements."""
         terms: list[str] = []
@@ -164,7 +245,9 @@ class StoryParserService:
         # Add key verb if available
         if verbs:
             terms.append(verbs[0])
-        return terms
+        terms.extend(distinctive_terms[:4])
+        terms.extend(visual_descriptors[:3])
+        return self._dedupe_terms(terms)[:10]
 
     def _build_query_pack(
         self,
@@ -172,6 +255,8 @@ class StoryParserService:
         actors: list[str],
         verbs: list[str],
         seed_url: str | None,
+        distinctive_terms: list[str] | None = None,
+        visual_descriptors: list[str] | None = None,
     ) -> list[str]:
         """Build pre-formatted search queries."""
         queries: list[str] = []
@@ -189,6 +274,12 @@ class StoryParserService:
         if actors and verbs:
             queries.append(f"{actors[0]} {verbs[0]}")
 
+        if actors and distinctive_terms:
+            queries.append(f"{actors[0]} {' '.join(distinctive_terms[:3])}")
+
+        if distinctive_terms and visual_descriptors:
+            queries.append(" ".join(distinctive_terms[:3] + visual_descriptors[:2]))
+
         # Actor-only query
         if actors and len(actors) > 1:
             queries.append(f"{actors[0]} {actors[1]}")
@@ -200,6 +291,19 @@ class StoryParserService:
                 queries.append(slug_terms)
 
         return queries[:4]
+
+    @staticmethod
+    def _dedupe_terms(terms: list[str]) -> list[str]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for term in terms:
+            normalized = term.strip()
+            key = normalized.lower()
+            if not normalized or key in seen:
+                continue
+            seen.add(key)
+            ordered.append(normalized)
+        return ordered
 
     @staticmethod
     def _slug_keywords(url: str) -> str:

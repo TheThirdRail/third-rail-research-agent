@@ -9,14 +9,21 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+from src.core.config import settings
 from src.services.source_registry import (
+    CENTER_SIDE,
     LEFT_SIDE,
     RIGHT_SIDE,
-    RegistryEntry,
     get_source_registry,
 )
 
 logger = logging.getLogger(__name__)
+
+_BIAS_PREFERENCE: dict[str, list[int]] = {
+    "left_side": [-2, -3, -4, -1],
+    "center": [0],
+    "right_side": [2, 3, 4, 1],
+}
 
 
 @dataclass
@@ -97,29 +104,27 @@ class BalancedSourcePlanner:
         required: list[BucketSpec] = []
         optional: list[BucketSpec] = []
 
-        if seed_bias is not None and seed_bias <= -3:
-            # Far-left seed → need center + right
-            required.append(self._make_bucket("center", {-1, 0, 1}, required=True))
-            required.append(self._make_bucket("right_side", {2, 3, 4}, required=True))
-            optional.append(self._make_bucket("left_side", {-4, -3, -2}, required=False))
+        required_labels = self._required_bucket_labels()
+        for label in required_labels:
+            required.append(
+                self._make_bucket(label, self._bias_values(label), required=True)
+            )
 
-        elif seed_bias is not None and seed_bias >= 3:
-            # Far-right seed → need center + left
-            required.append(self._make_bucket("center", {-1, 0, 1}, required=True))
-            required.append(self._make_bucket("left_side", {-4, -3, -2}, required=True))
-            optional.append(self._make_bucket("right_side", {2, 3, 4}, required=False))
-
-        else:
-            # Center, unknown, or moderate seed → need all three
-            required.append(self._make_bucket("left_side", {-4, -3, -2}, required=True))
-            required.append(self._make_bucket("center", {-1, 0, 1}, required=True))
-            required.append(self._make_bucket("right_side", {2, 3, 4}, required=True))
+        if (
+            self._setting_bool("exact_center_preferred", True)
+            and "center" not in required_labels
+        ):
+            optional.append(self._make_bucket("center", CENTER_SIDE, required=False))
 
         if include_libertarian:
-            optional.append(self._make_bucket_by_category("libertarian", required=False))
+            optional.append(
+                self._make_bucket_by_category("libertarian", required=False)
+            )
 
         if include_fringe:
-            optional.append(self._make_bucket_by_category("fringe_conspiracy", required=False))
+            optional.append(
+                self._make_bucket_by_category("fringe_conspiracy", required=False)
+            )
 
         # Build domain targets per bucket
         domain_targets: dict[str, list[str]] = {}
@@ -155,12 +160,45 @@ class BalancedSourcePlanner:
             return "right_side"
         return "center"
 
+    def _required_bucket_labels(self) -> list[str]:
+        raw = getattr(settings, "required_bucket_groups", "left_side,right_side")
+        if not isinstance(raw, str):
+            return ["left_side", "right_side"]
+        labels: list[str] = []
+        for item in raw.split(","):
+            label = item.strip()
+            if not label:
+                continue
+            if label == "center_side":
+                label = "center"
+            if label in {"left_side", "center", "right_side"} and label not in labels:
+                labels.append(label)
+        return labels or ["left_side", "right_side"]
+
+    @staticmethod
+    def _bias_values(label: str) -> set[int]:
+        if label == "left_side":
+            return set(LEFT_SIDE)
+        if label == "right_side":
+            return set(RIGHT_SIDE)
+        return set(CENTER_SIDE)
+
+    @staticmethod
+    def _setting_bool(name: str, default: bool) -> bool:
+        value = getattr(settings, name, default)
+        return value if isinstance(value, bool) else default
+
     def _make_bucket(
         self, label: str, bias_values: set[int], *, required: bool
     ) -> BucketSpec:
         """Create a bias-based bucket with curated domain targets."""
         domains: list[str] = []
-        for bias_val in sorted(bias_values):
+        ordered_bias_values = [
+            bias
+            for bias in _BIAS_PREFERENCE.get(label, sorted(bias_values))
+            if bias in bias_values
+        ]
+        for bias_val in ordered_bias_values:
             for entry in self._registry.get_by_bias(bias_val):
                 if entry.allow_in_analysis:
                     domains.append(entry.domain)
@@ -171,9 +209,7 @@ class BalancedSourcePlanner:
             domain_targets=domains,
         )
 
-    def _make_bucket_by_category(
-        self, category: str, *, required: bool
-    ) -> BucketSpec:
+    def _make_bucket_by_category(self, category: str, *, required: bool) -> BucketSpec:
         """Create a category-based bucket."""
         entries = self._registry.get_by_category(category)
         domains = [e.domain for e in entries if e.allow_in_analysis]
@@ -195,13 +231,11 @@ class BalancedSourcePlanner:
 
         for bucket in required:
             # Skip seed domain in targets
-            targets = [
-                d for d in bucket.domain_targets if d != seed_domain
-            ]
+            targets = [d for d in bucket.domain_targets if d != seed_domain]
             if targets:
                 plan.append(
                     {
-                        "phase": "rss_curated",
+                        "phase": "rss",
                         "bucket": bucket.label,
                         "domains": targets[:5],
                         "required": True,
@@ -225,13 +259,11 @@ class BalancedSourcePlanner:
             )
 
         for bucket in optional:
-            targets = [
-                d for d in bucket.domain_targets if d != seed_domain
-            ]
+            targets = [d for d in bucket.domain_targets if d != seed_domain]
             if targets:
                 plan.append(
                     {
-                        "phase": "rss_curated",
+                        "phase": "rss",
                         "bucket": bucket.label,
                         "domains": targets[:3],
                         "required": False,

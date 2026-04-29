@@ -1141,9 +1141,9 @@ bias_buckets:
 
 # Bucket groups for coverage policy
 bucket_groups:
-  left_side: [-4, -3, -2]
-  center_side: [-1, 0, 1]
-  right_side: [2, 3, 4]
+  left_side: [-4, -3, -2, -1]
+  center_side: [0]
+  right_side: [1, 2, 3, 4]
 
 # Factual rating scale
 factual_ratings:

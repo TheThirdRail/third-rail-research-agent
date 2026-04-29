@@ -15,6 +15,7 @@ from src.services.rss_fallback_service import RssFallbackService
 from src.services.source_registry import SourceRegistry, get_source_registry
 from src.services.source_scoring import score_candidate
 from src.services.story_parser_service import StoryParserService
+from src.services.visual_evidence_service import VisualEvidenceService
 
 __all__ = [
     "AnalysisService",
@@ -23,6 +24,7 @@ __all__ = [
     "NarrativeAnalyzerService",
     "RelevanceScorerService",
     "ReportRenderer",
+    "VisualEvidenceService",
     "RssFallbackService",
     "SourceRegistry",
     "StoryParserService",

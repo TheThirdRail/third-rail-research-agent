@@ -42,6 +42,14 @@ class StoryPacket(BaseModel):
         default_factory=list,
         description="Alternative names, abbreviations, or spellings for key entities",
     )
+    distinctive_terms: list[str] = Field(
+        default_factory=list,
+        description="Distinctive codes, quoted numbers, platforms, or visual terms",
+    )
+    visual_descriptors: list[str] = Field(
+        default_factory=list,
+        description="Visual descriptors that materially identify the story",
+    )
     must_have_terms: list[str] = Field(
         default_factory=list,
         description="Terms that MUST appear in a relevant article",

@@ -161,6 +161,38 @@ class Settings(BaseSettings):
     strict_bucket_enforcement: bool = Field(
         default=True, description="Fail/warn if required bias buckets are missing"
     )
+    required_bucket_groups: str = Field(
+        default="left_side,right_side",
+        description="Comma-separated required source bucket groups",
+    )
+    exact_center_preferred: bool = Field(
+        default=True,
+        description="Prefer an exact-center source when available, but do not require it",
+    )
+    max_per_exact_bias: int = Field(
+        default=1,
+        description="Maximum retained sources with the same exact bias score",
+    )
+    max_per_bucket_group: int = Field(
+        default=2,
+        description="Maximum retained sources from the same bias bucket group",
+    )
+    allow_same_bias_backfill: bool = Field(
+        default=False,
+        description="Allow same-bias padding when required buckets are missing",
+    )
+    analysis_rss_first_enabled: bool = Field(
+        default=True,
+        description="Search canonical RSS feeds before site/open-web search",
+    )
+    analysis_rss_timeout_seconds: int = Field(
+        default=6,
+        description="Per-feed timeout for analysis-time RSS retrieval",
+    )
+    analysis_rss_max_feeds_per_bucket: int = Field(
+        default=3,
+        description="Maximum RSS feeds to fetch for a single planned bucket",
+    )
 
     # Database
     database_url: str = "sqlite:///data/research_agent.db"

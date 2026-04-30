@@ -52,6 +52,11 @@ Open `.env` in your editor. The crucial setting is your `LLM_PROVIDER` and corre
 ```ini
 LLM_PROVIDER=openrouter
 OPENROUTER_API_KEY=mock-or-v1-xxxxxxxx
+
+# Optional Semantic Memory Configuration
+SEMANTIC_MEMORY_ENABLED=true
+SEMANTIC_QUERY_EXPANSION_ENABLED=true
+VECTOR_STORE_PROVIDER=lancedb
 ```
 
 *Other valid `LLM_PROVIDER` options: `openai`, `anthropic`, `gemini`, `groq`, `cerebras`, `sambanova`, `mistral`, `ollama`.*

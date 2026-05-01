@@ -25,6 +25,7 @@ class SourceRecord:
     bias_label: str
     confidence: float
     key_framing: str = ""
+    notable_claim: str = ""
 
 
 @dataclass
@@ -197,7 +198,8 @@ class ReportRenderer:
             source_link = f"[{src.title[:60]}]({src.url})"
             bias_display = f"{src.bias:+d} ({src.bias_label})"
             conf_display = f"{src.confidence:.0%}"
-            framing = src.key_framing or "—"
+            framing_parts = [src.key_framing, src.notable_claim]
+            framing = " ".join(part for part in framing_parts if part).strip() or "—"
             lines.append(
                 f"| S{i} | {source_link} | {src.domain} | {src.url} | "
                 f"{bias_display} | {conf_display} | {framing} |"

@@ -42,9 +42,25 @@ class StoryPacket(BaseModel):
         default_factory=list,
         description="Alternative names, abbreviations, or spellings for key entities",
     )
+    negative_clues: list[str] = Field(
+        default_factory=list,
+        description="Hints that identify nearby but different stories",
+    )
     distinctive_terms: list[str] = Field(
         default_factory=list,
         description="Distinctive codes, quoted numbers, platforms, or visual terms",
+    )
+    quote_markers: list[str] = Field(
+        default_factory=list,
+        description="Quoted phrases or exact strings that identify the story",
+    )
+    number_markers: list[str] = Field(
+        default_factory=list,
+        description="Distinctive numbers or codes that identify the story",
+    )
+    platform_markers: list[str] = Field(
+        default_factory=list,
+        description="Social or publishing platforms materially tied to the story",
     )
     visual_descriptors: list[str] = Field(
         default_factory=list,
@@ -61,6 +77,10 @@ class StoryPacket(BaseModel):
     query_pack: list[str] = Field(
         default_factory=list,
         description="Pre-built search queries for source finding",
+    )
+    query_families: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Search queries grouped by lexical, semantic, opposing, and visual/social intent",
     )
     disambiguation_notes: str = Field(
         default="",

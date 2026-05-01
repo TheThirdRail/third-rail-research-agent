@@ -12,6 +12,10 @@ from src.services.narrative_analyzer_service import NarrativeAnalyzerService
 from src.services.relevance_scorer_service import RelevanceScorerService
 from src.services.report_renderer import ReportRenderer
 from src.services.rss_fallback_service import RssFallbackService
+from src.services.screenshot_capture_service import ScreenshotCaptureService
+from src.services.semantic_memory_service import SemanticMemoryService
+from src.services.semantic_query_expansion_service import SemanticQueryExpansionService
+from src.services.social_post_resolver_service import SocialPostResolverService
 from src.services.source_registry import SourceRegistry, get_source_registry
 from src.services.source_scoring import score_candidate
 from src.services.story_parser_service import StoryParserService
@@ -26,6 +30,10 @@ __all__ = [
     "ReportRenderer",
     "VisualEvidenceService",
     "RssFallbackService",
+    "ScreenshotCaptureService",
+    "SemanticMemoryService",
+    "SemanticQueryExpansionService",
+    "SocialPostResolverService",
     "SourceRegistry",
     "StoryParserService",
     "check_duplicate",

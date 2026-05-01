@@ -4,23 +4,38 @@ from __future__ import annotations
 
 import logging
 import re
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import urlparse
 
 from src.core.config import settings
 from src.core.exceptions import SourceExtractionError
+from src.schemas.retrieval_diagnostics import (
+    BucketLaneAttempt,
+    CandidateCensus,
+    CandidateDecision,
+    MissingBucketExplanation,
+)
 from src.schemas.story_packet import StoryPacket
 from src.schemas.visual_evidence import MediaPointer
-from src.services.balanced_source_planner import BalancedSourcePlanner, SourcePlan
+from src.services.balanced_source_planner import (
+    BalancedSourcePlanner,
+    BucketSpec,
+    SourcePlan,
+)
 from src.services.bias_resolution_service import (
     BiasResolutionInput,
     BiasResolutionService,
 )
+from src.services.candidate_semantic_scorer import CandidateSemanticScorer
 from src.services.duplicate_detector import check_duplicate
 from src.services.relevance_scorer_service import RelevanceScorerService
 from src.services.rss_fallback_service import RssFallbackResult, RssFallbackService
 from src.services.rss_retrieval_service import RssRetrievalService
+from src.services.semantic_query_expansion_service import (
+    SemanticQueryExpansionService,
+)
 from src.services.source_scoring import ScoredCandidate, score_candidate
 from src.tools.article_extractor import ArticleExtractor
 from src.tools.bias_classifier import BiasResult
@@ -48,6 +63,12 @@ class SourceCandidate:
     http_status: int | None = None
     bias_result: BiasResult | None = None
     relevance_score: float | None = None
+    semantic_similarity: float | None = None
+    semantic_title_similarity: float | None = None
+    semantic_lede_similarity: float | None = None
+    semantic_chunk_similarity: float | None = None
+    distinctive_term_overlap: float | None = None
+    direct_evidence_score: float | None = None
     source_score: float | None = None
     bucket_label: str | None = None
     coverage_type: str | None = None
@@ -81,6 +102,10 @@ class SourceAggregatorService:
         self._probed_count: int = 0
         self._duplicate_count: int = 0
         self._last_plan: SourcePlan | None = None
+        self._candidate_decisions: list[CandidateDecision] = []
+        self._bucket_lane_attempts: list[BucketLaneAttempt] = []
+        self._result_stage_by_url: dict[str, str] = {}
+        self._result_bucket_by_url: dict[str, str] = {}
 
     def gather_sources(
         self,
@@ -96,6 +121,10 @@ class SourceAggregatorService:
         self._probed_count = 0
         self._duplicate_count = 0
         self._last_plan = None
+        self._candidate_decisions = []
+        self._bucket_lane_attempts = []
+        self._result_stage_by_url = {}
+        self._result_bucket_by_url = {}
 
         sources: list[SourceCandidate] = []
         seen_urls: set[str] = set()
@@ -113,9 +142,19 @@ class SourceAggregatorService:
                 sources.append(primary)
                 seen_urls.add(self._normalize_url(primary.url))
                 seen_domains.add(primary.domain)
+                self._record_primary_decision(primary, state="retained")
             else:
                 primary_error = primary.extraction_error or "No content extracted"
                 primary_error_code = primary.extraction_error_code
+                self._record_primary_decision(
+                    primary,
+                    state="extraction_failed",
+                    rejection_reason=(
+                        "extracted_text_too_short"
+                        if primary.full_text
+                        else "no_extracted_text"
+                    ),
+                )
                 logger.warning(
                     "Primary URL extraction failed for %s: %s (%s); continuing with discovery.",
                     url,
@@ -158,9 +197,10 @@ class SourceAggregatorService:
             rss_summary=rss_hint.summary if rss_hint else None,
             story_packet=story_packet,
         )
-        results = self._search_queries(queries, plan)
+        results = self._search_queries(queries, plan, story_packet)
         scored_candidates = self._preflight_search_results(
             results=results,
+            description=description,
             sources=sources,
             seen_urls=seen_urls,
             seen_domains=seen_domains,
@@ -331,7 +371,79 @@ class SourceAggregatorService:
             "probed_count": self._probed_count,
             "retained_count": len(sources),
             "duplicate_count": self._duplicate_count,
+            "candidate_census": self.candidate_census(
+                missing_buckets=missing
+            ).model_dump(mode="json"),
         }
+
+    @property
+    def candidate_decisions(self) -> list[CandidateDecision]:
+        """Return terminal lifecycle decisions from the last gather run."""
+        return list(self._candidate_decisions)
+
+    def candidate_census(
+        self, *, missing_buckets: list[str] | None = None
+    ) -> CandidateCensus:
+        """Return aggregate lifecycle counts from the last gather run."""
+        missing = list(missing_buckets or [])
+        return CandidateCensus.from_decisions(
+            self._candidate_decisions,
+            missing_buckets=missing,
+            missing_bucket_explanations=self._missing_bucket_explanations(missing),
+            bucket_lane_attempts=self._bucket_lane_attempts,
+        )
+
+    def _missing_bucket_explanations(
+        self,
+        missing_buckets: list[str],
+    ) -> list[MissingBucketExplanation]:
+        explanations: list[MissingBucketExplanation] = []
+        for bucket in missing_buckets:
+            decisions = [
+                decision
+                for decision in self._candidate_decisions
+                if decision.bucket_label == bucket
+            ]
+            state_counts = Counter(decision.state for decision in decisions)
+            rejection_counts = Counter(
+                decision.rejection_reason
+                for decision in decisions
+                if decision.rejection_reason
+            )
+            if not decisions:
+                reason = "no_candidates_probed"
+            elif state_counts and state_counts.total() == state_counts.get(
+                "extraction_failed", 0
+            ):
+                reason = "all_candidates_failed_extraction"
+            elif state_counts and state_counts.total() == state_counts.get(
+                "relevance_rejected", 0
+            ):
+                reason = "all_candidates_relevance_rejected"
+            elif state_counts and state_counts.total() == state_counts.get(
+                "policy_rejected", 0
+            ):
+                reason = "all_candidates_policy_rejected"
+            elif state_counts.get("extracted", 0) or state_counts.get(
+                "duplicate_rejected", 0
+            ):
+                reason = "candidates_available_but_not_retained"
+            else:
+                reason = "bucket_not_retained"
+
+            explanations.append(
+                MissingBucketExplanation(
+                    bucket_label=bucket,
+                    reason=reason,
+                    probed_count=len(decisions),
+                    by_state=dict(state_counts),
+                    rejection_reasons=dict(rejection_counts),
+                    probe_limit_reached=(
+                        self._probed_count >= settings.candidate_probe_limit
+                    ),
+                )
+            )
+        return explanations
 
     @property
     def missing_buckets(self) -> list[str]:
@@ -349,6 +461,10 @@ class SourceAggregatorService:
     ) -> list[str]:
         queries = []
         if story_packet:
+            if story_packet.query_families:
+                queries.extend(
+                    SemanticQueryExpansionService().flatten(story_packet.query_families)
+                )
             queries.extend(story_packet.query_pack)
             if story_packet.canonical_headline:
                 queries.append(f'"{story_packet.canonical_headline}"')
@@ -392,90 +508,239 @@ class SourceAggregatorService:
         self,
         queries: list[str],
         plan: SourcePlan | None = None,
+        story_packet: StoryPacket | None = None,
     ) -> list[SearchResult]:
         results: list[SearchResult] = []
         seen_urls: set[str] = set()
 
-        def add_results(found: list[SearchResult]) -> None:
+        def add_results(
+            found: list[SearchResult],
+            stage: str = "open_web",
+            bucket_label: str | None = None,
+        ) -> None:
             for result in found:
                 normalized = self._normalize_url(result.url)
                 if normalized in seen_urls:
                     continue
                 seen_urls.add(normalized)
+                self._result_stage_by_url[normalized] = stage
+                if bucket_label:
+                    self._result_bucket_by_url[normalized] = bucket_label
                 results.append(result)
 
+        if plan:
+            return self._search_queries_by_bucket_round_robin(
+                queries,
+                plan,
+                story_packet,
+                add_results,
+                results,
+            )
+
         for query in queries:
-            if plan:
-                for step in plan.search_plan:
-                    phase = step.get("phase")
-                    domains = step.get("domains") or []
-                    if phase == "rss":
-                        if not self._setting_bool("analysis_rss_first_enabled", True):
-                            continue
-                        try:
-                            found = self._rss_retriever.search(
-                                query,
-                                domains=list(domains),
-                                max_results=8,
-                            )
-                            add_results(found)
-                        except Exception as exc:
-                            logger.warning(
-                                "RSS retrieval failed for '%s': %s", query, exc
-                            )
-                    elif phase == "site_search":
-                        for domain in domains:
-                            site_query = f"site:{domain} {query}"
-                            try:
-                                found = self._searcher.web_search(
-                                    site_query,
-                                    max_results=2,
-                                )
-                                add_results(found)
-                            except Exception as exc:
-                                logger.warning(
-                                    "Search failed for '%s': %s", site_query, exc
-                                )
-                    elif phase == "open_web":
-                        try:
-                            found = self._searcher.news_search(
-                                query,
-                                max_results=12,
-                                time_range=self._search_time_range(),
-                            )
-                            add_results(found)
-                            if len(found) < 4:
-                                fallback = self._searcher.web_search(
-                                    query, max_results=8
-                                )
-                                add_results(fallback)
-                        except Exception as exc:
-                            logger.warning("Search failed for '%s': %s", query, exc)
-
-                    if len(results) >= settings.candidate_probe_limit * 3:
-                        break
-                if len(results) >= settings.candidate_probe_limit * 3:
-                    break
-                continue
-
             try:
                 found = self._searcher.news_search(
                     query,
                     max_results=12,
                     time_range=self._search_time_range(),
                 )
-                add_results(found)
+                add_results(found, "open_web")
                 if len(found) < 4:
                     fallback = self._searcher.web_search(query, max_results=8)
-                    add_results(fallback)
+                    add_results(fallback, "open_web")
             except Exception as exc:
                 logger.warning("Search failed for '%s': %s", query, exc)
         return results
+
+    def _search_queries_by_bucket_round_robin(
+        self,
+        queries: list[str],
+        plan: SourcePlan,
+        story_packet: StoryPacket | None,
+        add_results,
+        results: list[SearchResult],
+    ) -> list[SearchResult]:
+        steps_by_bucket: dict[str, list[dict[str, object]]] = {}
+        for step in plan.search_plan:
+            bucket = str(step.get("bucket") or "")
+            if not bucket:
+                continue
+            steps_by_bucket.setdefault(bucket, []).append(step)
+
+        bucket_result_counts = dict.fromkeys(steps_by_bucket, 0)
+        max_results_total = settings.candidate_probe_limit * 3
+        bucket_specs = {bucket.label: bucket for bucket in plan.all_buckets}
+
+        for query in queries:
+            for bucket_label in plan.bucket_probe_sequence:
+                if len(results) >= max_results_total:
+                    self._record_unattempted_bucket_lanes(
+                        query,
+                        steps_by_bucket.get(bucket_label, []),
+                        "global_result_limit_reached",
+                    )
+                    return results
+                quota = bucket_specs.get(bucket_label)
+                if (
+                    quota
+                    and bucket_result_counts.get(bucket_label, 0) >= quota.probe_quota
+                ):
+                    self._record_unattempted_bucket_lanes(
+                        query,
+                        steps_by_bucket.get(bucket_label, []),
+                        "bucket_probe_quota_reached",
+                    )
+                    continue
+                for step in steps_by_bucket.get(bucket_label, []):
+                    before = len(results)
+                    new_count = self._search_plan_step(
+                        query,
+                        step,
+                        story_packet,
+                        plan,
+                        add_results,
+                    )
+                    bucket_result_counts[bucket_label] = bucket_result_counts.get(
+                        bucket_label,
+                        0,
+                    ) + max(0, len(results) - before)
+                    self._record_bucket_lane_attempt(
+                        query=query,
+                        step=step,
+                        result_count=new_count,
+                        new_result_count=max(0, len(results) - before),
+                    )
+                    if len(results) >= max_results_total:
+                        return results
+                    if (
+                        quota
+                        and bucket_result_counts.get(bucket_label, 0)
+                        >= quota.probe_quota
+                    ):
+                        break
+        return results
+
+    def _search_plan_step(
+        self,
+        query: str,
+        step: dict[str, object],
+        story_packet: StoryPacket | None,
+        plan: SourcePlan | None,
+        add_results,
+    ) -> int:
+        found_count = 0
+
+        def add_found(found: list[SearchResult], stage: str) -> None:
+            nonlocal found_count
+            found_count += len(found)
+            try:
+                add_results(found, stage, str(step.get("bucket") or "") or None)
+            except TypeError:
+                add_results(found)
+
+        phase = step.get("phase")
+        domains = step.get("domains") or []
+        if phase == "rss":
+            if not self._setting_bool("analysis_rss_first_enabled", True):
+                return 0
+            try:
+                bucket_spec = self._bucket_spec(plan, str(step.get("bucket") or ""))
+                if story_packet and bucket_spec:
+                    found = self._rss_retriever.search_story(
+                        story_packet,
+                        bucket_spec,
+                        max_results=8,
+                    )
+                else:
+                    found = self._rss_retriever.search(
+                        query,
+                        domains=list(domains),
+                        max_results=8,
+                    )
+                add_found(found, "rss")
+            except Exception as exc:
+                logger.warning("RSS retrieval failed for '%s': %s", query, exc)
+        elif phase == "site_search":
+            for domain in domains:
+                site_query = f"site:{domain} {query}"
+                try:
+                    found = self._searcher.web_search(site_query, max_results=2)
+                    add_found(found, "site_search")
+                except Exception as exc:
+                    logger.warning("Search failed for '%s': %s", site_query, exc)
+        elif phase == "open_web":
+            try:
+                found = self._searcher.news_search(
+                    query,
+                    max_results=12,
+                    time_range=self._search_time_range(),
+                )
+                add_found(found, "open_web")
+                if len(found) < 4:
+                    fallback = self._searcher.web_search(query, max_results=8)
+                    add_found(fallback, "open_web")
+            except Exception as exc:
+                logger.warning("Search failed for '%s': %s", query, exc)
+        return found_count
+
+    def _record_unattempted_bucket_lanes(
+        self,
+        query: str,
+        steps: list[dict[str, object]],
+        reason: str,
+    ) -> None:
+        for step in steps:
+            self._record_bucket_lane_attempt(
+                query=query,
+                step=step,
+                result_count=0,
+                new_result_count=0,
+                exhausted_reason=reason,
+            )
+
+    def _record_bucket_lane_attempt(
+        self,
+        *,
+        query: str,
+        step: dict[str, object],
+        result_count: int,
+        new_result_count: int,
+        exhausted_reason: str | None = None,
+    ) -> None:
+        phase = str(step.get("phase") or "unknown")
+        if phase not in {"rss", "site_search", "open_web"}:
+            phase = "unknown"
+        domains = step.get("domains") or []
+        self._bucket_lane_attempts.append(
+            BucketLaneAttempt(
+                bucket_label=str(step.get("bucket") or ""),
+                stage=phase,
+                query=query,
+                exact_bias=step.get("exact_bias")
+                if isinstance(step.get("exact_bias"), int)
+                else None,
+                domains=[str(domain) for domain in domains],
+                result_count=result_count,
+                new_result_count=new_result_count,
+                exhausted_reason=exhausted_reason
+                or ("no_results" if result_count == 0 else None),
+            )
+        )
+
+    @staticmethod
+    def _bucket_spec(plan: SourcePlan | None, label: str) -> BucketSpec | None:
+        if not plan:
+            return None
+        for bucket in plan.all_buckets:
+            if bucket.label == label:
+                return bucket
+        return None
 
     def _preflight_search_results(
         self,
         *,
         results: list[SearchResult],
+        description: str,
         sources: list[SourceCandidate],
         seen_urls: set[str],
         seen_domains: set[str],
@@ -485,6 +750,9 @@ class SourceAggregatorService:
         scored_candidates: list[tuple[ScoredCandidate, SourceCandidate]] = []
         candidate_urls = set(seen_urls)
         candidate_domains = set(seen_domains)
+        semantic_scorer = self._build_candidate_semantic_scorer(
+            story_packet, description
+        )
 
         for result in results:
             if self._probed_count >= settings.candidate_probe_limit:
@@ -495,18 +763,51 @@ class SourceAggregatorService:
                 continue
             normalized_url = self._normalize_url(candidate_url)
             domain = self._extract_domain(candidate_url)
+            stage = self._result_stage_by_url.get(normalized_url, "open_web")
+            planned_bucket = self._result_bucket_by_url.get(normalized_url)
             if normalized_url in candidate_urls or domain in candidate_domains:
                 continue
 
             self._probed_count += 1
             candidate = self._extract_url(candidate_url, require_success=False)
             if not candidate or not candidate.full_text:
+                self._record_candidate_decision(
+                    candidate=candidate,
+                    result=result,
+                    stage=stage,
+                    state="extraction_failed",
+                    rejection_reason="no_extracted_text",
+                    fallback_domain=domain,
+                    fallback_bucket_label=planned_bucket,
+                )
                 continue
             if len(candidate.full_text) < self.MIN_TEXT_LENGTH:
+                self._record_candidate_decision(
+                    candidate=candidate,
+                    result=result,
+                    stage=stage,
+                    state="extraction_failed",
+                    rejection_reason="extracted_text_too_short",
+                    fallback_domain=domain,
+                    fallback_bucket_label=planned_bucket,
+                )
                 continue
 
             relevance_total = 0.5
+            relevance_diag: dict[str, object] = {}
             if story_packet:
+                semantic_scores = self._score_semantic_candidate(
+                    semantic_scorer,
+                    candidate,
+                )
+                semantic_similarity = (
+                    semantic_scores.get("aggregate_similarity")
+                    if semantic_scores
+                    else None
+                )
+                semantic_chunk_similarity = (
+                    semantic_scores.get("chunk_similarity") if semantic_scores else None
+                )
                 relevance = self._relevance_scorer.score(
                     candidate_title=candidate.title,
                     candidate_text=candidate.full_text,
@@ -514,15 +815,49 @@ class SourceAggregatorService:
                     story_packet=story_packet,
                     seen_domains=candidate_domains,
                     candidate_domain=candidate.domain,
+                    semantic_similarity=semantic_similarity,
+                    semantic_chunk_similarity=semantic_chunk_similarity,
                 )
                 relevance_total = relevance.total
                 candidate.relevance_score = relevance.total
+                candidate.semantic_similarity = relevance.semantic_similarity
+                candidate.semantic_title_similarity = (
+                    semantic_scores.get("title_similarity") if semantic_scores else None
+                )
+                candidate.semantic_lede_similarity = (
+                    semantic_scores.get("lede_similarity") if semantic_scores else None
+                )
+                candidate.semantic_chunk_similarity = semantic_chunk_similarity
+                candidate.distinctive_term_overlap = relevance.distinctive_term_overlap
+                candidate.direct_evidence_score = relevance.direct_evidence_score
                 candidate.coverage_type = relevance.coverage_type
+                relevance_diag = relevance.to_diagnostics().model_dump(mode="json")
+                if candidate.semantic_title_similarity is not None:
+                    relevance_diag["semantic_title_similarity"] = (
+                        candidate.semantic_title_similarity
+                    )
+                if candidate.semantic_lede_similarity is not None:
+                    relevance_diag["semantic_lede_similarity"] = (
+                        candidate.semantic_lede_similarity
+                    )
+                if candidate.semantic_chunk_similarity is not None:
+                    relevance_diag["semantic_chunk_similarity"] = (
+                        candidate.semantic_chunk_similarity
+                    )
                 if relevance.rejection_reason:
                     logger.debug(
                         "Skipping low-relevance source %s: %s",
                         candidate.url,
                         relevance.rejection_reason,
+                    )
+                    self._record_candidate_decision(
+                        candidate=candidate,
+                        result=result,
+                        stage=stage,
+                        state="relevance_rejected",
+                        rejection_reason=relevance.rejection_reason,
+                        relevance_diagnostics=relevance_diag,
+                        fallback_bucket_label=planned_bucket,
                     )
                     continue
 
@@ -547,6 +882,15 @@ class SourceAggregatorService:
                 logger.debug(
                     "Skipping duplicate %s: %s", candidate.url, dup_result.reason
                 )
+                self._record_candidate_decision(
+                    candidate=candidate,
+                    result=result,
+                    stage=stage,
+                    state="duplicate_rejected",
+                    rejection_reason=dup_result.reason,
+                    relevance_diagnostics=relevance_diag,
+                    fallback_bucket_label=planned_bucket,
+                )
                 continue
 
             bucket_label = self._bucket_label(candidate)
@@ -560,6 +904,7 @@ class SourceAggregatorService:
                 else 0,
                 bucket_label=bucket_label,
                 similarity=relevance_total,
+                semantic_similarity=candidate.semantic_similarity,
                 bucket_is_empty=self._bucket_is_empty(bucket_label, sources, plan),
                 domain_already_present=candidate.domain in seen_domains,
                 is_duplicate=False,
@@ -572,10 +917,74 @@ class SourceAggregatorService:
             )
             candidate.source_score = score.total_score
             scored_candidates.append((score, candidate))
+            self._record_candidate_decision(
+                candidate=candidate,
+                result=result,
+                stage=stage,
+                state="extracted",
+                relevance_diagnostics=relevance_diag,
+                fallback_bucket_label=planned_bucket,
+            )
             candidate_urls.add(normalized_url)
             candidate_domains.add(domain)
 
         return scored_candidates
+
+    def _build_candidate_semantic_scorer(
+        self,
+        story_packet: StoryPacket | None,
+        description: str,
+    ) -> CandidateSemanticScorer | None:
+        if not story_packet or not self._semantic_candidate_scoring_enabled():
+            return None
+        try:
+            return CandidateSemanticScorer(story_packet, description)
+        except Exception as exc:
+            if not self._semantic_fail_open():
+                raise
+            logger.warning(
+                "Candidate semantic scoring unavailable; continuing deterministic relevance: %s",
+                exc,
+            )
+            return None
+
+    def _score_semantic_candidate(
+        self,
+        semantic_scorer: CandidateSemanticScorer | None,
+        candidate: SourceCandidate,
+    ) -> dict[str, float | None] | None:
+        if semantic_scorer is None:
+            return None
+        try:
+            if hasattr(semantic_scorer, "score_candidate_diagnostics"):
+                scores = semantic_scorer.score_candidate_diagnostics(
+                    candidate.title,
+                    candidate.full_text,
+                )
+                return {
+                    "aggregate_similarity": scores.aggregate_similarity,
+                    "title_similarity": scores.title_similarity,
+                    "lede_similarity": scores.lede_similarity,
+                    "chunk_similarity": getattr(scores, "chunk_similarity", None),
+                }
+            return {
+                "aggregate_similarity": semantic_scorer.score_candidate(
+                    candidate.title,
+                    candidate.full_text,
+                ),
+                "title_similarity": None,
+                "lede_similarity": None,
+                "chunk_similarity": None,
+            }
+        except Exception as exc:
+            if not self._semantic_fail_open():
+                raise
+            logger.warning(
+                "Candidate semantic similarity failed for %s; continuing: %s",
+                candidate.url,
+                exc,
+            )
+            return None
 
     def _select_scored_candidates(
         self,
@@ -610,15 +1019,28 @@ class SourceAggregatorService:
                 )
             ):
                 break
+            is_backfill = False
             if not pool:
                 pool = remaining
+                is_backfill = True
 
             policy_pool = [
                 item
                 for item in pool
-                if self._candidate_allowed_by_policy(item[1], sources)
+                if self._candidate_allowed_by_policy(
+                    item[1],
+                    sources,
+                    plan,
+                    enforce_result_quota=not is_backfill,
+                )
             ]
             if not policy_pool:
+                for _score, candidate in pool:
+                    self._mark_candidate_decision(
+                        candidate.url,
+                        state="policy_rejected",
+                        rejection_reason="strict_bucket_or_exact_bias_policy",
+                    )
                 if missing:
                     break
                 break
@@ -635,6 +1057,7 @@ class SourceAggregatorService:
             if normalized_url in seen_urls or selected.domain in seen_domains:
                 continue
             sources.append(selected)
+            self._mark_candidate_decision(selected.url, state="retained")
             seen_urls.add(normalized_url)
             seen_domains.add(selected.domain)
 
@@ -682,6 +1105,105 @@ class SourceAggregatorService:
             image_alt_text=article.image_alt_text,
             media_captions=article.media_captions,
         )
+
+    def _record_primary_decision(
+        self,
+        candidate: SourceCandidate,
+        *,
+        state: str,
+        rejection_reason: str | None = None,
+    ) -> None:
+        self._record_candidate_decision(
+            candidate=candidate,
+            result=SearchResult(
+                title=candidate.title,
+                url=candidate.url,
+                snippet="",
+                source=candidate.domain,
+            ),
+            stage="primary",
+            state=state,
+            rejection_reason=rejection_reason,
+        )
+
+    def _record_candidate_decision(
+        self,
+        *,
+        candidate: SourceCandidate | None,
+        result: SearchResult,
+        stage: str,
+        state: str,
+        rejection_reason: str | None = None,
+        relevance_diagnostics: dict[str, object] | None = None,
+        fallback_domain: str = "",
+        fallback_bucket_label: str | None = None,
+    ) -> None:
+        url = candidate.url if candidate else result.url
+        domain = candidate.domain if candidate else fallback_domain
+        title = candidate.title if candidate else result.title
+        media_diagnostics = {}
+        exact_bias = None
+        bucket_label = None
+        if candidate:
+            bucket_label = candidate.bucket_label or fallback_bucket_label
+            if not bucket_label and candidate.bias_result:
+                bucket_label = self._bucket_label(candidate)
+            if not bucket_label:
+                bucket_label = self._bucket_label(candidate)
+            exact_bias = self._candidate_bias(candidate)
+            media_diagnostics = {
+                "og_image_url": candidate.og_image_url,
+                "embedded_post_urls": list(candidate.embedded_post_urls),
+                "image_alt_text_count": len(candidate.image_alt_text),
+                "media_caption_count": len(candidate.media_captions),
+            }
+        self._candidate_decisions.append(
+            CandidateDecision(
+                url=url,
+                domain=domain,
+                title=title,
+                stage=stage
+                if stage in {"primary", "rss", "site_search", "open_web"}
+                else "unknown",
+                state=state,
+                bucket_label=bucket_label,
+                exact_bias=exact_bias,
+                rejection_reason=rejection_reason,
+                extraction_error=candidate.extraction_error if candidate else None,
+                extraction_error_code=(
+                    candidate.extraction_error_code if candidate else None
+                ),
+                extractor_method=candidate.extractor_method if candidate else None,
+                http_status=candidate.http_status if candidate else None,
+                relevance_score=candidate.relevance_score if candidate else None,
+                relevance_diagnostics=relevance_diagnostics or {},
+                source_score=candidate.source_score if candidate else None,
+                media_diagnostics=media_diagnostics,
+            )
+        )
+
+    def _mark_candidate_decision(
+        self,
+        url: str,
+        *,
+        state: str,
+        rejection_reason: str | None = None,
+    ) -> None:
+        normalized = self._normalize_url(url)
+        for index in range(len(self._candidate_decisions) - 1, -1, -1):
+            decision = self._candidate_decisions[index]
+            if self._normalize_url(decision.url) != normalized:
+                continue
+            updated = decision.model_copy(
+                update={
+                    "state": state,
+                    "rejection_reason": rejection_reason
+                    if rejection_reason is not None
+                    else decision.rejection_reason,
+                }
+            )
+            self._candidate_decisions[index] = updated
+            return
 
     def _resolve_bias(self, domain: str, url: str, text: str):
         if not domain:
@@ -737,7 +1259,21 @@ class SourceAggregatorService:
         self,
         candidate: SourceCandidate,
         sources: list[SourceCandidate],
+        plan: SourcePlan | None = None,
+        *,
+        enforce_result_quota: bool = True,
     ) -> bool:
+        bucket = self._bucket_label(candidate)
+        if plan and enforce_result_quota:
+            bucket_spec = self._bucket_spec(plan, bucket)
+            if (
+                bucket_spec
+                and bucket_spec.result_quota >= 0
+                and self._bucket_counts(sources).get(bucket, 0)
+                >= bucket_spec.result_quota
+            ):
+                return False
+
         bias = self._candidate_bias(candidate)
         exact_limit = self._setting_int("max_per_exact_bias", 1)
         if (
@@ -747,7 +1283,6 @@ class SourceAggregatorService:
             return False
 
         bucket_limit = self._setting_int("max_per_bucket_group", 2)
-        bucket = self._bucket_label(candidate)
         return not (
             bucket_limit >= 0
             and self._bucket_counts(sources).get(bucket, 0) >= bucket_limit
@@ -777,6 +1312,12 @@ class SourceAggregatorService:
     def _setting_bool(name: str, default: bool) -> bool:
         value = getattr(settings, name, default)
         return value if isinstance(value, bool) else default
+
+    def _semantic_candidate_scoring_enabled(self) -> bool:
+        return self._setting_bool("semantic_candidate_scoring_enabled", False)
+
+    def _semantic_fail_open(self) -> bool:
+        return self._setting_bool("semantic_fail_open", True)
 
     @staticmethod
     def _setting_int(name: str, default: int) -> int:

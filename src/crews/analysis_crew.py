@@ -1,5 +1,7 @@
 """Analysis Crew for multi-source story research."""
 
+from typing import Any
+
 from crewai import Crew, Process, Task
 
 from src.agents import (
@@ -14,11 +16,66 @@ from src.crews.analysis_rubric import build_rhetoric_rubric
 from src.schemas.analysis_report_sections import AnalysisReportSections
 
 
+def _extract_final_report_payload(result: Any) -> dict[str, Any]:
+    """Extract the final task JSON from CrewAI's result object."""
+    candidates: list[Any] = []
+    for attr in ("json_dict", "pydantic", "raw"):
+        value = getattr(result, attr, None)
+        if value:
+            candidates.append(value)
+
+    tasks_output = getattr(result, "tasks_output", None)
+    if tasks_output:
+        final_output = tasks_output[-1]
+        for attr in ("json_dict", "pydantic", "raw"):
+            value = getattr(final_output, attr, None)
+            if value:
+                candidates.append(value)
+        candidates.append(final_output)
+
+    candidates.append(result)
+
+    for candidate in candidates:
+        if isinstance(candidate, AnalysisReportSections):
+            return candidate.model_dump()
+        if hasattr(candidate, "model_dump"):
+            dumped = candidate.model_dump()
+            if isinstance(dumped, dict):
+                return dumped
+        if isinstance(candidate, dict):
+            return candidate
+
+        text = str(candidate).strip()
+        if not text:
+            continue
+        try:
+            sections = AnalysisReportSections.from_crew_payload(
+                {"report": text},
+            )
+        except ValueError:
+            continue
+        if sections.model_dump(exclude_defaults=True):
+            return sections.model_dump()
+
+    return {"report": str(result)}
+
+
+def _agent_context_block(
+    agent_contexts: dict[str, str] | None,
+    agent_name: str,
+) -> str:
+    context = (agent_contexts or {}).get(agent_name, "").strip()
+    if not context:
+        return ""
+    return f"\n\nRetrieved Semantic Context:\n{context}\n"
+
+
 def create_analysis_tasks(
     story_description: str,
     story_url: str | None = None,
     prefetched_sources: str | None = None,
     visual_evidence_context: str | None = None,
+    agent_contexts: dict[str, str] | None = None,
 ) -> list[Task]:
     """Create tasks for the analysis workflow.
 
@@ -26,6 +83,7 @@ def create_analysis_tasks(
         story_description: Description of the story to analyze
         story_url: Optional URL of a source article
         prefetched_sources: Optional prefetched source context block
+        agent_contexts: Optional semantic context blocks keyed by agent name
 
     Returns:
         List of CrewAI tasks
@@ -41,6 +99,10 @@ def create_analysis_tasks(
         if visual_evidence_context
         else ""
     )
+    fact_context = _agent_context_block(agent_contexts, "fact_extractor")
+    rhetoric_context = _agent_context_block(agent_contexts, "rhetorical_analyst")
+    narrative_context = _agent_context_block(agent_contexts, "narrative_analyzer")
+    report_context = _agent_context_block(agent_contexts, "report_writer")
     rhetoric_rubric = build_rhetoric_rubric()
     source_agent = create_source_aggregator_agent(
         prefetched_mode=bool(prefetched_sources)
@@ -87,7 +149,7 @@ def create_analysis_tasks(
 
     # Task 3: Extract facts vs opinions
     fact_task = Task(
-        description="""Analyze the articles to separate facts from opinions.
+        description=f"""Analyze the articles to separate facts from opinions.
 
         For each source:
         1. Identify verifiable facts (who, what, when, where)
@@ -98,6 +160,7 @@ def create_analysis_tasks(
         Use the visual evidence context as observable evidence only; do not infer
         intent, legality, or motive from image contents unless a source attributes
         that interpretation.
+        {fact_context}
 
         Create three lists:
         - Agreed facts (appear across perspectives)
@@ -114,6 +177,7 @@ def create_analysis_tasks(
 
         Use this compact rubric:
         {rhetoric_rubric}
+        {rhetoric_context}
 
         Required output schema:
         ### Framing Tactics
@@ -145,6 +209,7 @@ def create_analysis_tasks(
         description=f"""Analyze the narrative patterns across all sources for this story:
 
         Story: {story_description}
+        {narrative_context}
 
         Using the fact extraction and rhetoric analysis above, produce:
         1. **Mainstream Narrative**: The dominant story told by center/mainstream sources.
@@ -171,6 +236,7 @@ def create_analysis_tasks(
         description=f"""Write a comprehensive research report for this story:
 
         Story: {story_description}
+        {report_context}
 
         Use ONLY the source manifest from the previous tasks. Do not add new sources.
 
@@ -192,13 +258,23 @@ def create_analysis_tasks(
           "creator_angles": ["2-3 evidence-grounded creator angles"],
           "recommended_approach": "creator-facing approach",
           "video_outline": "concise outline",
-          "evidence_limitations": ["limitations, missing perspectives, or visual failures"]
+          "evidence_limitations": ["limitations, missing perspectives, or visual failures"],
+          "source_findings": [
+            {{
+              "source_id": "S1",
+              "key_framing": "one concise framing or emphasis used by this source",
+              "notable_claim": "one source-specific claim or evidence note",
+              "evidence_snippet": "short supporting phrase or paraphrase",
+              "confidence": 0.0
+            }}
+          ]
         }}
 
         Rules:
         - Do not include Markdown headings.
         - Do not include a Source Matrix or All Sources & Citations.
         - The deterministic renderer will add layout, matrix, and citations.
+        - Include one source_findings entry for each provided source ID.
         - Keep observable visual content separate from interpretation and legal characterization.
         - Every substantive claim should reference source IDs like S1/S2 in the text.""",
         expected_output="Valid JSON matching AnalysisReportSections fields; no Markdown headings.",
@@ -221,6 +297,7 @@ def run_analysis(
     story_url: str | None = None,
     prefetched_sources: str | None = None,
     visual_evidence_context: str | None = None,
+    agent_contexts: dict[str, str] | None = None,
 ) -> dict:
     """Run the full analysis workflow.
 
@@ -228,6 +305,7 @@ def run_analysis(
         story_description: Description of the story
         story_url: Optional starting URL
         prefetched_sources: Optional prefetched source context block
+        agent_contexts: Optional semantic context blocks keyed by agent name
 
     Returns:
         Dictionary with analysis results
@@ -237,6 +315,7 @@ def run_analysis(
         story_url,
         prefetched_sources,
         visual_evidence_context,
+        agent_contexts,
     )
 
     crew = Crew(
@@ -255,14 +334,20 @@ def run_analysis(
     )
 
     result = crew.kickoff()
-    raw_report = str(result)
+    report_payload = _extract_final_report_payload(result)
     sections = AnalysisReportSections.from_crew_payload(
-        {"report": raw_report},
+        report_payload,
         fallback_summary=story_description,
+    )
+    raw_report = (
+        report_payload.get("report")
+        if isinstance(report_payload.get("report"), str)
+        else sections.model_dump_json()
     )
 
     return {
         "report": raw_report,
+        "report_json": report_payload,
         "sections": sections.model_dump(),
         "story_description": story_description,
         "story_url": story_url,

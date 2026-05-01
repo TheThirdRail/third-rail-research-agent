@@ -1,0 +1,45 @@
+{
+  "name": "screenshot_social_post",
+  "description": "Benchmark for verifying visual evidence handling when the story centers on a social media post and its visual content",
+  "seed": {
+    "description": "Former FBI Director James Comey posts image on X showing seashells arranged to read 8647, prosecutors allege coded threat",
+    "url": "https://www.example.com/comey-shell-post"
+  },
+  "story_packet_overrides": {
+    "actors": ["James Comey"],
+    "number_markers": ["8647"],
+    "platform_markers": ["X", "Twitter"],
+    "visual_descriptors": ["seashells", "shell arrangement", "beach photo"],
+    "must_have_terms": ["8647", "post"]
+  },
+  "media_pointers": [
+    {
+      "source_url": "https://www.example.com/comey-shell-post",
+      "media_url": "https://pbs.twimg.com/media/comey_shells.jpg",
+      "media_type": "image",
+      "platform": "X",
+      "alt_text": "Seashells arranged on a beach",
+      "caption": "A beautiful day"
+    },
+    {
+      "source_url": "https://www.example.com/comey-shell-post",
+      "media_url": "https://x.com/Comey/status/1234567890",
+      "media_type": "social_post",
+      "platform": "X",
+      "alt_text": "",
+      "caption": ""
+    }
+  ],
+  "expectations": {
+    "visual_evidence_records_min": 1,
+    "observable_text_includes": ["8647"],
+    "platform_resolved": "X",
+    "social_post_url_canonicalized": true,
+    "observable_vs_interpretation_separated": true,
+    "source_matrix_completeness": {
+      "left_present": true,
+      "right_present": true
+    },
+    "description": "The pipeline must resolve the social post URL, extract visual evidence, identify observable content (8647 in shells), and separate that from interpretive claims about the meaning."
+  }
+}

@@ -26,6 +26,7 @@ class ScoredCandidate:
     bias: int
     bucket_label: str
     total_score: float
+    event_similarity: float
     similarity_score: float
     bucket_need_score: float
     novelty_score: float
@@ -53,6 +54,7 @@ def score_candidate(
     bucket_label: str,
     *,
     similarity: float = 0.5,
+    semantic_similarity: float | None = None,
     bucket_is_empty: bool = True,
     domain_already_present: bool = False,
     is_duplicate: bool = False,
@@ -67,7 +69,8 @@ def score_candidate(
         title: Article title.
         bias: Bias score (-4 to +4).
         bucket_label: Which bias bucket this source fills.
-        similarity: Event similarity score (0.0-1.0).
+        similarity: Deterministic/blended fallback event similarity score (0.0-1.0).
+        semantic_similarity: Optional semantic event similarity score (0.0-1.0).
         bucket_is_empty: Whether this source's bucket still needs filling.
         domain_already_present: Whether this domain already has a source.
         is_duplicate: Whether this is a detected duplicate.
@@ -81,7 +84,10 @@ def score_candidate(
     entry = registry.lookup_domain(domain)
 
     # 1) Event similarity (0.0-1.0, weight: 0.25)
-    similarity_score = similarity * 0.25
+    event_similarity = _bounded_score(
+        semantic_similarity if semantic_similarity is not None else similarity
+    )
+    similarity_score = event_similarity * 0.25
 
     # 2) Bucket need (0.0 or 0.30, weight: 0.30)
     bucket_need_score = 0.30 if bucket_is_empty else 0.05
@@ -116,6 +122,7 @@ def score_candidate(
         bias=bias,
         bucket_label=bucket_label,
         total_score=total,
+        event_similarity=event_similarity,
         similarity_score=similarity_score,
         bucket_need_score=bucket_need_score,
         novelty_score=novelty_score,
@@ -123,6 +130,10 @@ def score_candidate(
         freshness_score=freshness_score,
         duplicate_penalty=duplicate_penalty,
     )
+
+
+def _bounded_score(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
 
 
 def _compute_freshness(

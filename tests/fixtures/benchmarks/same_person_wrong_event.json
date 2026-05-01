@@ -1,0 +1,75 @@
+{
+  "name": "same_person_wrong_event",
+  "description": "Benchmark for verifying wrong-event rejection when articles mention the same public figure but cover a different event",
+  "seed": {
+    "description": "James Comey indicted on federal charges related to social media post containing seashells arranged as 8647",
+    "url": "https://www.example.com/comey-indictment-2026"
+  },
+  "story_packet_overrides": {
+    "actors": ["James Comey"],
+    "must_have_terms": ["indictment", "indicted"],
+    "must_not_have_terms": ["memoir", "book tour", "fired", "2017"],
+    "number_markers": ["8647"],
+    "platform_markers": ["X", "Twitter"]
+  },
+  "simulated_candidates": [
+    {
+      "url": "https://www.cnn.com/comey-indicted-2026",
+      "domain": "cnn.com",
+      "title": "James Comey Indicted Over Social Media Post",
+      "bias": -1,
+      "stage": "site_search",
+      "text_excerpt": "Former FBI Director James Comey was indicted on charges related to a post on X showing seashells arranged to spell 8647.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.cnn.com/comey-testimony-2017",
+      "domain": "cnn.com",
+      "title": "Comey's Historic Testimony Before Senate Intelligence Committee",
+      "bias": -1,
+      "stage": "open_web",
+      "text_excerpt": "Former FBI Director James Comey testified before the Senate Intelligence Committee about his interactions with President Trump in 2017.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "same_person_wrong_event"
+    },
+    {
+      "url": "https://www.nytimes.com/comey-book-review",
+      "domain": "nytimes.com",
+      "title": "Comey's Memoir Reveals New Details About FBI Leadership",
+      "bias": -1,
+      "stage": "open_web",
+      "text_excerpt": "A Higher Loyalty by James Comey details his time as FBI Director and the turbulent relationship with the Trump administration.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "same_person_wrong_event"
+    },
+    {
+      "url": "https://www.foxnews.com/comey-indicted",
+      "domain": "foxnews.com",
+      "title": "Former FBI Chief Comey Faces Federal Charges Over Post",
+      "bias": 2,
+      "stage": "site_search",
+      "text_excerpt": "James Comey, former head of the FBI, has been indicted in connection with a social media post that prosecutors say contained a threat coded as 8647.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.politico.com/comey-fired-2017",
+      "domain": "politico.com",
+      "title": "Revisiting the Day Trump Fired Comey",
+      "bias": -1,
+      "stage": "open_web",
+      "text_excerpt": "In May 2017, President Trump fired FBI Director James Comey, setting off a political firestorm that would lead to the Mueller investigation.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "same_person_wrong_event"
+    }
+  ],
+  "expectations": {
+    "correct_event_retained_min": 2,
+    "wrong_event_rejected_min": 2,
+    "wrong_event_rejection_reason": "same_person_wrong_event",
+    "must_have_terms_enforced": true,
+    "must_not_have_terms_enforced": true,
+    "description": "Articles about the same person (Comey) but different events (2017 firing, testimony, memoir) must be rejected. Only articles about the 2026 indictment/8647 post should survive."
+  }
+}

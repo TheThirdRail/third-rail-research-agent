@@ -35,6 +35,9 @@ class BucketSpec:
     required: bool
     domain_targets: list[str] = field(default_factory=list)
     search_queries: list[str] = field(default_factory=list)
+    probe_quota: int = 0
+    result_quota: int = 0
+    exact_bias_order: list[int] = field(default_factory=list)
     filled: bool = False
 
 
@@ -46,6 +49,9 @@ class SourcePlan:
     optional_buckets: list[BucketSpec]
     domain_targets_per_bucket: dict[str, list[str]]
     search_plan: list[dict[str, object]]
+    bucket_probe_sequence: list[str]
+    proceed_minimum_groups: list[str]
+    target_unique_exact_biases: int
     seed_bias: int | None
     seed_domain: str | None
 
@@ -133,12 +139,23 @@ class BalancedSourcePlanner:
 
         # Build search plan
         search_plan = self._build_search_plan(required, optional, seed_domain)
+        bucket_probe_sequence = self._bucket_probe_sequence(
+            required,
+            optional,
+            seed_bias,
+        )
 
         plan = SourcePlan(
             required_buckets=required,
             optional_buckets=optional,
             domain_targets_per_bucket=domain_targets,
             search_plan=search_plan,
+            bucket_probe_sequence=bucket_probe_sequence,
+            proceed_minimum_groups=[bucket.label for bucket in required],
+            target_unique_exact_biases=self._setting_int(
+                "target_unique_exact_biases",
+                3,
+            ),
             seed_bias=seed_bias,
             seed_domain=seed_domain,
         )
@@ -188,6 +205,11 @@ class BalancedSourcePlanner:
         value = getattr(settings, name, default)
         return value if isinstance(value, bool) else default
 
+    @staticmethod
+    def _setting_int(name: str, default: int) -> int:
+        value = getattr(settings, name, default)
+        return value if isinstance(value, int) else default
+
     def _make_bucket(
         self, label: str, bias_values: set[int], *, required: bool
     ) -> BucketSpec:
@@ -207,6 +229,9 @@ class BalancedSourcePlanner:
             bias_values=bias_values,
             required=required,
             domain_targets=domains,
+            probe_quota=self._bucket_probe_quota(required=required),
+            result_quota=self._bucket_result_quota(required=required),
+            exact_bias_order=ordered_bias_values,
         )
 
     def _make_bucket_by_category(self, category: str, *, required: bool) -> BucketSpec:
@@ -218,7 +243,41 @@ class BalancedSourcePlanner:
             bias_values=set(),
             required=required,
             domain_targets=domains,
+            probe_quota=self._bucket_probe_quota(required=required),
+            result_quota=self._bucket_result_quota(required=required),
+            exact_bias_order=[],
         )
+
+    def _bucket_probe_quota(self, *, required: bool) -> int:
+        default = max(2, self._setting_int("candidate_probe_limit", 20) // 2)
+        if not required:
+            default = max(1, default // 2)
+        return self._setting_int("bucket_probe_quota", default)
+
+    def _bucket_result_quota(self, *, required: bool) -> int:
+        default = 2 if required else 1
+        return self._setting_int("bucket_result_quota", default)
+
+    def _bucket_probe_sequence(
+        self,
+        required: list[BucketSpec],
+        optional: list[BucketSpec],
+        seed_bias: int | None,
+    ) -> list[str]:
+        required_labels = [bucket.label for bucket in required]
+        optional_labels = [bucket.label for bucket in optional]
+        if seed_bias is not None and seed_bias <= -1:
+            preferred = ["right_side", "center", "left_side"]
+        elif seed_bias is not None and seed_bias >= 1:
+            preferred = ["left_side", "center", "right_side"]
+        else:
+            preferred = ["center", "left_side", "right_side"]
+
+        labels: list[str] = []
+        for label in preferred + required_labels + optional_labels:
+            if label in required_labels + optional_labels and label not in labels:
+                labels.append(label)
+        return labels
 
     def _build_search_plan(
         self,
@@ -231,12 +290,13 @@ class BalancedSourcePlanner:
 
         for bucket in required:
             # Skip seed domain in targets
-            targets = [d for d in bucket.domain_targets if d != seed_domain]
-            if targets:
+            lane_targets = self._bucket_lane_targets(bucket, seed_domain)
+            for exact_bias, targets in lane_targets:
                 plan.append(
                     {
                         "phase": "rss",
                         "bucket": bucket.label,
+                        "exact_bias": exact_bias,
                         "domains": targets[:5],
                         "required": True,
                     }
@@ -245,6 +305,7 @@ class BalancedSourcePlanner:
                     {
                         "phase": "site_search",
                         "bucket": bucket.label,
+                        "exact_bias": exact_bias,
                         "domains": targets[:5],
                         "required": True,
                     }
@@ -259,15 +320,36 @@ class BalancedSourcePlanner:
             )
 
         for bucket in optional:
-            targets = [d for d in bucket.domain_targets if d != seed_domain]
-            if targets:
+            for exact_bias, targets in self._bucket_lane_targets(bucket, seed_domain):
                 plan.append(
                     {
                         "phase": "rss",
                         "bucket": bucket.label,
+                        "exact_bias": exact_bias,
                         "domains": targets[:3],
                         "required": False,
                     }
                 )
 
         return plan
+
+    def _bucket_lane_targets(
+        self,
+        bucket: BucketSpec,
+        seed_domain: str | None,
+    ) -> list[tuple[int | None, list[str]]]:
+        """Return domain targets split by exact-bias preference lanes."""
+        if not bucket.exact_bias_order:
+            targets = [domain for domain in bucket.domain_targets if domain != seed_domain]
+            return [(None, targets)] if targets else []
+
+        lanes: list[tuple[int | None, list[str]]] = []
+        for exact_bias in bucket.exact_bias_order:
+            domains = [
+                entry.domain
+                for entry in self._registry.get_by_bias(exact_bias)
+                if entry.allow_in_analysis and entry.domain != seed_domain
+            ]
+            if domains:
+                lanes.append((exact_bias, domains))
+        return lanes

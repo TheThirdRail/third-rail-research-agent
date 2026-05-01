@@ -1,0 +1,28 @@
+{
+  "name": "one_side_heavy_coverage",
+  "description": "Benchmark for verifying balanced retrieval when search results heavily favor one ideological side",
+  "seed": {
+    "description": "Federal judge blocks executive order on immigration enforcement",
+    "url": null
+  },
+  "simulated_candidates": [
+    {"url": "https://www.cnn.com/immigration-order-blocked", "domain": "cnn.com", "title": "Judge Strikes Down Immigration Executive Order", "bias": -1, "stage": "site_search"},
+    {"url": "https://www.msnbc.com/immigration-ruling", "domain": "msnbc.com", "title": "Federal Court Blocks Immigration Crackdown", "bias": -2, "stage": "site_search"},
+    {"url": "https://www.nytimes.com/immigration-court-order", "domain": "nytimes.com", "title": "Court Ruling Halts Immigration Enforcement Changes", "bias": -1, "stage": "site_search"},
+    {"url": "https://www.washingtonpost.com/immigration-legal-battle", "domain": "washingtonpost.com", "title": "Legal Challenge Succeeds Against Immigration Order", "bias": -1, "stage": "site_search"},
+    {"url": "https://www.huffpost.com/immigration-victory", "domain": "huffpost.com", "title": "Major Win for Immigration Rights in Federal Court", "bias": -3, "stage": "open_web"},
+    {"url": "https://www.theguardian.com/us-immigration-ruling", "domain": "theguardian.com", "title": "US Judge Rules Against Immigration Executive Order", "bias": -2, "stage": "open_web"},
+    {"url": "https://apnews.com/immigration-court-ruling", "domain": "apnews.com", "title": "Federal Judge Blocks Executive Order on Immigration", "bias": 0, "stage": "rss"},
+    {"url": "https://www.foxnews.com/immigration-order-blocked", "domain": "foxnews.com", "title": "Activist Judge Blocks Immigration Enforcement Order", "bias": 2, "stage": "site_search"},
+    {"url": "https://www.dailywire.com/immigration-order", "domain": "dailywire.com", "title": "Federal Court Overrules Immigration Policy", "bias": 3, "stage": "open_web"}
+  ],
+  "expectations": {
+    "retained_must_include_buckets": ["left_side", "right_side"],
+    "max_per_exact_bias_respected": true,
+    "left_count_max": 2,
+    "right_count_min": 1,
+    "center_preferred": true,
+    "no_same_bias_backfill": true,
+    "description": "With 6 left-leaning candidates and only 2 right-leaning, the system must still retain at least one right_side source and respect max_per_exact_bias caps."
+  }
+}

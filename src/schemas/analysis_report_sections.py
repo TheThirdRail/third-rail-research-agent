@@ -13,6 +13,16 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 
+class SourceFinding(BaseModel):
+    """Per-source finding used to populate the deterministic Source Matrix."""
+
+    source_id: str = ""
+    key_framing: str = ""
+    notable_claim: str = ""
+    evidence_snippet: str = ""
+    confidence: float = 0.0
+
+
 class AnalysisReportSections(BaseModel):
     """Typed section payload produced by the analysis crew."""
 
@@ -33,6 +43,7 @@ class AnalysisReportSections(BaseModel):
     recommended_approach: str = ""
     video_outline: str = ""
     evidence_limitations: list[str] = Field(default_factory=list)
+    source_findings: list[SourceFinding] = Field(default_factory=list)
 
     @field_validator("*", mode="before")
     @classmethod

@@ -66,9 +66,9 @@ class Settings(BaseSettings):
 
     # Optional Codex OAuth testing (local-only)
     codex_oauth_testing_enabled: bool = False
-    codex_oauth_mode: Literal[
-        "disabled", "openai_compatible_bridge", "codex_cli"
-    ] = "disabled"
+    codex_oauth_mode: Literal["disabled", "openai_compatible_bridge", "codex_cli"] = (
+        "disabled"
+    )
     codex_cli_command: str = "codex"
     codex_require_localhost: bool = True
     codex_allow_public_api: bool = False
@@ -192,6 +192,50 @@ class Settings(BaseSettings):
     analysis_rss_max_feeds_per_bucket: int = Field(
         default=3,
         description="Maximum RSS feeds to fetch for a single planned bucket",
+    )
+    rss_candidate_min_story_score: float = Field(
+        default=0.45,
+        description="Minimum story-identity score for analysis-time RSS candidates",
+    )
+    semantic_query_expansion_enabled: bool = Field(
+        default=False,
+        description="Use a lightweight LLM call to add semantic search queries",
+    )
+    semantic_query_expansion_max_queries: int = Field(
+        default=4,
+        description="Maximum LLM-generated semantic queries to append to StoryPacket.query_pack",
+    )
+    semantic_query_expansion_agent_name: str = Field(
+        default="semantic_query_expander",
+        description="Agent configuration name used for semantic query expansion calls",
+    )
+    semantic_memory_enabled: bool = Field(
+        default=False,
+        description="Index retained story/source text into SQL-backed semantic memory",
+    )
+    semantic_candidate_scoring_enabled: bool = Field(
+        default=False,
+        description="Use embedding similarity during pre-retention candidate scoring",
+    )
+    semantic_fail_open: bool = Field(
+        default=True,
+        description="Continue deterministic relevance if semantic scoring/indexing fails",
+    )
+    semantic_top_k: int = Field(
+        default=4,
+        description="Default number of retrieved semantic chunks per agent context",
+    )
+    embedding_provider: str = Field(
+        default="fake",
+        description="Embedding provider for semantic memory: fake|lmstudio",
+    )
+    embedding_model: str = Field(
+        default="fake-hash-v1",
+        description="Embedding model ID for semantic memory",
+    )
+    embedding_batch_size: int = Field(
+        default=32,
+        description="Maximum text inputs per embedding request",
     )
 
     # Database

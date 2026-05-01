@@ -1,0 +1,95 @@
+{
+  "name": "recurring_event_recurring_actors",
+  "description": "Benchmark for verifying event-specific filtering when a public figure appears in many recurring news cycles",
+  "seed": {
+    "description": "Supreme Court rules 6-3 on student loan forgiveness plan, overturning Biden administration policy",
+    "url": null
+  },
+  "story_packet_overrides": {
+    "actors": ["Supreme Court", "Biden"],
+    "must_have_terms": ["student loan", "forgiveness"],
+    "must_not_have_terms": ["abortion", "gun rights", "affirmative action"],
+    "time_window": "2026-04-20/2026-04-30"
+  },
+  "simulated_candidates": [
+    {
+      "url": "https://apnews.com/scotus-student-loans-2026",
+      "domain": "apnews.com",
+      "title": "Supreme Court Strikes Down Student Loan Forgiveness Plan",
+      "bias": 0,
+      "stage": "rss",
+      "text_excerpt": "The Supreme Court ruled 6-3 that the Biden administration exceeded its authority with the student loan forgiveness plan.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.reuters.com/scotus-abortion-2022",
+      "domain": "reuters.com",
+      "title": "Supreme Court Overturns Roe v. Wade in Dobbs Decision",
+      "bias": 0,
+      "stage": "open_web",
+      "text_excerpt": "The Supreme Court overturned Roe v. Wade in a landmark 2022 decision that reshaped American politics.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "same_person_wrong_event"
+    },
+    {
+      "url": "https://www.foxnews.com/scotus-student-loans",
+      "domain": "foxnews.com",
+      "title": "High Court Correctly Blocks Illegal Student Loan Bailout",
+      "bias": 2,
+      "stage": "site_search",
+      "text_excerpt": "The Supreme Court ruled that Biden's student loan forgiveness plan was an unconstitutional overreach of executive authority.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.msnbc.com/biden-agenda-stalled",
+      "domain": "msnbc.com",
+      "title": "Biden Administration Suffers Another Supreme Court Setback",
+      "bias": -2,
+      "stage": "site_search",
+      "text_excerpt": "The Biden administration's policy agenda took another hit as the Supreme Court blocked the student loan forgiveness program.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.washingtonpost.com/biden-infrastructure-2021",
+      "domain": "washingtonpost.com",
+      "title": "Biden Signs Infrastructure Bill Into Law",
+      "bias": -1,
+      "stage": "open_web",
+      "text_excerpt": "President Biden signed the bipartisan infrastructure bill in November 2021, a centerpiece of his legislative agenda.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "same_person_wrong_event"
+    },
+    {
+      "url": "https://www.cnn.com/scotus-affirmative-action-2023",
+      "domain": "cnn.com",
+      "title": "Supreme Court Ends Affirmative Action in College Admissions",
+      "bias": -1,
+      "stage": "open_web",
+      "text_excerpt": "The Supreme Court struck down race-conscious admissions programs at Harvard and UNC in 2023.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "same_person_wrong_event"
+    },
+    {
+      "url": "https://www.nationalreview.com/scotus-gun-rights-2022",
+      "domain": "nationalreview.com",
+      "title": "Supreme Court Expands Second Amendment Rights in Bruen Decision",
+      "bias": 3,
+      "stage": "open_web",
+      "text_excerpt": "In New York State Rifle & Pistol Association v. Bruen, the Supreme Court ruled that gun rights extend beyond the home.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "same_person_wrong_event"
+    }
+  ],
+  "expectations": {
+    "correct_event_retained_min": 3,
+    "wrong_event_rejected_min": 3,
+    "must_have_terms_enforced": true,
+    "must_not_have_terms_enforced": true,
+    "time_window_enforced": true,
+    "recurring_actor_handling": "event_markers_required",
+    "description": "Actors like 'Supreme Court' and 'Biden' appear in many news cycles. The system must use event markers (student loan, forgiveness) and time window to distinguish the target event from unrelated SCOTUS and Biden stories."
+  }
+}

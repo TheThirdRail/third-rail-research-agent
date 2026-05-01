@@ -1,4 +1,6 @@
-from src.schemas.visual_evidence import MediaPointer
+from src.schemas.visual_evidence import MediaPointer, ResolvedSocialPost
+from src.services.screenshot_capture_service import ScreenshotCaptureService
+from src.services.social_post_resolver_service import SocialPostResolverService
 from src.services.visual_evidence_service import VisualEvidenceService
 from src.tools.article_extractor import ArticleExtractor
 
@@ -86,3 +88,71 @@ def test_visual_evidence_falls_back_to_metadata_on_model_failure(monkeypatch):
     assert bundle.limitations
     assert bundle.records[0].observable_text == "Shells arranged as 8647"
     assert bundle.records[0].visible_symbols_or_numbers == ["8647"]
+
+
+def test_social_post_resolver_canonicalizes_supported_platforms():
+    resolver = SocialPostResolverService()
+
+    assert (
+        resolver.canonicalize("https://twitter.com/example/status/123?utm_source=x")
+        == "https://x.com/example/status/123"
+    )
+    assert (
+        resolver.canonicalize("https://www.instagram.com/p/ABC/?igshid=tracking")
+        == "https://instagram.com/p/ABC"
+    )
+    assert resolver.platform_from_url("https://threads.net/@acct/post/1") == "threads"
+    assert resolver.platform_from_url("https://facebook.com/story.php?id=1") == (
+        "facebook"
+    )
+    assert resolver.platform_from_url("https://www.tiktok.com/@acct/video/1") == (
+        "tiktok"
+    )
+    assert resolver.platform_from_url("https://truthsocial.com/@acct/posts/1") == (
+        "truthsocial"
+    )
+
+
+def test_screenshot_capture_returns_structured_no_raw_artifact_fallback():
+    artifact = ScreenshotCaptureService().capture(
+        "https://x.com/example/status/123",
+        source_url="https://example.com/story",
+        platform="x",
+    )
+
+    assert not artifact.success
+    assert artifact.artifact_path == ""
+    assert artifact.fallback_reason == "browser_capture_unavailable"
+    assert artifact.provenance["retention"] == "no_raw_screenshot_stored"
+
+
+def test_visual_evidence_routes_social_post_through_resolver():
+    class FakeResolver:
+        def resolve(self, post_url: str, *, source_url: str = ""):
+            return ResolvedSocialPost(
+                source_url=source_url,
+                original_url=post_url,
+                resolved_url="https://x.com/example/status/123",
+                platform="x",
+                metadata_text="Post text says 8647 with seashell image",
+                fallback_reason="oembed_unavailable_for_platform",
+            )
+
+    bundle = VisualEvidenceService(social_resolver=FakeResolver()).analyze(
+        [
+            MediaPointer(
+                source_url="https://example.com/story",
+                media_url="https://twitter.com/example/status/123?utm_source=x",
+                media_type="social_post",
+                alt_text="Embedded X post",
+            )
+        ]
+    )
+
+    record = bundle.records[0]
+    assert record.media_type == "social_post"
+    assert record.platform == "x"
+    assert record.resolved_url == "https://x.com/example/status/123"
+    assert record.fallback_reason == "browser_capture_unavailable"
+    assert "8647" in record.visible_symbols_or_numbers
+    assert record.screenshot_provenance["retention"] == "no_raw_screenshot_stored"

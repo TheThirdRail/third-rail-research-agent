@@ -21,8 +21,14 @@ class VisualEvidenceRecord(BaseModel):
 
     source_url: str
     media_url: str
+    resolved_url: str = ""
     media_type: str = "image"
     platform: str = ""
+    render_method: str = ""
+    screenshot_artifact_path: str = ""
+    screenshot_provenance: dict[str, str] = Field(default_factory=dict)
+    ocr_text: str = ""
+    fallback_reason: str = ""
     observable_text: str = ""
     visible_symbols_or_numbers: list[str] = Field(default_factory=list)
     observable_objects: list[str] = Field(default_factory=list)
@@ -30,6 +36,36 @@ class VisualEvidenceRecord(BaseModel):
     interpretation: str = ""
     legal_characterization: str = ""
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class ResolvedSocialPost(BaseModel):
+    """Canonical social-post metadata resolved without interpretation."""
+
+    source_url: str
+    original_url: str
+    resolved_url: str
+    platform: str
+    metadata_text: str = ""
+    author_name: str = ""
+    provider_name: str = ""
+    oembed_html: str = ""
+    resolution_method: str = "canonical_url"
+    success: bool = True
+    fallback_reason: str = ""
+
+
+class ScreenshotArtifact(BaseModel):
+    """Screenshot capture provenance without storing raw screenshot bytes."""
+
+    source_url: str
+    target_url: str
+    platform: str = ""
+    render_method: str = ""
+    artifact_path: str = ""
+    ocr_text: str = ""
+    success: bool = False
+    fallback_reason: str = ""
+    provenance: dict[str, str] = Field(default_factory=dict)
 
 
 class VisualEvidenceBundle(BaseModel):
@@ -49,7 +85,11 @@ class VisualEvidenceBundle(BaseModel):
                     f"Visual Evidence V{index}:",
                     f"Source URL: {record.source_url}",
                     f"Media URL: {record.media_url}",
+                    f"Resolved URL: {record.resolved_url or record.media_url}",
                     f"Platform: {record.platform or 'unknown'}",
+                    f"Render method: {record.render_method or 'not captured'}",
+                    f"OCR text: {record.ocr_text or 'none captured'}",
+                    f"Fallback reason: {record.fallback_reason or 'none'}",
                     f"Observable text: {record.observable_text or 'none observed'}",
                     "Visible symbols/numbers: "
                     + (", ".join(record.visible_symbols_or_numbers) or "none observed"),

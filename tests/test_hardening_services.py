@@ -123,6 +123,33 @@ class TestBalancedSourcePlanner:
         plan = planner.plan(seed_bias=0)
         assert not plan.coverage_satisfied
 
+    def test_plan_carries_round_robin_probe_metadata(self) -> None:
+        planner = BalancedSourcePlanner()
+        plan = planner.plan(seed_bias=-2)
+
+        assert plan.bucket_probe_sequence[0] == "right_side"
+        assert plan.proceed_minimum_groups == plan.required_labels
+        assert all(bucket.probe_quota > 0 for bucket in plan.required_buckets)
+        assert all(bucket.result_quota > 0 for bucket in plan.required_buckets)
+
+    def test_search_plan_splits_required_buckets_by_exact_bias_lane(self) -> None:
+        planner = BalancedSourcePlanner()
+        plan = planner.plan(seed_bias=0)
+
+        right_rss_lanes = [
+            step.get("exact_bias")
+            for step in plan.search_plan
+            if step.get("bucket") == "right_side" and step.get("phase") == "rss"
+        ]
+        left_site_lanes = [
+            step.get("exact_bias")
+            for step in plan.search_plan
+            if step.get("bucket") == "left_side" and step.get("phase") == "site_search"
+        ]
+
+        assert right_rss_lanes[:2] == [2, 3]
+        assert left_site_lanes[:2] == [-2, -3]
+
 
 # ─────────────────────── Story Parser ──────────────────────────
 
@@ -284,6 +311,19 @@ class TestSourceScoring:
         )
         assert result.duplicate_penalty < 0
 
+    def test_semantic_similarity_supplies_event_similarity(self) -> None:
+        result = score_candidate(
+            url="https://a.com/1",
+            domain="a.com",
+            title="Article",
+            bias=0,
+            bucket_label="center",
+            similarity=0.2,
+            semantic_similarity=0.9,
+        )
+        assert result.event_similarity == 0.9
+        assert result.similarity_score == 0.225
+
 
 # ─────────────────────── Report Renderer ───────────────────────
 
@@ -333,6 +373,29 @@ class TestReportRenderer:
         )
         assert "Source Matrix" in report
         assert "reuters.com" in report
+
+    def test_render_source_matrix_uses_source_findings(self) -> None:
+        sources = [
+            SourceRecord(
+                source_id="S1",
+                title="Reuters Article",
+                domain="reuters.com",
+                url="https://reuters.com/article",
+                bias=0,
+                bias_label="Center",
+                confidence=1.0,
+                key_framing="Frames the update as a confirmed timeline.",
+                notable_claim="Officials confirmed the vote date.",
+            ),
+        ]
+        report = ReportRenderer().render(
+            sources,
+            ReportSections(executive_summary="Content here."),
+            missing_buckets=[],
+        )
+
+        assert "Frames the update as a confirmed timeline." in report
+        assert "Officials confirmed the vote date." in report
 
     def test_render_single_matrix_and_story_first_sections(self) -> None:
         sources = [

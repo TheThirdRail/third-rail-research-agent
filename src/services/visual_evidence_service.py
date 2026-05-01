@@ -10,15 +10,27 @@ from typing import Any
 from src.core.llm_provider_docker import get_llm_router
 from src.schemas.visual_evidence import (
     MediaPointer,
+    ResolvedSocialPost,
+    ScreenshotArtifact,
     VisualEvidenceBundle,
     VisualEvidenceRecord,
 )
+from src.services.screenshot_capture_service import ScreenshotCaptureService
+from src.services.social_post_resolver_service import SocialPostResolverService
 
 logger = logging.getLogger(__name__)
 
 
 class VisualEvidenceService:
     """Turn article media pointers into observable-evidence records."""
+
+    def __init__(
+        self,
+        social_resolver: SocialPostResolverService | None = None,
+        screenshot_capture: ScreenshotCaptureService | None = None,
+    ) -> None:
+        self._social_resolver = social_resolver or SocialPostResolverService()
+        self._screenshot_capture = screenshot_capture or ScreenshotCaptureService()
 
     def analyze(self, pointers: list[MediaPointer]) -> VisualEvidenceBundle:
         if not pointers:
@@ -27,6 +39,15 @@ class VisualEvidenceService:
         records: list[VisualEvidenceRecord] = []
         limitations: list[str] = []
         for pointer in pointers[:5]:
+            if pointer.media_type == "social_post":
+                record = self._resolve_social_post(pointer)
+                records.append(record)
+                if record.fallback_reason:
+                    limitations.append(
+                        f"Social post fallback for {record.resolved_url or pointer.media_url}: "
+                        f"{record.fallback_reason}"
+                    )
+                continue
             if pointer.media_type == "image" and pointer.media_url.startswith("http"):
                 try:
                     records.append(self._analyze_with_model(pointer))
@@ -75,6 +96,7 @@ class VisualEvidenceService:
         return VisualEvidenceRecord(
             source_url=pointer.source_url,
             media_url=pointer.media_url,
+            resolved_url=pointer.media_url,
             media_type=pointer.media_type,
             platform=str(data.get("platform") or pointer.platform or ""),
             observable_text=str(data.get("observable_text") or ""),
@@ -88,6 +110,38 @@ class VisualEvidenceService:
             confidence=self._confidence(data.get("confidence")),
         )
 
+    def _resolve_social_post(self, pointer: MediaPointer) -> VisualEvidenceRecord:
+        resolved = self._social_resolver.resolve(
+            pointer.media_url,
+            source_url=pointer.source_url,
+        )
+        screenshot = self._screenshot_capture.capture(
+            resolved.resolved_url,
+            source_url=pointer.source_url,
+            platform=resolved.platform,
+        )
+        text = self._social_metadata_context(pointer, resolved, screenshot)
+        symbols = re.findall(r"\b[A-Z0-9]{2,12}\b", text)
+        return VisualEvidenceRecord(
+            source_url=pointer.source_url,
+            media_url=pointer.media_url,
+            resolved_url=resolved.resolved_url,
+            media_type="social_post",
+            platform=resolved.platform,
+            render_method=screenshot.render_method,
+            screenshot_artifact_path=screenshot.artifact_path,
+            screenshot_provenance=screenshot.provenance,
+            ocr_text=screenshot.ocr_text,
+            fallback_reason=screenshot.fallback_reason or resolved.fallback_reason,
+            observable_text=text,
+            visible_symbols_or_numbers=symbols,
+            observable_objects=[],
+            reported_context=text,
+            interpretation="",
+            legal_characterization="",
+            confidence=0.45 if resolved.success else 0.25,
+        )
+
     def _record_from_metadata(
         self,
         pointer: MediaPointer,
@@ -99,6 +153,7 @@ class VisualEvidenceService:
         return VisualEvidenceRecord(
             source_url=pointer.source_url,
             media_url=pointer.media_url,
+            resolved_url=pointer.media_url,
             media_type=pointer.media_type,
             platform=pointer.platform,
             observable_text=text,
@@ -113,6 +168,21 @@ class VisualEvidenceService:
     @staticmethod
     def _metadata_context(pointer: MediaPointer) -> str:
         parts = [pointer.alt_text.strip(), pointer.caption.strip()]
+        return " ".join(part for part in parts if part).strip()
+
+    @classmethod
+    def _social_metadata_context(
+        cls,
+        pointer: MediaPointer,
+        resolved: ResolvedSocialPost,
+        screenshot: ScreenshotArtifact,
+    ) -> str:
+        parts = [
+            pointer.alt_text.strip(),
+            pointer.caption.strip(),
+            resolved.metadata_text.strip(),
+            screenshot.ocr_text.strip(),
+        ]
         return " ".join(part for part in parts if part).strip()
 
     @staticmethod

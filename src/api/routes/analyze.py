@@ -3,13 +3,13 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from src.core.config import settings
 from src.core.exceptions import (
     BudgetExceededError,
     RateLimitExceededError,
     SourceExtractionError,
     is_upstream_rate_limit_error,
 )
-from src.core.config import settings
 from src.services import AnalysisService
 
 router = APIRouter()
@@ -53,8 +53,8 @@ def analyze_story(request: AnalyzeRequest) -> AnalyzeResponse:
         raise HTTPException(status_code=402, detail=str(e)) from e
     except Exception as e:
         if is_upstream_rate_limit_error(e):
-            fallback_enabled = (
-                settings.lmstudio_fallback_enabled and bool(settings.lmstudio_fallback_model)
+            fallback_enabled = settings.lmstudio_fallback_enabled and bool(
+                settings.lmstudio_fallback_model
             )
             fallback_note = (
                 "LM Studio fallback is enabled; request still failed."
@@ -78,4 +78,24 @@ def get_analysis(story_id: str) -> dict:
     result = service.get_analysis(story_id)
     if not result:
         raise HTTPException(status_code=404, detail="Analysis not found")
+    return result
+
+
+@router.get("/analysis/{story_id}/diagnostics")
+def get_analysis_diagnostics(story_id: str) -> dict:
+    """Retrieve persisted retrieval and analysis diagnostics for a story."""
+    service = AnalysisService()
+    result = service.get_diagnostics(story_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Analysis diagnostics not found")
+    return result
+
+
+@router.get("/analysis/{story_id}/handoff/{stage}")
+def get_analysis_handoff(story_id: str, stage: str) -> dict:
+    """Retrieve a persisted handoff bundle for a story and stage."""
+    service = AnalysisService()
+    result = service.get_handoff(story_id, stage)
+    if not result:
+        raise HTTPException(status_code=404, detail="Analysis handoff not found")
     return result

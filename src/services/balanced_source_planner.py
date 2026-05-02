@@ -86,8 +86,9 @@ class BalancedSourcePlanner:
     outlets to target for each bucket, before any searching begins.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, settings_overrides: dict[str, object] | None = None) -> None:
         self._registry = get_source_registry()
+        self._settings_overrides = settings_overrides or {}
 
     def plan(
         self,
@@ -178,7 +179,10 @@ class BalancedSourcePlanner:
         return "center"
 
     def _required_bucket_labels(self) -> list[str]:
-        raw = getattr(settings, "required_bucket_groups", "left_side,right_side")
+        raw = self._settings_overrides.get(
+            "required_bucket_groups",
+            getattr(settings, "required_bucket_groups", "left_side,right_side"),
+        )
         if not isinstance(raw, str):
             return ["left_side", "right_side"]
         labels: list[str] = []
@@ -200,14 +204,12 @@ class BalancedSourcePlanner:
             return set(RIGHT_SIDE)
         return set(CENTER_SIDE)
 
-    @staticmethod
-    def _setting_bool(name: str, default: bool) -> bool:
-        value = getattr(settings, name, default)
+    def _setting_bool(self, name: str, default: bool) -> bool:
+        value = self._settings_overrides.get(name, getattr(settings, name, default))
         return value if isinstance(value, bool) else default
 
-    @staticmethod
-    def _setting_int(name: str, default: int) -> int:
-        value = getattr(settings, name, default)
+    def _setting_int(self, name: str, default: int) -> int:
+        value = self._settings_overrides.get(name, getattr(settings, name, default))
         return value if isinstance(value, int) else default
 
     def _make_bucket(

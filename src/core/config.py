@@ -221,9 +221,45 @@ class Settings(BaseSettings):
         default=True,
         description="Continue deterministic relevance if semantic scoring/indexing fails",
     )
+    screenshot_capture_enabled: bool = Field(
+        default=False,
+        description="Capture browser screenshots for social/visual evidence.",
+    )
+    screenshot_capture_timeout_ms: int = Field(
+        default=15000,
+        description="Timeout for restricted browser screenshot capture.",
+    )
+    screenshot_capture_viewport_width: int = Field(
+        default=1280,
+        description="Browser viewport width for visual evidence screenshots.",
+    )
+    screenshot_capture_viewport_height: int = Field(
+        default=1600,
+        description="Browser viewport height for visual evidence screenshots.",
+    )
+    screenshot_ocr_enabled: bool = Field(
+        default=False,
+        description="Extract OCR text from captured screenshot artifacts.",
+    )
+    screenshot_ocr_engine: str = Field(
+        default="pytesseract",
+        description="OCR engine for screenshot artifacts: pytesseract.",
+    )
     semantic_top_k: int = Field(
         default=4,
         description="Default number of retrieved semantic chunks per agent context",
+    )
+    semantic_vector_store: str = Field(
+        default="none",
+        description="Vector store for semantic memory retrieval: none|lancedb",
+    )
+    lancedb_uri: str = Field(
+        default="",
+        description="LanceDB URI/path for the semantic vector index.",
+    )
+    lancedb_table_name: str = Field(
+        default="semantic_chunks",
+        description="LanceDB table name for semantic memory chunks.",
     )
     embedding_provider: str = Field(
         default="fake",
@@ -246,6 +282,87 @@ class Settings(BaseSettings):
     api_port: int = 8000
 
     # Paths
+
+    def validate_feature_dependencies(self) -> list[str]:
+        """Validate that feature-flagged dependencies are consistently configured.
+
+        Checks for common misconfigurations such as enabling semantic
+        candidate scoring while using the fake embedding provider.
+
+        Returns:
+            List of configuration warning strings (empty if all valid).
+        """
+        warnings: list[str] = []
+
+        # Semantic candidate scoring requires real embeddings
+        if (
+            self.semantic_candidate_scoring_enabled
+            and self.embedding_provider == "fake"
+        ):
+            warnings.append(
+                "SEMANTIC_CANDIDATE_SCORING_ENABLED=true but "
+                "EMBEDDING_PROVIDER=fake; semantic scoring will use "
+                "hash-based vectors (low quality). Set EMBEDDING_PROVIDER "
+                "to 'lmstudio' or another real provider."
+            )
+
+        # Semantic memory with fake embeddings
+        if self.semantic_memory_enabled and self.embedding_provider == "fake":
+            warnings.append(
+                "SEMANTIC_MEMORY_ENABLED=true but EMBEDDING_PROVIDER=fake; "
+                "memory retrieval will be imprecise. Use a real embedding "
+                "provider for production."
+            )
+
+        # Semantic query expansion requires LLM provider
+        if self.semantic_query_expansion_enabled and not self.llm_provider:
+            warnings.append(
+                "SEMANTIC_QUERY_EXPANSION_ENABLED=true but no "
+                "LLM_PROVIDER is configured."
+            )
+
+        # Embedding model mismatch
+        if self.embedding_provider != "fake" and self.embedding_model == "fake-hash-v1":
+            warnings.append(
+                f"EMBEDDING_PROVIDER={self.embedding_provider} but "
+                "EMBEDDING_MODEL=fake-hash-v1; specify a real model name "
+                "matching the provider."
+            )
+
+        if self.semantic_vector_store == "lancedb":
+            try:
+                import lancedb  # noqa: F401
+            except ImportError:
+                warnings.append(
+                    "SEMANTIC_VECTOR_STORE=lancedb but the 'lancedb' package "
+                    "is not installed; semantic retrieval will fall back if "
+                    "SEMANTIC_FAIL_OPEN=true."
+                )
+
+        if self.screenshot_ocr_enabled:
+            if self.screenshot_ocr_engine != "pytesseract":
+                warnings.append(
+                    f"SCREENSHOT_OCR_ENGINE={self.screenshot_ocr_engine} is not "
+                    "supported; use 'pytesseract'."
+                )
+            else:
+                try:
+                    import pytesseract  # noqa: F401
+                except ImportError:
+                    warnings.append(
+                        "SCREENSHOT_OCR_ENABLED=true but the 'pytesseract' package "
+                        "is not installed; screenshot OCR will be skipped."
+                    )
+
+        # Strict bucket enforcement with too few sources
+        if self.strict_bucket_enforcement and self.retained_source_max < 2:
+            warnings.append(
+                "STRICT_BUCKET_ENFORCEMENT=true but RETAINED_SOURCE_MAX < 2; "
+                "at least 2 sources are needed for multi-perspective coverage."
+            )
+
+        return warnings
+
     @property
     def project_root(self) -> Path:
         """Get project root directory."""

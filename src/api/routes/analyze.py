@@ -10,6 +10,7 @@ from src.core.exceptions import (
     SourceExtractionError,
     is_upstream_rate_limit_error,
 )
+from src.schemas.analysis_options import AnalysisOptions
 from src.services import AnalysisService
 
 router = APIRouter()
@@ -20,6 +21,7 @@ class AnalyzeRequest(BaseModel):
 
     description: str
     url: str | None = None
+    options: AnalysisOptions | None = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -43,7 +45,12 @@ def analyze_story(request: AnalyzeRequest) -> AnalyzeResponse:
     """
     try:
         service = AnalysisService()
-        result = service.analyze(request.description, request.url)
+        if request.options is None:
+            result = service.analyze(request.description, request.url)
+        else:
+            result = service.analyze(
+                request.description, request.url, options=request.options
+            )
         return AnalyzeResponse(**result)
     except SourceExtractionError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e

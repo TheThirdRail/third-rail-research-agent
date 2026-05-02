@@ -1,5 +1,6 @@
 """CLI entry point for Research Agent."""
 
+import importlib.util
 from pathlib import Path
 
 import click
@@ -28,6 +29,310 @@ def load_channel_topics() -> list[str]:
     except Exception as e:
         console.print(f"[yellow]Warning: Could not load channel profile: {e}[/yellow]")
         return ["politics", "geopolitics", "news"]
+
+
+def _package_available(package_name: str) -> bool:
+    """Return whether an optional package can be imported."""
+    return importlib.util.find_spec(package_name) is not None
+
+
+def _playwright_chromium_available() -> tuple[bool, str]:
+    """Return whether Playwright can launch Chromium."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception as exc:
+        return False, f"Playwright import failed: {exc}"
+
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(args=["--no-sandbox"])
+            browser.close()
+    except Exception as exc:
+        return False, f"Chromium launch failed: {exc}"
+
+    return True, "Playwright Chromium launched successfully."
+
+
+def _pytesseract_ocr_available() -> tuple[bool, str]:
+    """Return whether pytesseract can execute OCR through the system binary."""
+    import tempfile
+
+    try:
+        import pytesseract  # type: ignore[import-not-found]
+        from PIL import Image, ImageDraw
+    except Exception as exc:
+        return False, f"OCR import failed: {exc}"
+
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "ocr-smoke.png"
+            image = Image.new("RGB", (140, 48), "white")
+            draw = ImageDraw.Draw(image)
+            draw.text((12, 12), "OK", fill="black")
+            image.save(image_path)
+            pytesseract.image_to_string(str(image_path))
+    except Exception as exc:
+        return False, f"OCR smoke test failed: {exc}"
+
+    return True, "pytesseract OCR smoke test completed."
+
+
+def _provider_key_configured(provider: str) -> bool:
+    """Check provider configuration without returning secret values."""
+    key_check = {
+        "openrouter": bool(settings.openrouter_api_key),
+        "gemini": bool(settings.google_api_key or settings.gemini_api_key),
+        "anthropic": bool(settings.anthropic_api_key),
+        "groq": bool(settings.groq_api_key),
+        "openai": bool(settings.openai_api_key),
+        "lmstudio": True,
+        "ollama": True,
+        "grok": bool(settings.xai_api_key),
+        "cerebras": bool(settings.cerebras_api_key),
+        "sambanova": bool(settings.sambanova_api_key),
+        "mistral": bool(settings.mistral_api_key),
+    }
+    return bool(key_check.get(provider.strip().lower(), False))
+
+
+def _health_rows() -> list[tuple[str, str, str, str]]:
+    """Build readiness rows as (component, status, detail, action)."""
+    from sqlalchemy import inspect
+
+    from src.database.models import Base
+    from src.database.session import HARDENING_COLUMNS, engine
+
+    rows: list[tuple[str, str, str, str]] = []
+
+    try:
+        inspector = inspect(engine)
+        tables = set(inspector.get_table_names())
+        expected_tables = set(Base.metadata.tables)
+        missing_tables = sorted(expected_tables - tables)
+        missing_columns: list[str] = []
+        for table, column, _sql_type, _default in HARDENING_COLUMNS:
+            if table not in tables:
+                continue
+            columns = {col["name"] for col in inspector.get_columns(table)}
+            if column not in columns:
+                missing_columns.append(f"{table}.{column}")
+        if missing_tables or missing_columns:
+            detail = ", ".join((missing_tables + missing_columns)[:6])
+            rows.append(
+                (
+                    "Database schema",
+                    "error",
+                    f"Missing schema objects: {detail}",
+                    "Run `research-agent init`.",
+                )
+            )
+        else:
+            rows.append(("Database schema", "ok", "Required tables/columns exist.", ""))
+    except Exception as exc:
+        rows.append(
+            (
+                "Database schema",
+                "error",
+                f"Could not inspect database: {exc}",
+                "Check DATABASE_URL and run `research-agent init`.",
+            )
+        )
+
+    provider = settings.llm_provider.strip().lower()
+    if _provider_key_configured(provider):
+        rows.append(("LLM provider", "ok", f"{provider} is configured.", ""))
+    else:
+        rows.append(
+            (
+                "LLM provider",
+                "warn",
+                f"{provider} is selected but its API key is not configured.",
+                "Set the provider API key or choose a local provider.",
+            )
+        )
+
+    if settings.embedding_provider == "fake":
+        status = "warn" if (
+            settings.semantic_memory_enabled
+            or settings.semantic_candidate_scoring_enabled
+        ) else "ok"
+        rows.append(
+            (
+                "Embeddings",
+                status,
+                "Using deterministic fake embeddings.",
+                "Set EMBEDDING_PROVIDER=lmstudio for production semantic quality.",
+            )
+        )
+    elif settings.embedding_provider in {"lmstudio", "lm_studio", "lm-studio"}:
+        if settings.embedding_model and settings.embedding_model != "fake-hash-v1":
+            rows.append(
+                (
+                    "Embeddings",
+                    "ok",
+                    f"LM Studio embeddings configured for {settings.embedding_model}.",
+                    "",
+                )
+            )
+        else:
+            rows.append(
+                (
+                    "Embeddings",
+                    "error",
+                    "LM Studio embeddings selected without a real model.",
+                    "Set EMBEDDING_MODEL.",
+                )
+            )
+    else:
+        rows.append(
+            (
+                "Embeddings",
+                "error",
+                f"Unsupported embedding provider: {settings.embedding_provider}",
+                "Use `fake` or `lmstudio`.",
+            )
+        )
+
+    vector_store = settings.semantic_vector_store.strip().lower()
+    if vector_store in {"", "none", "disabled", "sql"}:
+        rows.append(("Vector store", "ok", "SQL-only semantic retrieval selected.", ""))
+    elif vector_store == "lancedb":
+        if _package_available("lancedb"):
+            rows.append(
+                (
+                    "Vector store",
+                    "ok",
+                    "LanceDB package is available.",
+                    "",
+                )
+            )
+        else:
+            status = "warn" if settings.semantic_fail_open else "error"
+            rows.append(
+                (
+                    "Vector store",
+                    status,
+                    "SEMANTIC_VECTOR_STORE=lancedb but package is not installed.",
+                    "Install `lancedb` or use SEMANTIC_VECTOR_STORE=none.",
+                )
+            )
+    else:
+        rows.append(
+            (
+                "Vector store",
+                "error",
+                f"Unsupported vector store: {settings.semantic_vector_store}",
+                "Use `none` or `lancedb`.",
+            )
+        )
+
+    if settings.screenshot_capture_enabled:
+        if _package_available("playwright"):
+            chromium_available, chromium_detail = _playwright_chromium_available()
+            if chromium_available:
+                rows.append(
+                    (
+                        "Screenshot capture",
+                        "ok",
+                        chromium_detail,
+                        "",
+                    )
+                )
+            else:
+                rows.append(
+                    (
+                        "Screenshot capture",
+                        "error",
+                        chromium_detail,
+                        "Run `playwright install chromium` or disable screenshot capture.",
+                    )
+                )
+        else:
+            rows.append(
+                (
+                    "Screenshot capture",
+                    "error",
+                    "Screenshot capture enabled but Playwright is unavailable.",
+                    "Install Playwright or disable screenshot capture.",
+                )
+            )
+    else:
+        rows.append(
+            (
+                "Screenshot capture",
+                "ok",
+                "Disabled by default; structured fallbacks will be used.",
+                "",
+            )
+        )
+
+    if settings.screenshot_ocr_enabled:
+        if settings.screenshot_ocr_engine != "pytesseract":
+            rows.append(
+                (
+                    "OCR",
+                    "error",
+                    f"Unsupported OCR engine: {settings.screenshot_ocr_engine}",
+                    "Use SCREENSHOT_OCR_ENGINE=pytesseract or disable OCR.",
+                )
+            )
+        elif _package_available("pytesseract"):
+            ocr_available, ocr_detail = _pytesseract_ocr_available()
+            if ocr_available:
+                rows.append(
+                    (
+                        "OCR",
+                        "ok",
+                        ocr_detail,
+                        "",
+                    )
+                )
+            else:
+                rows.append(
+                    (
+                        "OCR",
+                        "error",
+                        ocr_detail,
+                        "Install pytesseract/Tesseract or disable screenshot OCR.",
+                    )
+                )
+        else:
+            rows.append(
+                (
+                    "OCR",
+                    "error",
+                    "SCREENSHOT_OCR_ENABLED=true but pytesseract is unavailable.",
+                    "Install pytesseract/Tesseract or disable screenshot OCR.",
+                )
+            )
+    else:
+        rows.append(
+            (
+                "OCR",
+                "ok",
+                "Disabled; ocr_text will remain empty.",
+                "",
+            )
+        )
+
+    if Path("alembic.ini").exists() and (
+        Path("migrations").exists() or Path("alembic").exists()
+    ):
+        rows.append(("Migrations", "ok", "Alembic files are present.", ""))
+    else:
+        rows.append(
+            (
+                "Migrations",
+                "warn",
+                "No Alembic migration chain is present; startup schema sync is in use.",
+                "Convert bootstrap schema sync to versioned migrations.",
+            )
+        )
+
+    for warning in settings.validate_feature_dependencies():
+        rows.append(("Feature config", "warn", warning, "Review .env settings."))
+
+    return rows
 
 
 @click.group()
@@ -412,6 +717,157 @@ def codex_oauth_bridge(host: str, port: int) -> None:
     )
     uvicorn.run(create_app(settings), host=host, port=port)
 
+
+
+@cli.command()
+@click.argument("story_id")
+def diagnostics(story_id: str) -> None:
+    """Retrieve retrieval and analysis diagnostics for a story.
+
+    Shows candidate census, bucket lane attempts, coverage metrics,
+    and visual evidence limitations for the given story.
+    """
+    import json
+
+    from src.services import AnalysisService
+
+    service = AnalysisService()
+    result = service.get_diagnostics(story_id)
+    if not result:
+        console.print(f"[bold red]Error:[/bold red] No diagnostics found for {story_id}")
+        raise click.Abort()
+
+    console.print(Panel(f"[bold]Diagnostics for story:[/bold] {story_id[:8]}"))
+
+    # Coverage summary
+    coverage = result.get("coverage", {})
+    if coverage:
+        cov_table = Table(title="Coverage Summary")
+        cov_table.add_column("Metric", style="cyan")
+        cov_table.add_column("Value", style="white")
+        cov_table.add_row("Retained", str(coverage.get("retained_count", 0)))
+        cov_table.add_row("Probed", str(coverage.get("probed_count", 0)))
+        cov_table.add_row("Coverage Satisfied", str(coverage.get("coverage_satisfied", False)))
+        cov_table.add_row("Left Count", str(coverage.get("left_count", 0)))
+        cov_table.add_row("Center Count", str(coverage.get("center_count", 0)))
+        cov_table.add_row("Right Count", str(coverage.get("right_count", 0)))
+        missing = coverage.get("missing_buckets", [])
+        cov_table.add_row("Missing Buckets", ", ".join(missing) if missing else "none")
+        console.print(cov_table)
+
+    # Analysis run info
+    run_info = result.get("analysis_run")
+    if run_info:
+        run_table = Table(title="Analysis Run")
+        run_table.add_column("Field", style="cyan")
+        run_table.add_column("Value", style="white")
+        run_table.add_row("Status", str(run_info.get("status", "N/A")))
+        run_table.add_row("Started", str(run_info.get("started_at", "N/A")))
+        run_table.add_row("Completed", str(run_info.get("completed_at", "N/A")))
+        console.print(run_table)
+
+    # Candidate census
+    census = result.get("candidate_census", {})
+    if census:
+        console.print("\n[bold]Candidate Census:[/bold]")
+        console.print(json.dumps(census, indent=2, default=str)[:2000])
+
+    # Retrieval candidates
+    candidates = result.get("retrieval_candidates", [])
+    if candidates:
+        cand_table = Table(title=f"Retrieval Candidates ({len(candidates)})")
+        cand_table.add_column("URL", style="dim", max_width=40)
+        cand_table.add_column("State", style="green")
+        cand_table.add_column("Bucket", style="cyan")
+        cand_table.add_column("Score", style="white")
+        for c in candidates[:20]:
+            cand_table.add_row(
+                str(c.get("url", ""))[:40],
+                str(c.get("state", "")),
+                str(c.get("bucket_label", "")),
+                str(c.get("relevance_score", ""))[:6],
+            )
+        console.print(cand_table)
+        if len(candidates) > 20:
+            console.print(f"[dim]... and {len(candidates) - 20} more candidates[/dim]")
+
+
+@cli.command()
+@click.option(
+    "--strict",
+    is_flag=True,
+    help="Exit with an error when any readiness check is warning or failing.",
+)
+def health(strict: bool) -> None:
+    """Check readiness for configured providers and optional backends."""
+    rows = _health_rows()
+    status_style = {"ok": "green", "warn": "yellow", "error": "red"}
+
+    table = Table(title="Research Agent Health")
+    table.add_column("Component", style="cyan")
+    table.add_column("Status")
+    table.add_column("Detail", style="white", max_width=70)
+    table.add_column("Action", style="dim", max_width=60)
+
+    for component, status, detail, action in rows:
+        table.add_row(
+            component,
+            f"[{status_style.get(status, 'white')}]{status.upper()}[/]",
+            detail,
+            action,
+        )
+
+    console.print(table)
+
+    errors = [row for row in rows if row[1] == "error"]
+    warnings = [row for row in rows if row[1] == "warn"]
+    if errors:
+        console.print(f"[bold red]Health check failed:[/bold red] {len(errors)} error(s)")
+        raise click.Abort() from None
+    if strict and warnings:
+        console.print(
+            f"[bold yellow]Health check has warnings:[/bold yellow] {len(warnings)} warning(s)"
+        )
+        raise click.Abort() from None
+    console.print("[bold green]Health check completed.[/bold green]")
+
+
+@cli.command()
+@click.argument("story_id")
+@click.argument("stage")
+def handoff(story_id: str, stage: str) -> None:
+    """Retrieve a persisted agent handoff bundle for a story and stage.
+
+    Stages: post_retrieval, pre_crew, fact_handoff, rhetoric_handoff, narrative_handoff
+    """
+    import json
+
+    from src.services import AnalysisService
+
+    service = AnalysisService()
+    result = service.get_handoff(story_id, stage)
+    if not result:
+        console.print(
+            f"[bold red]Error:[/bold red] No handoff found for {story_id[:8]} / {stage}"
+        )
+        raise click.Abort()
+
+    console.print(Panel(f"[bold]Handoff:[/bold] {stage} for story {story_id[:8]}"))
+
+    table = Table()
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Stage", result.get("stage", ""))
+    table.add_row("From Agent", result.get("from_agent", ""))
+    table.add_row("To Agent", result.get("to_agent", ""))
+    table.add_row("Created", str(result.get("created_at", "")))
+    table.add_row("Summary", str(result.get("summary", ""))[:200])
+    console.print(table)
+
+    payload = result.get("payload")
+    if payload:
+        console.print("\n[bold]Payload:[/bold]")
+        console.print(json.dumps(payload, indent=2, default=str)[:3000])
 
 @cli.command(name="test-llm")
 @click.option(

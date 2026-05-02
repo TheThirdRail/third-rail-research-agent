@@ -195,3 +195,81 @@ def validate_orphaned_citations(report_markdown: str) -> list[str]:
         )
 
     return warnings
+
+
+def validate_source_findings(
+    source_findings: list[object],
+    retained_source_count: int,
+) -> list[str]:
+    """Validate source findings completeness and correctness.
+
+    Checks that:
+    - Every retained source has a source finding.
+    - Source IDs match expected S1, S2, etc. pattern.
+    - Key framing is not empty or generic filler.
+    - No duplicate source IDs exist.
+
+    Args:
+        source_findings: List of SourceFinding objects (or dicts).
+        retained_source_count: Number of retained sources in the report.
+
+    Returns:
+        List of validation warning strings (empty if all checks pass).
+    """
+    warnings: list[str] = []
+    expected_ids = {f"S{i}" for i in range(1, retained_source_count + 1)}
+
+    # Normalize findings to dicts
+    findings: list[dict[str, str]] = []
+    for f in source_findings:
+        if hasattr(f, "model_dump"):
+            findings.append(f.model_dump())  # type: ignore[union-attr]
+        elif isinstance(f, dict):
+            findings.append(f)
+
+    # Check for missing source findings
+    found_ids: list[str] = []
+    for finding in findings:
+        sid = str(finding.get("source_id", "")).strip().upper()
+        found_ids.append(sid)
+
+    found_set = set(found_ids)
+    missing = expected_ids - found_set
+    if missing:
+        warnings.append(
+            f"Missing source findings for: {', '.join(sorted(missing))}"
+        )
+
+    # Check for invalid source IDs
+    invalid = found_set - expected_ids
+    if invalid:
+        warnings.append(
+            f"Invalid source IDs in findings: {', '.join(sorted(invalid))}"
+        )
+
+    # Check for duplicate source IDs
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for sid in found_ids:
+        if sid in seen:
+            duplicates.append(sid)
+        seen.add(sid)
+    if duplicates:
+        warnings.append(
+            f"Duplicate source findings: {', '.join(duplicates)}"
+        )
+
+    # Check for empty key framing
+    _GENERIC_FILLER = {"n/a", "none", "no framing", "see report", "tbd", ""}
+    empty_framing: list[str] = []
+    for finding in findings:
+        sid = str(finding.get("source_id", "")).strip().upper()
+        framing = str(finding.get("key_framing", "")).strip()
+        if framing.lower() in _GENERIC_FILLER:
+            empty_framing.append(sid)
+    if empty_framing:
+        warnings.append(
+            f"Empty or generic key framing for: {', '.join(sorted(empty_framing))}"
+        )
+
+    return warnings

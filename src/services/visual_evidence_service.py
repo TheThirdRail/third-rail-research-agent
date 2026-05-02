@@ -28,9 +28,12 @@ class VisualEvidenceService:
         self,
         social_resolver: SocialPostResolverService | None = None,
         screenshot_capture: ScreenshotCaptureService | None = None,
+        screenshot_capture_enabled: bool | None = None,
     ) -> None:
         self._social_resolver = social_resolver or SocialPostResolverService()
-        self._screenshot_capture = screenshot_capture or ScreenshotCaptureService()
+        self._screenshot_capture = screenshot_capture or ScreenshotCaptureService(
+            enabled=screenshot_capture_enabled
+        )
 
     def analyze(self, pointers: list[MediaPointer]) -> VisualEvidenceBundle:
         if not pointers:

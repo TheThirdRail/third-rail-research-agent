@@ -208,6 +208,7 @@ class AnalysisRun(Base):
     )
     story_id: Mapped[str] = mapped_column(String(36), ForeignKey("stories.id"))
     status: Mapped[str] = mapped_column(String(30), default="running")
+    options_snapshot_json: Mapped[str] = mapped_column(Text, default="{}")
     coverage_snapshot_json: Mapped[str] = mapped_column(Text, default="{}")
     candidate_census_json: Mapped[str] = mapped_column(Text, default="{}")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -2,10 +2,12 @@ import json
 from pathlib import Path
 from urllib.parse import urlparse
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from src.core import config as core_config
+from src.core.exceptions import SourceExtractionError
 from src.database.models import (
     AgentFinding,
     AgentHandoff,
@@ -15,8 +17,10 @@ from src.database.models import (
     SemanticDocument,
     Source,
     SourceFindingRecord,
+    Story,
     VisualEvidenceRecordModel,
 )
+from src.schemas.analysis_options import AnalysisOptions
 from src.schemas.visual_evidence import VisualEvidenceBundle, VisualEvidenceRecord
 from src.services.analysis_service import AnalysisService
 from src.services.source_aggregator_service import (
@@ -204,6 +208,7 @@ def test_end_to_end_seed_url_produces_deterministic_report(monkeypatch, tmp_path
             .all()
         )
     assert run.status == "retrieval_complete"
+    assert json.loads(run.options_snapshot_json)["strict_bucket_enforcement"] is True
     assert result["candidate_census"]["by_state"]["retained"] == 3
     assert result["candidate_census"]["by_stage"]["primary"] == 1
     assert {candidate.state for candidate in candidates} >= {
@@ -251,6 +256,9 @@ def test_end_to_end_seed_url_produces_deterministic_report(monkeypatch, tmp_path
     assert diagnostics["coverage"]["coverage_satisfied"]
     assert diagnostics["candidate_census"]["by_state"]["retained"] == 3
     assert diagnostics["retrieval_candidates"]
+    assert diagnostics["analysis_run"]["options_snapshot"][
+        "required_bucket_groups"
+    ] == ["left_side", "right_side"]
     post_retrieval = AnalysisService().get_handoff(
         result["story_id"],
         "post_retrieval",
@@ -417,3 +425,212 @@ def test_analysis_service_indexes_retained_sources_when_semantic_memory_enabled(
     assert visual_records[0].source_id is not None
     assert visual_records[0].observable_text == "AI order graphic"
     assert "pre_crew" in {handoff.stage for handoff in handoffs}
+
+
+def test_analysis_options_disable_semantic_memory_per_run(monkeypatch, tmp_path: Path):
+    class DummySearcher:
+        def news_search(self, query: str, max_results: int = 10, time_range: str = "w"):
+            return [
+                SearchResult("CNN covers Biden order", "https://cnn.com/story", "", "cnn"),
+                SearchResult(
+                    "Fox covers Biden order", "https://foxnews.com/story", "", "fox"
+                ),
+            ]
+
+        def web_search(self, query: str, max_results: int = 10):
+            return []
+
+    def bias_for(domain: str) -> BiasResult:
+        mapping = {
+            "reuters.com": (0, "Center"),
+            "cnn.com": (-2, "Lean Left"),
+            "foxnews.com": (3, "Right"),
+        }
+        bias, label = mapping[domain]
+        return BiasResult(
+            domain=domain,
+            bias=bias,
+            bias_label=label,
+            confidence=1.0,
+            method="dataset",
+            factual_rating="high",
+            category="mainstream",
+        )
+
+    def fake_extract_url(
+        self, url: str, require_success: bool = False
+    ) -> SourceCandidate:
+        domain = urlparse(url).netloc.replace("www.", "")
+        return SourceCandidate(
+            url=url,
+            domain=domain,
+            title=f"{domain} title",
+            published_date=None,
+            author=None,
+            full_text=(
+                "President Joe Biden signed an executive order on AI safety. "
+                f"{domain} covered the regulatory details."
+            )
+            * 8,
+            extraction_error=None,
+            extractor_method="test_extractor",
+            http_status=200,
+            bias_result=bias_for(domain),
+        )
+
+    captured: dict[str, object] = {}
+
+    def fake_run_analysis(
+        description,
+        url=None,
+        prefetched_sources=None,
+        visual_evidence_context=None,
+        agent_contexts=None,
+    ):
+        captured["agent_contexts"] = agent_contexts
+        return {
+            "sections": {
+                "executive_summary": "Crew summary.",
+                "what_happened": "President Joe Biden signed an executive order. S1",
+            },
+            "report": "",
+            "story_description": description,
+            "story_url": url,
+        }
+
+    test_db = tmp_path / "analysis_semantic_options.db"
+    engine = create_engine(
+        f"sqlite:///{test_db}", connect_args={"check_same_thread": False}
+    )
+    Base.metadata.create_all(bind=engine)
+    test_session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    monkeypatch.setattr(
+        "src.services.analysis_service.get_session", lambda: test_session()
+    )
+    monkeypatch.setattr(
+        SourceAggregatorService, "_init_searcher", lambda self: DummySearcher()
+    )
+    monkeypatch.setattr(SourceAggregatorService, "_extract_url", fake_extract_url)
+    monkeypatch.setattr(
+        "src.services.rss_retrieval_service.RssRetrievalService.search",
+        lambda self, query, *, domains, max_results=8: [],
+    )
+    monkeypatch.setattr("src.services.analysis_service.run_analysis", fake_run_analysis)
+    monkeypatch.setattr(core_config.settings, "semantic_memory_enabled", True)
+    monkeypatch.setattr(core_config.settings, "embedding_provider", "fake")
+
+    result = AnalysisService().analyze(
+        "President Joe Biden signed executive order on AI safety",
+        "https://reuters.com/seed",
+        options=AnalysisOptions(enable_semantic_memory=False),
+    )
+
+    with test_session() as session:
+        documents = (
+            session.query(SemanticDocument)
+            .filter(SemanticDocument.story_id == result["story_id"])
+            .all()
+        )
+        run = (
+            session.query(AnalysisRun)
+            .filter(AnalysisRun.story_id == result["story_id"])
+            .one()
+        )
+
+    assert documents == []
+    assert captured["agent_contexts"] is None
+    assert json.loads(run.options_snapshot_json)["enable_semantic_memory"] is False
+
+
+def test_failed_retrieval_persists_run_options_and_candidate_diagnostics(
+    monkeypatch,
+    tmp_path: Path,
+):
+    class DummySearcher:
+        def news_search(self, query: str, max_results: int = 10, time_range: str = "w"):
+            return [
+                SearchResult("Left A", "https://left-a.example/story", "", "left"),
+                SearchResult("Left B", "https://left-b.example/story", "", "left"),
+            ]
+
+        def web_search(self, query: str, max_results: int = 10):
+            return []
+
+    def fake_extract_url(
+        self, url: str, require_success: bool = False
+    ) -> SourceCandidate:
+        domain = urlparse(url).netloc.replace("www.", "")
+        return SourceCandidate(
+            url=url,
+            domain=domain,
+            title=f"{domain} title",
+            published_date=None,
+            author=None,
+            full_text=(
+                "President Joe Biden signed an executive order on AI safety. "
+                f"{domain} covered the regulatory details."
+            )
+            * 8,
+            extraction_error=None,
+            extractor_method="test_extractor",
+            http_status=200,
+            bias_result=BiasResult(
+                domain=domain,
+                bias=-2,
+                bias_label="Left",
+                confidence=1.0,
+                method="dataset",
+                factual_rating="high",
+                category="mainstream",
+            ),
+        )
+
+    test_db = tmp_path / "analysis_failed_retrieval.db"
+    engine = create_engine(
+        f"sqlite:///{test_db}", connect_args={"check_same_thread": False}
+    )
+    Base.metadata.create_all(bind=engine)
+    test_session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    monkeypatch.setattr(
+        "src.services.analysis_service.get_session", lambda: test_session()
+    )
+    monkeypatch.setattr(
+        SourceAggregatorService, "_init_searcher", lambda self: DummySearcher()
+    )
+    monkeypatch.setattr(SourceAggregatorService, "_extract_url", fake_extract_url)
+    monkeypatch.setattr(
+        "src.services.rss_retrieval_service.RssRetrievalService.search",
+        lambda self, query, *, domains, max_results=8: [],
+    )
+
+    with pytest.raises(SourceExtractionError, match="right_side"):
+        AnalysisService().analyze(
+            "President Joe Biden signed executive order on AI safety",
+            options=AnalysisOptions(
+                strict_bucket_enforcement=True,
+                required_bucket_groups=["left_side", "right_side"],
+            ),
+        )
+
+    with test_session() as session:
+        story = session.query(Story).one()
+        run = session.query(AnalysisRun).filter(AnalysisRun.story_id == story.id).one()
+        candidates = (
+            session.query(RetrievalCandidate)
+            .filter(RetrievalCandidate.analysis_run_id == run.id)
+            .all()
+        )
+
+    assert story.status == "failed"
+    assert run.status == "failed"
+    assert run.error == "source_extraction_error"
+    options = json.loads(run.options_snapshot_json)
+    assert options["strict_bucket_enforcement"] is True
+    assert options["required_bucket_groups"] == ["left_side", "right_side"]
+    coverage = json.loads(run.coverage_snapshot_json)
+    census = json.loads(run.candidate_census_json)
+    assert "right_side" in coverage["missing_buckets"]
+    assert "right_side" in census["missing_buckets"]
+    assert candidates

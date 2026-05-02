@@ -238,8 +238,18 @@ class AnalysisRunCRUD:
     def __init__(self, db: Session):
         self.db = db
 
-    def create(self, story_id: str, status: str = "running") -> AnalysisRun:
-        run = AnalysisRun(id=str(uuid4()), story_id=story_id, status=status)
+    def create(
+        self,
+        story_id: str,
+        status: str = "running",
+        options_snapshot: dict | None = None,
+    ) -> AnalysisRun:
+        run = AnalysisRun(
+            id=str(uuid4()),
+            story_id=story_id,
+            status=status,
+            options_snapshot_json=json.dumps(options_snapshot or {}),
+        )
         self.db.add(run)
         self.db.commit()
         self.db.refresh(run)

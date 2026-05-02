@@ -10,6 +10,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 
 from src.core.config import settings
+from src.core.embedding_provider import EmbeddingProvider
 from src.core.exceptions import SourceExtractionError
 from src.schemas.retrieval_diagnostics import (
     BucketLaneAttempt,
@@ -87,10 +88,17 @@ class SourceAggregatorService:
 
     MIN_TEXT_LENGTH = 200
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        settings_overrides: dict[str, object] | None = None,
+        embedding_provider: EmbeddingProvider | None = None,
+    ) -> None:
+        self._settings_overrides = settings_overrides or {}
+        self._embedding_provider = embedding_provider
         self._extractor = ArticleExtractor()
         self._bias_resolver = BiasResolutionService()
-        self._planner = BalancedSourcePlanner()
+        self._planner = BalancedSourcePlanner(settings_overrides=self._settings_overrides)
         self._relevance_scorer = RelevanceScorerService()
         self._searcher = self._init_searcher()
         self._rss_retriever = RssRetrievalService()
@@ -938,7 +946,13 @@ class SourceAggregatorService:
         if not story_packet or not self._semantic_candidate_scoring_enabled():
             return None
         try:
-            return CandidateSemanticScorer(story_packet, description)
+            if self._embedding_provider is None:
+                return CandidateSemanticScorer(story_packet, description)
+            return CandidateSemanticScorer(
+                story_packet,
+                description,
+                embedding_provider=self._embedding_provider,
+            )
         except Exception as exc:
             if not self._semantic_fail_open():
                 raise
@@ -1308,9 +1322,8 @@ class SourceAggregatorService:
             return int(getattr(source.bias_result, "bias", 0))
         return 0
 
-    @staticmethod
-    def _setting_bool(name: str, default: bool) -> bool:
-        value = getattr(settings, name, default)
+    def _setting_bool(self, name: str, default: bool) -> bool:
+        value = self._settings_overrides.get(name, getattr(settings, name, default))
         return value if isinstance(value, bool) else default
 
     def _semantic_candidate_scoring_enabled(self) -> bool:

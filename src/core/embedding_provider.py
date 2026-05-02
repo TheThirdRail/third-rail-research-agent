@@ -107,11 +107,14 @@ class LMStudioEmbeddingProvider:
         return vectors
 
 
-def get_embedding_provider(provider_name: str | None = None) -> EmbeddingProvider:
+def get_embedding_provider(
+    provider_name: str | None = None,
+    model_name: str | None = None,
+) -> EmbeddingProvider:
     """Return the configured semantic memory embedding provider."""
     provider = (provider_name or settings.embedding_provider or "fake").strip().lower()
     if provider == "fake":
         return FakeEmbeddingProvider()
     if provider in {"lmstudio", "lm_studio", "lm-studio"}:
-        return LMStudioEmbeddingProvider()
+        return LMStudioEmbeddingProvider(model_name=model_name)
     raise ValueError(f"Unsupported embedding provider: {provider}")

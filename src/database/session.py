@@ -44,6 +44,7 @@ HARDENING_COLUMNS: tuple[tuple[str, str, str, str | None], ...] = (
     ("analyses", "candidate_census_json", "TEXT", "'{}'"),
     ("analyses", "visual_evidence_json", "TEXT", "'{}'"),
     ("analyses", "agent_handoff_snapshot_json", "TEXT", "'{}'"),
+    ("analysis_runs", "options_snapshot_json", "TEXT", "'{}'"),
     ("channel_profiles", "owner_user_id", "VARCHAR(36)", None),
     ("channel_profiles", "raw_content", "TEXT", "''"),
     ("channel_profiles", "format", "VARCHAR(20)", "'yaml'"),

@@ -11,6 +11,7 @@ from typing import Any
 
 from src.core import analysis_events
 from src.core.config import settings
+from src.core.embedding_provider import get_embedding_provider
 from src.core.exceptions import SourceExtractionError
 from src.crews import run_analysis
 from src.database import (
@@ -26,6 +27,7 @@ from src.database import (
     get_session,
 )
 from src.database.models import AgentHandoff, AnalysisRun, RetrievalCandidate, Source
+from src.schemas.analysis_options import AnalysisOptions
 from src.schemas.analysis_report_sections import AnalysisReportSections
 from src.schemas.retrieval_diagnostics import CandidateDecision
 from src.schemas.visual_evidence import VisualEvidenceBundle
@@ -72,6 +74,7 @@ class AnalysisService:
         self,
         description: str,
         url: str | None = None,
+        options: AnalysisOptions | None = None,
     ) -> dict[str, Any]:
         """Run analysis workflow and persist results.
 
@@ -96,8 +99,22 @@ class AnalysisService:
             url=url,
         )
 
+        options_snapshot = self._analysis_options_snapshot(options)
+        source_aggregator = SourceAggregatorService(
+            settings_overrides=self._source_aggregator_overrides(options_snapshot),
+            embedding_provider=get_embedding_provider(
+                options_snapshot["embedding_provider"],
+                options_snapshot["embedding_model"],
+            ),
+        )
+        story_parser = StoryParserService(
+            semantic_query_expansion_enabled=options_snapshot[
+                "enable_semantic_query_expansion"
+            ],
+        )
+
         # ── Stage 1: Story parsing ──────────────────────────────────
-        story_packet = self._story_parser.parse(description, url)
+        story_packet = story_parser.parse(description, url)
         logger.info(
             "Story parsed: headline=%s, actors=%s, queries=%d",
             story_packet.canonical_headline[:60],
@@ -105,49 +122,63 @@ class AnalysisService:
             len(story_packet.query_pack),
         )
 
-        # ── Stage 2: Source gathering with coverage enforcement ─────
-        sources = self._source_aggregator.gather_sources(
-            description,
-            url,
-            story_packet=story_packet,
-        )
-        coverage = self._source_aggregator.summarize_coverage(sources)
-        sources_context = self._source_aggregator.format_sources_context(sources)
-        visual_bundle = self._visual_evidence.analyze(
-            self._source_aggregator.collect_media_pointers(sources)
-        )
-        visual_context = visual_bundle.to_context_block()
-
-        logger.info(
-            "Sources gathered: retained=%d, probed=%d, coverage_ok=%s, missing=%s",
-            coverage["retained_count"],
-            coverage["probed_count"],
-            coverage["coverage_satisfied"],
-            coverage["missing_buckets"],
-        )
-        analysis_events.bucket_fill_ratio(
-            story_id="pending",
-            coverage=coverage,
-        )
-
-        # ── Stage 3: Create story in database ───────────────────────
+        # ── Stage 2: Create story/run before retrieval ──────────────
         story = self._story_crud.create(
             title=description[:100],
             description=description,
         )
-
-        # Persist parsed metadata
         story.parsed_metadata = story_packet.model_dump_json()
         self._session.commit()
-        analysis_run = self._analysis_run_crud.create(story.id)
+        analysis_run = self._analysis_run_crud.create(
+            story.id,
+            options_snapshot=options_snapshot,
+        )
 
+        coverage: dict[str, Any] = {}
+        sources: list[Any] = []
+        retrieval_candidates_persisted = False
         try:
-            candidate_census = self._source_aggregator.candidate_census(
+            # ── Stage 3: Source gathering with coverage enforcement ─
+            sources = source_aggregator.gather_sources(
+                description,
+                url,
+                story_packet=story_packet,
+            )
+            coverage = source_aggregator.summarize_coverage(sources)
+            sources_context = source_aggregator.format_sources_context(sources)
+            if not options_snapshot["enable_visual_evidence_resolution"]:
+                visual_bundle = VisualEvidenceBundle()
+            else:
+                visual_evidence = self._visual_evidence
+                if options and options.enable_screenshot_capture is not None:
+                    visual_evidence = VisualEvidenceService(
+                        screenshot_capture_enabled=options_snapshot[
+                            "enable_screenshot_capture"
+                        ]
+                    )
+                visual_bundle = visual_evidence.analyze(
+                    source_aggregator.collect_media_pointers(sources)
+                )
+            visual_context = visual_bundle.to_context_block()
+
+            logger.info(
+                "Sources gathered: retained=%d, probed=%d, coverage_ok=%s, missing=%s",
+                coverage["retained_count"],
+                coverage["probed_count"],
+                coverage["coverage_satisfied"],
+                coverage["missing_buckets"],
+            )
+            analysis_events.bucket_fill_ratio(
+                story_id="pending",
+                coverage=coverage,
+            )
+
+            candidate_census = source_aggregator.candidate_census(
                 missing_buckets=coverage.get("missing_buckets", [])
             )
             analysis_events.candidate_totals(
                 story_id=story.id,
-                candidate_decisions=self._source_aggregator.candidate_decisions,
+                candidate_decisions=source_aggregator.candidate_decisions,
             )
             analysis_events.bucket_fill_ratio(
                 story_id=story.id,
@@ -166,7 +197,7 @@ class AnalysisService:
             # RSS precision
             rss_decisions = [
                 d
-                for d in self._source_aggregator.candidate_decisions
+                for d in source_aggregator.candidate_decisions
                 if getattr(d, "stage", "") == "rss"
             ]
             rss_accepted = sum(
@@ -192,8 +223,9 @@ class AnalysisService:
             self._retrieval_candidate_crud.bulk_create(
                 analysis_run_id=analysis_run.id,
                 story_id=story.id,
-                decisions=self._source_aggregator.candidate_decisions,
+                decisions=source_aggregator.candidate_decisions,
             )
+            retrieval_candidates_persisted = True
             self._analysis_run_crud.complete(
                 analysis_run.id,
                 status="retrieval_complete",
@@ -216,7 +248,7 @@ class AnalysisService:
             # ── Stage 4: Persist sources ────────────────────────────
             persisted_sources: list[tuple[Any, Source]] = []
             retained_decisions = self._retained_decisions_by_url(
-                self._source_aggregator.candidate_decisions
+                source_aggregator.candidate_decisions
             )
             for src in sources:
                 bias = src.bias_result
@@ -265,12 +297,14 @@ class AnalysisService:
                 description=description,
                 sources=persisted_sources,
                 visual_bundle=visual_bundle,
+                options_snapshot=options_snapshot,
             )
             semantic_agent_contexts = (
                 self._build_semantic_agent_contexts(
                     story_id=story.id,
                     description=description,
                     sources=persisted_sources,
+                    options_snapshot=options_snapshot,
                 )
                 if semantic_indexed
                 else {}
@@ -359,6 +393,17 @@ class AnalysisService:
                 )
                 for i, src in enumerate(sources)
             ]
+            # Repair missing source findings with deterministic fallbacks
+            self._report_renderer.repair_source_findings(source_records)
+            # Validate source findings completeness
+            from src.services.report_validator import validate_source_findings
+
+            finding_warnings = validate_source_findings(
+                structured_sections.source_findings,
+                retained_source_count=len(source_records),
+            )
+            all_warnings.extend(finding_warnings)
+
             sections = structured_sections.to_renderer_sections()
             sections.evidence_limitations.extend(visual_bundle.limitations)
             validate_structured_section_payload(sections)
@@ -449,6 +494,7 @@ class AnalysisService:
                 analysis_id=analysis.id,
                 sections=structured_sections,
                 coverage=coverage,
+                options_snapshot=options_snapshot,
             )
 
             logger.info("Analysis complete for story %s", story.id[:8])
@@ -474,29 +520,48 @@ class AnalysisService:
                 "candidate_census": candidate_census.model_dump(mode="json"),
                 "warnings": all_warnings,
                 "visual_evidence_count": len(visual_bundle.records),
+                "analysis_options": options_snapshot,
             }
         except SourceExtractionError:
             story.status = "failed"
+            if not coverage:
+                coverage = source_aggregator.summarize_coverage([])
+            candidate_census = source_aggregator.candidate_census(
+                missing_buckets=coverage.get("missing_buckets", [])
+            )
+            if not retrieval_candidates_persisted:
+                self._retrieval_candidate_crud.bulk_create(
+                    analysis_run_id=analysis_run.id,
+                    story_id=story.id,
+                    decisions=source_aggregator.candidate_decisions,
+                )
             self._analysis_run_crud.complete(
                 analysis_run.id,
                 status="failed",
                 coverage_snapshot=coverage,
-                candidate_census=self._source_aggregator.candidate_census(
-                    missing_buckets=coverage.get("missing_buckets", [])
-                ).model_dump(mode="json"),
+                candidate_census=candidate_census.model_dump(mode="json"),
                 error="source_extraction_error",
             )
             self._session.commit()
             raise
         except Exception:
             story.status = "failed"
+            if not coverage:
+                coverage = source_aggregator.summarize_coverage([])
+            candidate_census = source_aggregator.candidate_census(
+                missing_buckets=coverage.get("missing_buckets", [])
+            )
+            if not retrieval_candidates_persisted:
+                self._retrieval_candidate_crud.bulk_create(
+                    analysis_run_id=analysis_run.id,
+                    story_id=story.id,
+                    decisions=source_aggregator.candidate_decisions,
+                )
             self._analysis_run_crud.complete(
                 analysis_run.id,
                 status="failed",
                 coverage_snapshot=coverage,
-                candidate_census=self._source_aggregator.candidate_census(
-                    missing_buckets=coverage.get("missing_buckets", [])
-                ).model_dump(mode="json"),
+                candidate_census=candidate_census.model_dump(mode="json"),
                 error="analysis_error",
             )
             self._session.commit()
@@ -595,11 +660,23 @@ class AnalysisService:
         description: str,
         sources: list[tuple[Any, Source]],
         visual_bundle: VisualEvidenceBundle,
+        options_snapshot: dict[str, Any] | None = None,
     ) -> bool:
-        if not getattr(settings, "semantic_memory_enabled", False):
+        options_snapshot = options_snapshot or {}
+        if not options_snapshot.get(
+            "enable_semantic_memory",
+            getattr(settings, "semantic_memory_enabled", False),
+        ):
             return False
         try:
-            semantic_memory = SemanticMemoryService(self._session)
+            semantic_memory = SemanticMemoryService(
+                self._session,
+                embedding_provider=get_embedding_provider(
+                    options_snapshot.get("embedding_provider"),
+                    options_snapshot.get("embedding_model"),
+                ),
+                vector_store_backend=options_snapshot.get("vector_store"),
+            )
             semantic_memory.index_seed_story(
                 story_id,
                 story_packet,
@@ -673,13 +750,22 @@ class AnalysisService:
         story_id: str,
         description: str,
         sources: list[tuple[Any, Source]],
+        options_snapshot: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         try:
+            options_snapshot = options_snapshot or {}
             source_refs = {
                 source.id: f"S{index}"
                 for index, (_candidate, source) in enumerate(sources, 1)
             }
-            semantic_memory = SemanticMemoryService(self._session)
+            semantic_memory = SemanticMemoryService(
+                self._session,
+                embedding_provider=get_embedding_provider(
+                    options_snapshot.get("embedding_provider"),
+                    options_snapshot.get("embedding_model"),
+                ),
+                vector_store_backend=options_snapshot.get("vector_store"),
+            )
             contexts = semantic_memory.build_agent_contexts(
                 story_id,
                 description,
@@ -706,11 +792,23 @@ class AnalysisService:
         analysis_id: str,
         sections: AnalysisReportSections,
         coverage: dict[str, Any],
+        options_snapshot: dict[str, Any] | None = None,
     ) -> None:
-        if not getattr(settings, "semantic_memory_enabled", False):
+        options_snapshot = options_snapshot or {}
+        if not options_snapshot.get(
+            "enable_semantic_memory",
+            getattr(settings, "semantic_memory_enabled", False),
+        ):
             return
         try:
-            semantic_memory = SemanticMemoryService(self._session)
+            semantic_memory = SemanticMemoryService(
+                self._session,
+                embedding_provider=get_embedding_provider(
+                    options_snapshot.get("embedding_provider"),
+                    options_snapshot.get("embedding_model"),
+                ),
+                vector_store_backend=options_snapshot.get("vector_store"),
+            )
             indexed = 0
             for spec in self._agent_finding_specs(sections, coverage):
                 semantic_memory.index_structured_finding(
@@ -946,6 +1044,93 @@ class AnalysisService:
         )
 
     @staticmethod
+    def _analysis_options_snapshot(options: AnalysisOptions | None) -> dict[str, Any]:
+        option_values = options.model_dump(exclude_none=True) if options else {}
+
+        def option_or_setting(name: str, default: Any = None) -> Any:
+            return option_values.get(name, getattr(settings, name, default))
+
+        required = option_values.get("required_bucket_groups")
+        if required is None:
+            required = AnalysisService._split_csv_setting(
+                getattr(settings, "required_bucket_groups", "left_side,right_side")
+            )
+        else:
+            required = AnalysisService._split_csv_setting(required)
+        preferred = option_values.get("preferred_bucket_groups")
+        if preferred is None:
+            preferred = ["center"] if getattr(settings, "exact_center_preferred", True) else []
+        else:
+            preferred = AnalysisService._split_csv_setting(preferred)
+
+        return {
+            "strict_bucket_enforcement": bool(
+                option_or_setting("strict_bucket_enforcement", True)
+            ),
+            "required_bucket_groups": list(required or []),
+            "preferred_bucket_groups": list(preferred or []),
+            "enable_semantic_memory": bool(
+                option_values.get(
+                    "enable_semantic_memory",
+                    getattr(settings, "semantic_memory_enabled", False),
+                )
+            ),
+            "enable_semantic_candidate_scoring": bool(
+                option_values.get(
+                    "enable_semantic_candidate_scoring",
+                    getattr(settings, "semantic_candidate_scoring_enabled", False),
+                )
+            ),
+            "enable_semantic_query_expansion": bool(
+                option_values.get(
+                    "enable_semantic_query_expansion",
+                    getattr(settings, "semantic_query_expansion_enabled", False),
+                )
+            ),
+            "enable_visual_evidence_resolution": bool(
+                option_or_setting("enable_visual_evidence_resolution", True)
+            ),
+            "enable_screenshot_capture": bool(
+                option_values.get(
+                    "enable_screenshot_capture",
+                    getattr(settings, "screenshot_capture_enabled", False),
+                )
+            ),
+            "embedding_provider": str(option_or_setting("embedding_provider", "fake")),
+            "embedding_model": str(option_or_setting("embedding_model", "fake-hash-v1")),
+            "vector_store": str(
+                option_values.get(
+                    "vector_store",
+                    getattr(settings, "semantic_vector_store", "none"),
+                )
+            ),
+        }
+
+    @staticmethod
+    def _source_aggregator_overrides(
+        options_snapshot: dict[str, Any],
+    ) -> dict[str, object]:
+        return {
+            "strict_bucket_enforcement": options_snapshot[
+                "strict_bucket_enforcement"
+            ],
+            "required_bucket_groups": ",".join(
+                options_snapshot["required_bucket_groups"]
+            ),
+            "semantic_candidate_scoring_enabled": options_snapshot[
+                "enable_semantic_candidate_scoring"
+            ],
+        }
+
+    @staticmethod
+    def _split_csv_setting(value: object) -> list[str]:
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if not isinstance(value, str):
+            return []
+        return [item.strip() for item in value.split(",") if item.strip()]
+
+    @staticmethod
     def _source_finding_value(
         sections: AnalysisReportSections,
         source_id: str,
@@ -984,6 +1169,7 @@ class AnalysisService:
         return {
             "id": run.id,
             "status": run.status,
+            "options_snapshot": cls._json_loads(run.options_snapshot_json),
             "coverage_snapshot": cls._json_loads(run.coverage_snapshot_json),
             "candidate_census": cls._json_loads(run.candidate_census_json),
             "error": run.error,

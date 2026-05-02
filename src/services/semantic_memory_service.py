@@ -1,9 +1,4 @@
-"""Semantic memory service backed by canonical SQL records.
-
-This first implementation intentionally stops at SQL document/chunk storage plus
-fake vector IDs. External vector store adapters are added in later phases after
-dependency approval.
-"""
+"""Semantic memory service backed by canonical SQL records."""
 
 from __future__ import annotations
 
@@ -21,6 +16,11 @@ from src.core.embedding_provider import EmbeddingProvider, get_embedding_provide
 from src.database.models import SemanticChunk, SemanticDocument, Source, Story
 from src.schemas.story_packet import StoryPacket
 from src.schemas.visual_evidence import VisualEvidenceRecord
+from src.services.vector_store_service import (
+    VectorRecord,
+    VectorStore,
+    get_vector_store,
+)
 
 AGENT_CONTEXT_TOP_K = 4
 AGENT_CONTEXT_EXCERPT_CHARS = 700
@@ -76,9 +76,12 @@ class SemanticMemoryService:
         self,
         db: Session,
         embedding_provider: EmbeddingProvider | None = None,
+        vector_store: VectorStore | None = None,
+        vector_store_backend: str | None = None,
     ) -> None:
         self._db = db
         self._embedding_provider = embedding_provider or get_embedding_provider()
+        self._vector_store = vector_store or get_vector_store(vector_store_backend)
 
     def index_seed_story(
         self,
@@ -218,11 +221,23 @@ class SemanticMemoryService:
     ) -> list[SemanticRetrievalResult]:
         """Search story chunks with metadata filters.
 
-        Until an external vector store adapter is approved, retrieval embeds SQL
-        chunk text on demand. Fake embeddings intentionally fall back to lexical
-        ranking so tests and local dry-runs remain deterministic and useful.
+        When a vector store is configured, retrieval uses that rebuildable index
+        and links results back to SQL chunks. Fake embeddings intentionally fall
+        back to lexical ranking so tests and local dry-runs remain deterministic.
         """
         chunks = self._query_chunks(story_id, filters or {})
+        vector_ranked = self._rank_chunks_with_vector_store(
+            story_id=story_id,
+            query_text=query_text,
+            chunks=chunks,
+            filters=filters or {},
+            top_k=self._top_k(top_k),
+        )
+        if vector_ranked is not None:
+            return [
+                self._retrieval_result(chunk, similarity)
+                for similarity, chunk in vector_ranked
+            ]
         ranked = self._rank_chunks(query_text, chunks)
         limit = self._top_k(top_k)
         return [
@@ -347,6 +362,12 @@ class SemanticMemoryService:
         for document in documents:
             self._db.delete(document)
         self._db.commit()
+        if self._vector_store is not None:
+            try:
+                self._vector_store.delete_story(story_id)
+            except Exception:
+                if not getattr(settings, "semantic_fail_open", True):
+                    raise
         return count
 
     def rebuild_story_index(self, story_id: str) -> list[SemanticDocument]:
@@ -468,6 +489,45 @@ class SemanticMemoryService:
             if not getattr(settings, "semantic_fail_open", True):
                 raise
             return self._rank_chunks_lexically(query_text, chunks)
+
+    def _rank_chunks_with_vector_store(
+        self,
+        *,
+        story_id: str,
+        query_text: str,
+        chunks: list[SemanticChunk],
+        filters: dict[str, Any],
+        top_k: int,
+    ) -> list[tuple[float, SemanticChunk]] | None:
+        if self._vector_store is None or not chunks:
+            return None
+        if getattr(self._embedding_provider, "provider_name", "") == "fake":
+            return None
+
+        try:
+            query_vector = self._embed_texts([query_text])[0]
+            results = self._vector_store.search(
+                query_vector,
+                story_id=story_id,
+                filters=filters,
+                top_k=top_k,
+            )
+        except Exception:
+            if not getattr(settings, "semantic_fail_open", True):
+                raise
+            return None
+
+        if not results:
+            return []
+
+        chunks_by_id = {chunk.id: chunk for chunk in chunks}
+        ranked: list[tuple[float, SemanticChunk]] = []
+        for result in results:
+            chunk_id = result.metadata.get("semantic_chunk_id") or result.id
+            chunk = chunks_by_id.get(str(chunk_id))
+            if chunk is not None:
+                ranked.append((round(float(result.score), 6), chunk))
+        return ranked
 
     def _rank_chunks_lexically(
         self,
@@ -736,6 +796,7 @@ class SemanticMemoryService:
 
         chunk_texts = self.chunk_text(canonical_text)
         embeddings = self._embedding_provider.embed_texts(chunk_texts)
+        indexed_chunks: list[tuple[SemanticChunk, list[float]]] = []
         for index, (chunk_text, embedding) in enumerate(
             zip(chunk_texts, embeddings, strict=True)
         ):
@@ -762,10 +823,64 @@ class SemanticMemoryService:
                 ),
             )
             self._db.add(chunk)
+            indexed_chunks.append((chunk, embedding))
 
+        self._db.flush()
+        self._upsert_vector_records(indexed_chunks)
         self._db.commit()
         self._db.refresh(document)
         return document
+
+    def _upsert_vector_records(
+        self,
+        indexed_chunks: list[tuple[SemanticChunk, list[float]]],
+    ) -> None:
+        if self._vector_store is None or not indexed_chunks:
+            return
+        records = [
+            VectorRecord(
+                id=chunk.id,
+                vector=embedding,
+                text=chunk.chunk_text,
+                metadata=self._vector_metadata(chunk),
+            )
+            for chunk, embedding in indexed_chunks
+        ]
+        try:
+            self._vector_store.upsert(records)
+        except Exception:
+            if not getattr(settings, "semantic_fail_open", True):
+                raise
+
+    def _vector_metadata(self, chunk: SemanticChunk) -> dict[str, Any]:
+        metadata = self._metadata_for_chunk(chunk)
+        source = chunk.document.source
+        metadata.update(
+            {
+                "story_id": chunk.story_id,
+                "analysis_id": chunk.document.analysis_id,
+                "semantic_document_id": chunk.semantic_document_id,
+                "semantic_chunk_id": chunk.id,
+                "source_id": chunk.source_id,
+                "source_ref": metadata.get("source_ref", ""),
+                "document_type": chunk.document.document_type,
+                "domain": metadata.get(
+                    "domain",
+                    getattr(source, "domain", "") if source is not None else "",
+                ),
+                "bias_bucket": metadata.get("bias_bucket", ""),
+                "exact_bias": metadata.get(
+                    "exact_bias",
+                    metadata.get(
+                        "bias_score",
+                        getattr(source, "exact_bias", None)
+                        if source is not None
+                        else None,
+                    ),
+                ),
+            }
+        )
+        return metadata
 
     @staticmethod
     def _seed_story_text(story_packet: StoryPacket, seed_text: str) -> str:

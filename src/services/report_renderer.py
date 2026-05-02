@@ -187,6 +187,32 @@ class ReportRenderer:
             lines.append(f"- {limitation}")
         return "\n".join(lines)
 
+    def repair_source_findings(
+        self, sources: list[SourceRecord]
+    ) -> list[SourceRecord]:
+        """Generate deterministic fallback key-framing for sources missing it.
+
+        Uses the source title as a truncated framing summary when
+        the analysis crew failed to return a source finding.
+
+        Args:
+            sources: List of source records, some possibly missing key_framing.
+
+        Returns:
+            Same list with empty key_framing fields populated from title.
+        """
+        for src in sources:
+            if not src.key_framing and not src.notable_claim:
+                # Deterministic fallback: use truncated title as framing
+                title = src.title.strip()
+                if title:
+                    src.key_framing = (
+                        f"[Auto] {title[:80]}" if len(title) > 80 else f"[Auto] {title}"
+                    )
+                else:
+                    src.key_framing = "[Auto] No framing available"
+        return sources
+
     def _render_source_matrix(self, sources: list[SourceRecord]) -> str:
         """Render deterministic Source Matrix table."""
         lines = [

@@ -32,6 +32,9 @@ class StoryParserService:
     changing the deterministic metadata gates.
     """
 
+    def __init__(self, *, semantic_query_expansion_enabled: bool | None = None) -> None:
+        self._semantic_query_expansion_override = semantic_query_expansion_enabled
+
     def parse(
         self,
         description: str,
@@ -126,6 +129,8 @@ class StoryParserService:
         return packet
 
     def _semantic_query_expansion_enabled(self) -> bool:
+        if self._semantic_query_expansion_override is not None:
+            return self._semantic_query_expansion_override
         value = getattr(settings, "semantic_query_expansion_enabled", False)
         return value if isinstance(value, bool) else False
 

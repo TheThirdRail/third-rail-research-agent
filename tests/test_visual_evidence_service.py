@@ -1,3 +1,7 @@
+import sys
+import types
+from pathlib import Path
+
 from src.schemas.visual_evidence import MediaPointer, ResolvedSocialPost
 from src.services.screenshot_capture_service import ScreenshotCaptureService
 from src.services.social_post_resolver_service import SocialPostResolverService
@@ -123,6 +127,160 @@ def test_screenshot_capture_returns_structured_no_raw_artifact_fallback():
     assert not artifact.success
     assert artifact.artifact_path == ""
     assert artifact.fallback_reason == "browser_capture_unavailable"
+    assert artifact.provenance["retention"] == "no_raw_screenshot_stored"
+
+
+def test_screenshot_capture_saves_playwright_artifact(monkeypatch, tmp_path):
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status = 200
+
+    class FakePage:
+        def goto(self, url, wait_until=None, timeout=None):
+            captured["url"] = url
+            captured["wait_until"] = wait_until
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        def screenshot(self, path=None, full_page=None):
+            captured["full_page"] = full_page
+            Path(path).write_bytes(b"fake-png")
+
+    class FakeBrowser:
+        def new_page(self, viewport=None):
+            captured["viewport"] = viewport
+            return FakePage()
+
+        def close(self):
+            captured["closed"] = True
+
+    class FakeChromium:
+        def launch(self, args=None):
+            captured["launch_args"] = args
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakeContext:
+        def __enter__(self):
+            return FakePlaywright()
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    fake_sync_api = types.SimpleNamespace(
+        TimeoutError=TimeoutError,
+        sync_playwright=lambda: FakeContext(),
+    )
+    monkeypatch.setitem(sys.modules, "playwright", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", fake_sync_api)
+    monkeypatch.setattr(
+        ScreenshotCaptureService,
+        "_blocked_target_reason",
+        staticmethod(lambda target_url: ""),
+    )
+
+    artifact = ScreenshotCaptureService(
+        enabled=True,
+        artifact_dir=tmp_path,
+        timeout_ms=1234,
+        viewport_width=800,
+        viewport_height=600,
+    ).capture(
+        "https://x.com/example/status/123",
+        source_url="https://example.com/story",
+        platform="x",
+    )
+
+    assert artifact.success
+    assert artifact.render_method == "playwright_sync"
+    assert artifact.fallback_reason == ""
+    assert Path(artifact.artifact_path).read_bytes() == b"fake-png"
+    assert artifact.provenance["retention"] == "raw_screenshot_stored"
+    assert artifact.provenance["ocr_status"] == "disabled"
+    assert artifact.provenance["http_status"] == "200"
+    assert captured["viewport"] == {"width": 800, "height": 600}
+    assert captured["timeout"] == 1234
+    assert captured["full_page"] is True
+    assert captured["closed"] is True
+
+
+def test_screenshot_capture_extracts_ocr_when_enabled(monkeypatch, tmp_path):
+    class FakeResponse:
+        status = 200
+
+    class FakePage:
+        def goto(self, url, wait_until=None, timeout=None):
+            return FakeResponse()
+
+        def screenshot(self, path=None, full_page=None):
+            Path(path).write_bytes(b"fake-png")
+
+    class FakeBrowser:
+        def new_page(self, viewport=None):
+            return FakePage()
+
+        def close(self):
+            pass
+
+    class FakeChromium:
+        def launch(self, args=None):
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakeContext:
+        def __enter__(self):
+            return FakePlaywright()
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    fake_sync_api = types.SimpleNamespace(
+        TimeoutError=TimeoutError,
+        sync_playwright=lambda: FakeContext(),
+    )
+    fake_pytesseract = types.SimpleNamespace(
+        image_to_string=lambda path: "Visible OCR text 8647"
+    )
+    monkeypatch.setitem(sys.modules, "playwright", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", fake_sync_api)
+    monkeypatch.setitem(sys.modules, "pytesseract", fake_pytesseract)
+    monkeypatch.setattr(
+        ScreenshotCaptureService,
+        "_blocked_target_reason",
+        staticmethod(lambda target_url: ""),
+    )
+
+    artifact = ScreenshotCaptureService(
+        enabled=True,
+        ocr_enabled=True,
+        artifact_dir=tmp_path,
+    ).capture(
+        "https://x.com/example/status/123",
+        source_url="https://example.com/story",
+        platform="x",
+    )
+
+    assert artifact.success
+    assert artifact.ocr_text == "Visible OCR text 8647"
+    assert artifact.provenance["ocr_status"] == "captured"
+
+
+def test_screenshot_capture_blocks_private_targets_when_enabled():
+    artifact = ScreenshotCaptureService(enabled=True).capture(
+        "http://127.0.0.1:8000/private",
+        source_url="https://example.com/story",
+        platform="x",
+    )
+
+    assert not artifact.success
+    assert artifact.render_method == "restricted_url_guard"
+    assert artifact.fallback_reason == "blocked_private_or_local_url"
+    assert artifact.artifact_path == ""
     assert artifact.provenance["retention"] == "no_raw_screenshot_stored"
 
 

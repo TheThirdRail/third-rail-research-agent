@@ -10,6 +10,11 @@ from src.schemas.story_packet import StoryPacket
 from src.schemas.visual_evidence import VisualEvidenceRecord
 from src.services.candidate_semantic_scorer import CandidateSemanticScorer
 from src.services.semantic_memory_service import SemanticMemoryService
+from src.services.vector_store_service import (
+    VectorRecord,
+    VectorSearchResult,
+    get_vector_store,
+)
 
 
 def test_semantic_tables_are_created_by_metadata(tmp_path):
@@ -80,6 +85,17 @@ def test_lmstudio_embedding_provider_posts_openai_compatible_payload(monkeypatch
             "json": {"model": "text-embedding-test", "input": ["first", "second"]},
         }
     ]
+
+
+def test_vector_store_defaults_to_sql_only_operational_mode(monkeypatch):
+    monkeypatch.setattr(
+        "src.services.vector_store_service.settings.semantic_vector_store",
+        "none",
+    )
+
+    assert get_vector_store() is None
+    assert get_vector_store("sql") is None
+    assert get_vector_store("disabled") is None
 
 
 def test_candidate_semantic_scorer_indexes_seed_and_scores_candidate():
@@ -278,6 +294,188 @@ def test_semantic_memory_search_returns_source_linked_chunks(tmp_path):
         assert results[0].semantic_document_id
         assert results[0].metadata["source_ref"] == "S1"
         assert results[0].metadata["bias_bucket"] == "center"
+
+
+def test_semantic_memory_upserts_sql_linked_vector_records(tmp_path):
+    class KeywordEmbeddingProvider:
+        provider_name = "keyword"
+        model_name = "keyword-v1"
+        dimensions = 3
+
+        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            return [[1.0, 0.0, 0.0] for _ in texts]
+
+    class RecordingVectorStore:
+        backend_name = "fake-vector"
+
+        def __init__(self):
+            self.records: list[VectorRecord] = []
+
+        def upsert(self, records: list[VectorRecord]) -> None:
+            self.records.extend(records)
+
+        def search(self, query_vector, *, story_id, filters=None, top_k=4):
+            return []
+
+        def delete_story(self, story_id: str) -> None:
+            return None
+
+    db_path = tmp_path / "semantic_vector_upsert.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    Base.metadata.create_all(bind=engine)
+
+    with Session(engine) as session:
+        story = Story(title="Vector story", description="seed")
+        session.add(story)
+        session.commit()
+        session.refresh(story)
+
+        source = Source(
+            story_id=story.id,
+            domain="example.com",
+            url="https://example.com/vector-story",
+            title="Vector source",
+            full_text="Vector-backed semantic retrieval source text.",
+            political_bias=-2,
+        )
+        session.add(source)
+        session.commit()
+        session.refresh(source)
+
+        vector_store = RecordingVectorStore()
+        service = SemanticMemoryService(
+            session,
+            embedding_provider=KeywordEmbeddingProvider(),
+            vector_store=vector_store,
+        )
+        service.index_source_article(
+            story_id=story.id,
+            source_id=source.id,
+            title=source.title,
+            text=source.full_text,
+            metadata={
+                "source_ref": "S1",
+                "domain": source.domain,
+                "bias_bucket": "left_side",
+                "bias_score": source.political_bias,
+            },
+        )
+
+        assert len(vector_store.records) == 1
+        record = vector_store.records[0]
+        assert record.id
+        assert record.metadata["story_id"] == story.id
+        assert record.metadata["semantic_document_id"]
+        assert record.metadata["semantic_chunk_id"] == record.id
+        assert record.metadata["source_id"] == source.id
+        assert record.metadata["source_ref"] == "S1"
+        assert record.metadata["document_type"] == "source_article"
+        assert record.metadata["domain"] == "example.com"
+        assert record.metadata["bias_bucket"] == "left_side"
+        assert record.metadata["exact_bias"] == -2
+
+
+def test_semantic_memory_search_uses_vector_store_when_configured(tmp_path):
+    class KeywordEmbeddingProvider:
+        provider_name = "keyword"
+        model_name = "keyword-v1"
+        dimensions = 3
+
+        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            vectors = []
+            for text in texts:
+                vectors.append([1.0, 0.0, 0.0] if "AI" in text else [0.0, 1.0, 0.0])
+            return vectors
+
+    class SearchVectorStore:
+        backend_name = "fake-vector"
+
+        def __init__(self):
+            self.records: list[VectorRecord] = []
+
+        def upsert(self, records: list[VectorRecord]) -> None:
+            self.records.extend(records)
+
+        def search(self, query_vector, *, story_id, filters=None, top_k=4):
+            matching = [
+                record
+                for record in self.records
+                if record.metadata["story_id"] == story_id
+                and record.metadata["source_ref"] == "S2"
+            ]
+            return [
+                VectorSearchResult(
+                    id=record.id,
+                    score=0.91,
+                    metadata=record.metadata,
+                )
+                for record in matching[:top_k]
+            ]
+
+        def delete_story(self, story_id: str) -> None:
+            return None
+
+    db_path = tmp_path / "semantic_vector_search.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    Base.metadata.create_all(bind=engine)
+
+    with Session(engine) as session:
+        story = Story(title="AI order", description="seed")
+        session.add(story)
+        session.commit()
+        session.refresh(story)
+
+        first = Source(
+            story_id=story.id,
+            domain="first.example",
+            url="https://first.example/ai",
+            title="First source",
+            full_text="AI safety executive order text.",
+            political_bias=0,
+        )
+        second = Source(
+            story_id=story.id,
+            domain="second.example",
+            url="https://second.example/ai",
+            title="Second source",
+            full_text="Different AI order framing.",
+            political_bias=2,
+        )
+        session.add_all([first, second])
+        session.commit()
+
+        vector_store = SearchVectorStore()
+        service = SemanticMemoryService(
+            session,
+            embedding_provider=KeywordEmbeddingProvider(),
+            vector_store=vector_store,
+        )
+        service.index_source_article(
+            story_id=story.id,
+            source_id=first.id,
+            title=first.title,
+            text=first.full_text,
+            metadata={"source_ref": "S1", "domain": first.domain},
+        )
+        service.index_source_article(
+            story_id=story.id,
+            source_id=second.id,
+            title=second.title,
+            text=second.full_text,
+            metadata={"source_ref": "S2", "domain": second.domain},
+        )
+
+        results = service.search_similar_to_story(
+            story.id,
+            "AI order",
+            filters={"document_types": ["source_article"]},
+            top_k=1,
+        )
+
+        assert len(results) == 1
+        assert results[0].source_id == second.id
+        assert results[0].similarity == 0.91
+        assert results[0].metadata["source_ref"] == "S2"
 
 
 def test_semantic_memory_builds_agent_contexts_without_full_article_dumps(tmp_path):

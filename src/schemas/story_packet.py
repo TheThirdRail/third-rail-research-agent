@@ -82,6 +82,10 @@ class StoryPacket(BaseModel):
         default_factory=dict,
         description="Search queries grouped by lexical, semantic, opposing, and visual/social intent",
     )
+    query_expansion_diagnostics: dict[str, object] = Field(
+        default_factory=dict,
+        description="Diagnostics for current-story query expansion methods and family counts",
+    )
     disambiguation_notes: str = Field(
         default="",
         description="Notes on how to distinguish this story from similar ones",

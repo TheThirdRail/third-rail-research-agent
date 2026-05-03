@@ -43,8 +43,10 @@ HARDENING_COLUMNS: tuple[tuple[str, str, str, str | None], ...] = (
     ("analyses", "coverage_snapshot_json", "TEXT", "'{}'"),
     ("analyses", "candidate_census_json", "TEXT", "'{}'"),
     ("analyses", "visual_evidence_json", "TEXT", "'{}'"),
+    ("analyses", "report_validation_warnings_json", "TEXT", "'[]'"),
     ("analyses", "agent_handoff_snapshot_json", "TEXT", "'{}'"),
     ("analysis_runs", "options_snapshot_json", "TEXT", "'{}'"),
+    ("analysis_runs", "report_validation_warnings_json", "TEXT", "'[]'"),
     ("channel_profiles", "owner_user_id", "VARCHAR(36)", None),
     ("channel_profiles", "raw_content", "TEXT", "''"),
     ("channel_profiles", "format", "VARCHAR(20)", "'yaml'"),
@@ -86,6 +88,75 @@ def init_db() -> None:
     ensure_agent_config_schema(engine)
     ensure_agent_config_rows(engine)
     backfill_agent_config_models(engine)
+
+
+def run_alembic_upgrade(database_url: str | None = None) -> tuple[bool, str]:
+    """Run Alembic migrations to the latest revision when configured."""
+    project_root = Path(__file__).resolve().parents[2]
+    alembic_ini = project_root / "alembic.ini"
+    migrations_dir = project_root / "migrations"
+    if not alembic_ini.exists() or not migrations_dir.exists():
+        return False, "Alembic migration files are not present."
+
+    try:
+        from alembic import command
+        from alembic.config import Config
+
+        config = Config(str(alembic_ini))
+        config.set_main_option("script_location", str(migrations_dir))
+        config.set_main_option("sqlalchemy.url", database_url or get_database_url())
+        command.upgrade(config, "head")
+    except Exception as exc:
+        logger.warning("Alembic upgrade failed", exc_info=True)
+        return False, f"Alembic upgrade failed: {exc}"
+
+    return True, "Alembic migrations upgraded to head."
+
+
+def get_alembic_revision_status(database_url: str | None = None) -> tuple[str, str]:
+    """Return Alembic revision readiness without applying migrations."""
+    project_root = Path(__file__).resolve().parents[2]
+    alembic_ini = project_root / "alembic.ini"
+    migrations_dir = project_root / "migrations"
+    if not alembic_ini.exists() or not migrations_dir.exists():
+        return "warn", "Alembic migration files are not present."
+
+    try:
+        from alembic.config import Config
+        from alembic.migration import MigrationContext
+        from alembic.script import ScriptDirectory
+
+        target_url = database_url or get_database_url()
+        config = Config(str(alembic_ini))
+        config.set_main_option("script_location", str(migrations_dir))
+        config.set_main_option("sqlalchemy.url", target_url)
+        script = ScriptDirectory.from_config(config)
+        heads = set(script.get_heads())
+        target_engine = engine if database_url is None else create_engine(target_url)
+        try:
+            with target_engine.connect() as connection:
+                context = MigrationContext.configure(connection)
+                current_heads = set(context.get_current_heads())
+        finally:
+            if database_url is not None:
+                target_engine.dispose()
+    except Exception as exc:
+        logger.warning("Alembic revision check failed", exc_info=True)
+        return "error", f"Could not inspect Alembic revision state: {exc}"
+
+    if current_heads == heads:
+        head_text = ", ".join(sorted(heads)) or "none"
+        return "ok", f"Database is at Alembic head: {head_text}."
+    if not current_heads:
+        return "warn", "Database is not stamped with an Alembic revision."
+    return (
+        "warn",
+        "Database revision "
+        + ", ".join(sorted(current_heads))
+        + " is not at head "
+        + ", ".join(sorted(heads))
+        + ".",
+    )
 
 
 def _default_fallback_model(provider: str) -> str:

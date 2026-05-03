@@ -132,12 +132,14 @@ def test_hardening_migration_syncs_diagnostic_tables_and_snapshots(tmp_path):
     assert "coverage_snapshot_json" in analysis_columns
     assert "candidate_census_json" in analysis_columns
     assert "visual_evidence_json" in analysis_columns
+    assert "report_validation_warnings_json" in analysis_columns
     assert "agent_handoff_snapshot_json" in analysis_columns
     assert {
         "status",
         "options_snapshot_json",
         "coverage_snapshot_json",
         "candidate_census_json",
+        "report_validation_warnings_json",
     } <= (
         analysis_run_columns
     )

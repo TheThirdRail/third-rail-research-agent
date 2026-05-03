@@ -58,6 +58,19 @@ def test_story_parser_builds_query_families_for_bucket_lanes():
     flattened = SemanticQueryExpansionService().flatten(packet.query_families)
     assert flattened
     assert flattened[0] in packet.query_families["lexical"]
+    assert packet.query_expansion_diagnostics["source"] == "current_story_only"
+    assert packet.query_expansion_diagnostics["deterministic_used"] is True
+
+
+def test_story_parser_deterministic_expansion_uses_current_story_markers():
+    packet = StoryParserService().parse(
+        "James Comey was indicted over an X post showing seashells arranged as 8647."
+    )
+
+    semantic_queries = packet.query_families["semantic_paraphrase"]
+
+    assert any("Comey" in query and "8647" in query for query in semantic_queries)
+    assert any("Comey" in query and "indicted" in query for query in semantic_queries)
 
 
 def test_story_parser_semantic_query_expansion_disabled_by_default(monkeypatch):
@@ -129,6 +142,44 @@ def test_story_parser_semantic_query_expansion_appends_valid_queries(monkeypatch
     assert "Republicans uphold Trump Cuba sanctions" in packet.query_pack
     assert all("https://" not in query for query in packet.query_pack)
     assert "Cuba embargo" in packet.aliases
+    assert packet.query_expansion_diagnostics["llm_status"] == "expanded"
+    assert packet.query_expansion_diagnostics["llm_added_count"] == 3
+
+
+def test_story_parser_semantic_query_expansion_rejects_unanchored_queries(monkeypatch):
+    class DummyRouter:
+        def complete(self, messages, temperature=None, max_tokens=None):
+            joined = "\n".join(message["content"] for message in messages)
+            assert "previous quer" not in joined.lower()
+            return """
+            {
+              "queries": [
+                "unrelated healthcare budget fight",
+                "Senate Republicans Cuba embargo vote"
+              ],
+              "aliases": []
+            }
+            """
+
+    monkeypatch.setattr(
+        story_parser_service.settings,
+        "semantic_query_expansion_enabled",
+        True,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        story_parser_service,
+        "get_llm_router",
+        lambda agent_name=None: DummyRouter(),
+    )
+
+    packet = StoryParserService().parse(
+        "Senate Republicans reject attempt to end Trump's blockade of Cuba"
+    )
+
+    assert "Senate Republicans Cuba embargo vote" in packet.query_pack
+    assert "unrelated healthcare budget fight" not in packet.query_pack
+    assert packet.query_expansion_diagnostics["llm_rejected_count"] == 1
 
 
 def test_story_parser_semantic_query_expansion_fails_open(monkeypatch):

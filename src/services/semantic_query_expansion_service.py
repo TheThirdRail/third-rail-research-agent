@@ -56,11 +56,26 @@ class SemanticQueryExpansionService:
         actor = packet.aliases[0] if packet.aliases else (
             packet.actors[0] if packet.actors else ""
         )
+        primary_actor = packet.actors[0] if packet.actors else actor
         markers = " ".join(packet.distinctive_terms[:2])
         if actor and markers:
             queries.append(f"{actor} story {markers}")
         if actor and packet.action_verbs:
             queries.append(f"{actor} {packet.action_verbs[0]} latest")
+        if primary_actor and packet.action_verbs and packet.location:
+            queries.append(f"{primary_actor} {packet.action_verbs[0]} {packet.location}")
+        if primary_actor and packet.action_verbs and packet.quote_markers:
+            queries.append(
+                f"{primary_actor} {packet.action_verbs[0]} {packet.quote_markers[0]}"
+            )
+        if primary_actor and packet.number_markers and packet.platform_markers:
+            queries.append(
+                f"{primary_actor} {packet.platform_markers[0]} {packet.number_markers[0]}"
+            )
+        if primary_actor and packet.action_verbs and packet.visual_descriptors:
+            queries.append(
+                f"{primary_actor} {packet.action_verbs[0]} {packet.visual_descriptors[0]}"
+            )
         return queries
 
     def _opposing_frame_queries(self, packet: StoryPacket) -> list[str]:

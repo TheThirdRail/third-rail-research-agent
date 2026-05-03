@@ -69,6 +69,10 @@ DATABASE_URL=sqlite:///data/research_agent.db
 > [!TIP]
 > For PostgreSQL in production, use: `postgresql://user:password@host:5432/dbname`
 
+### Migration policy
+
+Run `research-agent init` after installing or deploying a new version. That command runs Alembic migrations to the latest revision, then applies the compatibility schema sync/backfill. Use `research-agent health --strict` afterward to confirm the database is at the current Alembic head.
+
 ---
 
 ## Section 5: LLM Provider Selection
@@ -254,11 +258,45 @@ OLLAMA_BASE_URL=http://localhost:11434
 
 ---
 
+## Section 8: Optional Semantic, Screenshot, and OCR Checks
+
+```ini
+SEMANTIC_MEMORY_ENABLED=false
+SEMANTIC_QUERY_EXPANSION_ENABLED=false
+SEMANTIC_VECTOR_STORE=none
+SCREENSHOT_CAPTURE_ENABLED=false
+SCREENSHOT_OCR_ENABLED=false
+SCREENSHOT_OCR_ENGINE=pytesseract
+```
+
+| Variable | Purpose |
+| :--- | :--- |
+| `SEMANTIC_QUERY_EXPANSION_ENABLED` | Enables LLM-generated search phrases from the current requested story only. It does not reuse prior queries. |
+| `SEMANTIC_VECTOR_STORE` | Keep `none` for the default SQL-backed semantic memory path. LanceDB is optional and not part of the default setup. |
+| `SCREENSHOT_CAPTURE_ENABLED` | Enables restricted Playwright screenshot capture for supported public visual/social evidence URLs. |
+| `SCREENSHOT_OCR_ENABLED` | Enables OCR extraction from captured screenshots when Tesseract is installed. |
+
+Validate OCR explicitly before relying on it:
+
+```powershell
+research-agent validate-ocr --force --fixtures tests/fixtures/ocr
+```
+
+Run full-pipeline benchmark checks explicitly:
+
+```powershell
+research-agent benchmark --live --live-limit 1 --format markdown
+```
+
+---
+
 ## Quick Start Checklist
 
 - [ ] Copy `.env.example` to `.env`
 - [ ] Choose your `LLM_PROVIDER` (recommend `openrouter` to start)
 - [ ] Get API key for your chosen provider
 - [ ] Paste API key into `.env`
+- [ ] Run migrations and config backfill: `research-agent init`
+- [ ] Check readiness: `research-agent health --strict`
 - [ ] Run the backend: `uvicorn src.api.main:app --reload`
 - [ ] Select specific models in the UI Settings page

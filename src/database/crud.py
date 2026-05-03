@@ -201,6 +201,7 @@ class AnalysisCRUD:
         coverage_snapshot_json: dict | None = None,
         candidate_census_json: dict | None = None,
         visual_evidence_json: dict | None = None,
+        report_validation_warnings_json: list[str] | None = None,
         agent_handoff_snapshot_json: dict | None = None,
     ) -> Analysis:
         """Create analysis for a story."""
@@ -220,6 +221,9 @@ class AnalysisCRUD:
             coverage_snapshot_json=json.dumps(coverage_snapshot_json or {}),
             candidate_census_json=json.dumps(candidate_census_json or {}),
             visual_evidence_json=json.dumps(visual_evidence_json or {}),
+            report_validation_warnings_json=json.dumps(
+                report_validation_warnings_json or []
+            ),
             agent_handoff_snapshot_json=json.dumps(agent_handoff_snapshot_json or {}),
         )
         self.db.add(analysis)
@@ -262,6 +266,7 @@ class AnalysisRunCRUD:
         status: str,
         coverage_snapshot: dict | None = None,
         candidate_census: dict | None = None,
+        report_validation_warnings: list[str] | None = None,
         error: str | None = None,
     ) -> AnalysisRun | None:
         run = self.db.query(AnalysisRun).filter(AnalysisRun.id == run_id).first()
@@ -270,6 +275,8 @@ class AnalysisRunCRUD:
         run.status = status
         run.coverage_snapshot_json = json.dumps(coverage_snapshot or {})
         run.candidate_census_json = json.dumps(candidate_census or {})
+        if report_validation_warnings is not None:
+            run.report_validation_warnings_json = json.dumps(report_validation_warnings)
         run.error = error
         run.completed_at = datetime.utcnow()
         self.db.commit()

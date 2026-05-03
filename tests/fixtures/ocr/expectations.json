@@ -1,0 +1,14 @@
+{
+  "fixtures": [
+    {
+      "image": "clean_text.png",
+      "expected_text": "VISIBLE OCR 8647",
+      "min_score": 0.67
+    },
+    {
+      "image": "screenshot_text.png",
+      "expected_text": "SOURCE POST 2026",
+      "min_score": 0.67
+    }
+  ]
+}

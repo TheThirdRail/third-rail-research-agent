@@ -5,8 +5,8 @@ Built to provide multi-source aggregation, a 9-point bias classification, semant
 
 ## Features
 
-- **Multi-Source Aggregation**: Pulls and extracts coverage across the political spectrum using curated RSS feeds and DuckDuckGo search with LLM-generated **Semantic Query Expansion**.
-- **Semantic Memory & Vector Search**: Powered by LanceDB to index and retrieve source-grounded chunks, ensuring agent reasoning is backed by original facts rather than summaries.
+- **Multi-Source Aggregation**: Pulls and extracts coverage across the political spectrum using curated RSS feeds and DuckDuckGo search with current-story **Semantic Query Expansion**.
+- **Semantic Memory**: Indexes source-grounded chunks in SQL by default so agent reasoning can retrieve original facts rather than only summaries. Optional external vector backends are configured separately.
 - **9-Point Bias Classification**: Rates sources from Far Left (-4) to Far Right (+4) using local datasets and LLM fallback, enforcing ideological balance in research.
 - **Fact vs. Opinion & Visual Evidence**: Distinguishes verifiable facts and directly observable visual evidence from editorial interpretation and legal characterization.
 - **Multi-LLM Support**: Supports OpenRouter, Gemini, Anthropic, Groq, Mistral, Cerebras, SambaNova, OpenAI, and local Ollama (via LiteLLM).
@@ -38,16 +38,19 @@ Edit `.env` and configure at least one LLM provider. **OpenRouter** is recommend
 LLM_PROVIDER=openrouter
 OPENROUTER_API_KEY=your_key_here
 
-# Enable semantic features (requires LanceDB and sentence-transformers)
+# Optional semantic features
 SEMANTIC_MEMORY_ENABLED=true
 SEMANTIC_QUERY_EXPANSION_ENABLED=true
-VECTOR_STORE_PROVIDER=lancedb
+SEMANTIC_VECTOR_STORE=none
 ```
 
 ### 3. Initialize & Run
 ```bash
-# Initialize SQLite database & Vector Store
+# Initialize SQLite database and run Alembic migrations
 research-agent init
+
+# Verify provider, schema, migration, screenshot, and OCR readiness
+research-agent health --strict
 
 # Test your LLM connection
 research-agent test-llm
@@ -74,6 +77,13 @@ research-agent analyze --describe "New tax bill passed"
 research-agent analyze --url "https://example.com/news/article"
 ```
 
+**Operational Checks**
+```bash
+research-agent health --strict
+research-agent validate-ocr --force
+research-agent benchmark --live --live-limit 1 --format markdown
+```
+
 **Manage Your Channel Profile**
 ```bash
 research-agent profile upload -f my-channel.yaml
@@ -82,7 +92,7 @@ research-agent profile show
 
 ## Architecture & Project Structure
 
-Research Agent uses **CrewAI** for multi-agent orchestration, **LanceDB** for vector storage, **FastAPI** for its backend API, and **SQLAlchemy** for SQLite data persistence.
+Research Agent uses **CrewAI** for multi-agent orchestration, **FastAPI** for its backend API, and **SQLAlchemy/Alembic** for SQLite data persistence. SQL-backed semantic memory is the default local retrieval path; LanceDB remains optional and out of the default setup.
 
 ```
 research-agent/
@@ -96,7 +106,7 @@ research-agent/
 │   ├── core/          # Configuration, LLMRouter, EmbeddingProvider 
 │   └── services/      # Business logic (SemanticMemoryService, StoryParserService)
 ├── config/            # YAML configs (bias_sources, rss_feeds)
-├── data/              # SQLite DB and LanceDB vector store
+├── data/              # SQLite DB and local artifacts
 ├── docs/              # Implementation guides (Semantic Search, etc.)
 ├── tests/             # Pytest test suite
 ├── web/               # Next.js frontend (in development)

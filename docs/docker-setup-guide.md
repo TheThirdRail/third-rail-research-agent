@@ -143,6 +143,17 @@ Common issues:
 - Missing API keys in `.env`
 - Port 8000 already in use (change `API_PORT` in `.env`)
 
+### Database migrations
+
+Alembic migrations are explicit. After building a new backend image or pulling schema changes, run:
+
+```powershell
+docker compose exec backend research-agent init
+docker compose exec backend research-agent health --strict
+```
+
+The backend still keeps startup schema sync as a compatibility fallback, but deployment should treat `research-agent init` as the migration step before serving traffic.
+
 ### Frontend shows "Cannot connect to API"
 
 1. Make sure backend is running: `docker compose ps`

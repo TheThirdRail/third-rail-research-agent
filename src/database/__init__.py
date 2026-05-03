@@ -32,9 +32,11 @@ from src.database.models import (
 from src.database.session import (
     SessionLocal,
     engine,
+    get_alembic_revision_status,
     get_db,
     get_session,
     init_db,
+    run_alembic_upgrade,
 )
 
 __all__ = [
@@ -70,5 +72,7 @@ __all__ = [
     "SessionLocal",
     "get_db",
     "get_session",
+    "get_alembic_revision_status",
     "init_db",
+    "run_alembic_upgrade",
 ]

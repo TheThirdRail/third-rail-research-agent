@@ -259,6 +259,8 @@ def test_end_to_end_seed_url_produces_deterministic_report(monkeypatch, tmp_path
     assert diagnostics["analysis_run"]["options_snapshot"][
         "required_bucket_groups"
     ] == ["left_side", "right_side"]
+    assert diagnostics["report_validation_warnings"] == result["warnings"]
+    assert diagnostics["analysis_run"]["report_validation_warnings"] == result["warnings"]
     post_retrieval = AnalysisService().get_handoff(
         result["story_id"],
         "post_retrieval",
@@ -634,3 +636,7 @@ def test_failed_retrieval_persists_run_options_and_candidate_diagnostics(
     assert "right_side" in coverage["missing_buckets"]
     assert "right_side" in census["missing_buckets"]
     assert candidates
+    diagnostics = AnalysisService().get_diagnostics(story.id)
+    assert diagnostics is not None
+    assert "right_side" in diagnostics["coverage"]["missing_buckets"]
+    assert "right_side" in diagnostics["candidate_census"]["missing_buckets"]

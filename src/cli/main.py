@@ -1,6 +1,8 @@
 """CLI entry point for Research Agent."""
 
 import importlib.util
+import json
+import re
 from pathlib import Path
 
 import click
@@ -10,9 +12,11 @@ from rich.panel import Panel
 from rich.table import Table
 
 from src.core.config import settings
-from src.database import init_db
+from src.database import get_alembic_revision_status, init_db, run_alembic_upgrade
 
 console = Console()
+
+DEFAULT_OCR_FIXTURE_DIR = Path("tests/fixtures/ocr")
 
 
 def load_channel_topics() -> list[str]:
@@ -75,6 +79,143 @@ def _pytesseract_ocr_available() -> tuple[bool, str]:
         return False, f"OCR smoke test failed: {exc}"
 
     return True, "pytesseract OCR smoke test completed."
+
+
+def _ocr_image_text(image_path: Path) -> str:
+    """Extract OCR text from an image using the configured OCR engine."""
+    if settings.screenshot_ocr_engine != "pytesseract":
+        raise RuntimeError(f"Unsupported OCR engine: {settings.screenshot_ocr_engine}")
+    try:
+        import pytesseract  # type: ignore[import-not-found]
+    except Exception as exc:
+        raise RuntimeError(f"pytesseract is unavailable: {exc}") from exc
+    try:
+        return str(pytesseract.image_to_string(str(image_path))).strip()
+    except Exception as exc:
+        raise RuntimeError(f"OCR failed for {image_path}: {exc}") from exc
+
+
+def _normalize_ocr_text(value: str) -> list[str]:
+    """Normalize OCR text into comparable tokens."""
+    return re.findall(r"[a-z0-9]+", value.lower())
+
+
+def _score_ocr_match(expected: str, actual: str) -> float:
+    """Return the share of expected tokens present in actual OCR output."""
+    expected_tokens = _normalize_ocr_text(expected)
+    if not expected_tokens:
+        return 0.0
+    actual_tokens = set(_normalize_ocr_text(actual))
+    matched = sum(1 for token in expected_tokens if token in actual_tokens)
+    return round(matched / len(expected_tokens), 6)
+
+
+def validate_ocr_fixtures(fixtures_dir: Path) -> dict[str, object]:
+    """Run OCR over fixture images and return a serializable validation report."""
+    expectations_path = fixtures_dir / "expectations.json"
+    if not expectations_path.exists():
+        return {
+            "status": "failed",
+            "fixture_dir": str(fixtures_dir),
+            "passed_count": 0,
+            "failed_count": 1,
+            "results": [
+                {
+                    "image": "",
+                    "status": "failed",
+                    "expected_text": "",
+                    "actual_text": "",
+                    "score": 0.0,
+                    "error": f"Missing OCR expectations file: {expectations_path}",
+                }
+            ],
+        }
+
+    data = json.loads(expectations_path.read_text(encoding="utf-8"))
+    fixtures = data.get("fixtures", [])
+    results = []
+    for fixture in fixtures:
+        image_name = str(fixture.get("image", ""))
+        expected_text = str(fixture.get("expected_text", ""))
+        min_score = float(fixture.get("min_score", 1.0))
+        image_path = fixtures_dir / image_name
+        if not image_name or not image_path.exists():
+            results.append(
+                {
+                    "image": image_name,
+                    "status": "failed",
+                    "expected_text": expected_text,
+                    "actual_text": "",
+                    "score": 0.0,
+                    "error": f"Missing OCR fixture image: {image_path}",
+                }
+            )
+            continue
+        try:
+            actual_text = _ocr_image_text(image_path)
+            score = _score_ocr_match(expected_text, actual_text)
+            passed = score >= min_score
+            results.append(
+                {
+                    "image": image_name,
+                    "status": "passed" if passed else "failed",
+                    "expected_text": expected_text,
+                    "actual_text": actual_text,
+                    "score": score,
+                    "min_score": min_score,
+                    "error": "" if passed else "OCR text did not match expectation.",
+                }
+            )
+        except Exception as exc:
+            results.append(
+                {
+                    "image": image_name,
+                    "status": "failed",
+                    "expected_text": expected_text,
+                    "actual_text": "",
+                    "score": 0.0,
+                    "min_score": min_score,
+                    "error": str(exc),
+                }
+            )
+
+    passed_count = sum(1 for result in results if result["status"] == "passed")
+    failed_count = len(results) - passed_count
+    return {
+        "status": "passed" if failed_count == 0 and results else "failed",
+        "fixture_dir": str(fixtures_dir),
+        "passed_count": passed_count,
+        "failed_count": failed_count,
+        "results": results,
+    }
+
+
+def _format_ocr_validation_markdown(report: dict[str, object]) -> str:
+    """Format OCR validation results for console output."""
+    lines = [
+        "# OCR Validation Report",
+        "",
+        "| Metric | Value |",
+        "|---|---:|",
+        f"| Status | {report['status']} |",
+        f"| Passed | {report['passed_count']} |",
+        f"| Failed | {report['failed_count']} |",
+        "",
+        "| Image | Status | Score | Expected | Actual/Error |",
+        "|---|---|---:|---|---|",
+    ]
+    for result in report["results"]:  # type: ignore[index]
+        actual_or_error = result.get("actual_text") or result.get("error")  # type: ignore[union-attr]
+        lines.append(
+            "| {image} | {status} | {score:.3f} | {expected_text} | {actual} |".format(
+                image=result.get("image", ""),  # type: ignore[union-attr]
+                status=result.get("status", ""),  # type: ignore[union-attr]
+                score=float(result.get("score", 0.0)),  # type: ignore[union-attr]
+                expected_text=result.get("expected_text", ""),  # type: ignore[union-attr]
+                actual=actual_or_error,
+            )
+        )
+    return "\n".join(lines) + "\n"
 
 
 def _provider_key_configured(provider: str) -> bool:
@@ -293,7 +434,7 @@ def _health_rows() -> list[tuple[str, str, str, str]]:
                         "OCR",
                         "error",
                         ocr_detail,
-                        "Install pytesseract/Tesseract or disable screenshot OCR.",
+                        "Install pytesseract/Tesseract or run `research-agent validate-ocr --force`.",
                     )
                 )
         else:
@@ -302,7 +443,7 @@ def _health_rows() -> list[tuple[str, str, str, str]]:
                     "OCR",
                     "error",
                     "SCREENSHOT_OCR_ENABLED=true but pytesseract is unavailable.",
-                    "Install pytesseract/Tesseract or disable screenshot OCR.",
+                    "Install pytesseract/Tesseract or run `research-agent validate-ocr --force`.",
                 )
             )
     else:
@@ -315,19 +456,9 @@ def _health_rows() -> list[tuple[str, str, str, str]]:
             )
         )
 
-    if Path("alembic.ini").exists() and (
-        Path("migrations").exists() or Path("alembic").exists()
-    ):
-        rows.append(("Migrations", "ok", "Alembic files are present.", ""))
-    else:
-        rows.append(
-            (
-                "Migrations",
-                "warn",
-                "No Alembic migration chain is present; startup schema sync is in use.",
-                "Convert bootstrap schema sync to versioned migrations.",
-            )
-        )
+    migration_status, migration_detail = get_alembic_revision_status()
+    migration_action = "" if migration_status == "ok" else "Run `research-agent init`."
+    rows.append(("Migrations", migration_status, migration_detail, migration_action))
 
     for warning in settings.validate_feature_dependencies():
         rows.append(("Feature config", "warn", warning, "Review .env settings."))
@@ -337,14 +468,16 @@ def _health_rows() -> list[tuple[str, str, str, str]]:
 
 @click.group()
 @click.version_option(version="0.1.0", prog_name="research-agent")
-def cli() -> None:
+@click.pass_context
+def cli(ctx: click.Context) -> None:
     """Research Agent - AI-powered news research for YouTube creators.
 
     Find relevant stories, analyze political bias across sources,
     separate facts from opinions, and generate content outlines.
     """
-    # Initialize database on startup
-    init_db()
+    # Initialize database on startup. The explicit init command runs migrations first.
+    if ctx.invoked_subcommand != "init":
+        init_db()
 
 
 @cli.command()
@@ -832,6 +965,120 @@ def health(strict: bool) -> None:
     console.print("[bold green]Health check completed.[/bold green]")
 
 
+@cli.command(name="validate-ocr")
+@click.option(
+    "--fixtures",
+    type=click.Path(path_type=Path),
+    default=DEFAULT_OCR_FIXTURE_DIR,
+    help="Directory containing OCR fixture images and expectations.json.",
+)
+@click.option("--format", "output_format", type=click.Choice(["markdown", "json"]), default="markdown")
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Run validation even when SCREENSHOT_OCR_ENABLED is false.",
+)
+def validate_ocr(fixtures: Path, output_format: str, force: bool) -> None:
+    """Validate screenshot OCR against repo-owned fixture images."""
+    if not settings.screenshot_ocr_enabled and not force:
+        console.print(
+            "[bold red]OCR validation skipped:[/bold red] "
+            "SCREENSHOT_OCR_ENABLED=false. Re-run with --force to validate setup."
+        )
+        raise click.Abort() from None
+
+    report = validate_ocr_fixtures(fixtures)
+    if output_format == "json":
+        console.print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        console.print(_format_ocr_validation_markdown(report))
+    if report["status"] != "passed":
+        raise click.Abort() from None
+
+
+@cli.command()
+@click.option(
+    "--fixtures",
+    type=click.Path(path_type=Path),
+    default=Path("tests/fixtures/benchmarks"),
+    help="Benchmark fixture directory.",
+)
+@click.option("--live", is_flag=True, help="Run fixture seeds through AnalysisService.")
+@click.option("--live-limit", type=int, default=None, help="Limit live fixture attempts.")
+@click.option(
+    "--diagnostics-story-id",
+    multiple=True,
+    help="Include persisted diagnostics for a story ID. May be repeated.",
+)
+@click.option("--format", "output_format", type=click.Choice(["markdown", "json", "html"]), default="markdown")
+@click.option("--output", type=click.Path(path_type=Path), default=None)
+@click.option("--baseline", type=click.Path(path_type=Path), default=None)
+@click.option(
+    "--fail-on-regression",
+    is_flag=True,
+    help="Exit non-zero when live/fixture/baseline quality checks fail.",
+)
+def benchmark(
+    fixtures: Path,
+    live: bool,
+    live_limit: int | None,
+    diagnostics_story_id: tuple[str, ...],
+    output_format: str,
+    output: Path | None,
+    baseline: Path | None,
+    fail_on_regression: bool,
+) -> None:
+    """Run retrieval quality benchmarks and optional live pipeline checks."""
+    from scripts.run_retrieval_benchmark import (
+        apply_baseline,
+        format_html,
+        format_markdown,
+        load_baseline,
+        run_benchmarks,
+        run_combined_benchmark,
+    )
+
+    report = (
+        run_combined_benchmark(
+            fixtures,
+            list(diagnostics_story_id),
+            live_run=live,
+            live_limit=live_limit,
+        )
+        if live or diagnostics_story_id
+        else run_benchmarks(fixtures)
+    )
+    if baseline:
+        try:
+            report = apply_baseline(report, load_baseline(baseline))
+        except Exception as exc:
+            raise click.ClickException(f"Benchmark baseline error: {exc}") from exc
+
+    if output_format == "json":
+        content = json.dumps(report, indent=2, sort_keys=True)
+    elif output_format == "html":
+        content = format_html(report)
+    else:
+        content = format_markdown(report)
+
+    if output:
+        output.write_text(content, encoding="utf-8")
+        console.print(f"[bold green]Benchmark written:[/bold green] {output}")
+    else:
+        console.print(content)
+
+    fixture_report = report.get("fixtures", report)
+    diagnostics_report = report.get("diagnostics", {}) if "fixtures" in report else {}
+    live_report = report.get("live", {}) if "fixtures" in report else {}
+    if fail_on_regression and (
+        fixture_report["aggregate"]["failed_fixture_count"]
+        or diagnostics_report.get("missing_story_ids")
+        or live_report.get("failed_count", 0)
+        or report.get("regressions", {}).get("failed_count", 0)
+    ):
+        raise click.Abort() from None
+
+
 @cli.command()
 @click.argument("story_id")
 @click.argument("stage")
@@ -909,12 +1156,18 @@ def test_llm(provider: str | None) -> None:
 def init() -> None:
     """Initialize the database and verify configuration."""
 
+    migrated, migration_detail = run_alembic_upgrade()
     init_db()
-    console.print("[bold green]✓[/bold green] Database initialized")
+    console.print("[bold green]OK[/bold green] Database initialized")
+    if migrated:
+        console.print(f"[bold green]OK[/bold green] {migration_detail}")
+    else:
+        console.print(f"[yellow]![/yellow] {migration_detail}")
+        console.print("[dim]Used startup schema sync fallback.[/dim]")
 
     # Check config files
     if settings.channel_profile_path.exists():
-        console.print("[bold green]✓[/bold green] Channel profile found")
+        console.print("[bold green]OK[/bold green] Channel profile found")
     else:
         console.print(
             "[yellow]![/yellow] Channel profile not found at config/channel_profile.yaml"
@@ -939,7 +1192,7 @@ def init() -> None:
     }
 
     if key_check.get(provider):
-        console.print(f"[bold green]✓[/bold green] API key configured for {provider}")
+        console.print(f"[bold green]OK[/bold green] API key configured for {provider}")
     else:
         console.print(
             f"[yellow]![/yellow] API key not set for {provider} (add to .env)"

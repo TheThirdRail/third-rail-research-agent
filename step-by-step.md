@@ -56,7 +56,7 @@ OPENROUTER_API_KEY=mock-or-v1-xxxxxxxx
 # Optional Semantic Memory Configuration
 SEMANTIC_MEMORY_ENABLED=true
 SEMANTIC_QUERY_EXPANSION_ENABLED=true
-VECTOR_STORE_PROVIDER=lancedb
+SEMANTIC_VECTOR_STORE=none
 ```
 
 *Other valid `LLM_PROVIDER` options: `openai`, `anthropic`, `gemini`, `groq`, `cerebras`, `sambanova`, `mistral`, `ollama`.*
@@ -65,8 +65,11 @@ VECTOR_STORE_PROVIDER=lancedb
 
 ### Step 5: Initialize and Test
 ```bash
-# Initialize SQLite database (creates data/research_agent.db)
+# Initialize SQLite database and run Alembic migrations
 research-agent init
+
+# Verify schema, migration revision, providers, screenshot, and OCR readiness
+research-agent health --strict
 
 # Test LLM connection
 research-agent test-llm
@@ -99,8 +102,12 @@ This spins up the following network:
 ```powershell
 docker compose ps
 docker compose logs -f backend
+docker compose exec backend research-agent init
+docker compose exec backend research-agent health --strict
 ```
 Check health: `curl http://localhost:8000/health`
+
+> Alembic migrations are explicit. Run `research-agent init` before serving a new build or after pulling schema changes. Runtime startup keeps a compatibility schema-sync fallback, but deployment should not rely on it as the primary migration path.
 
 ### Step 4: Using with Local Ollama
 To run completely offline or use free local inference, start the `local-llm` profile:
@@ -182,6 +189,24 @@ CODEX_OAUTH_MODE=disabled
 
 ---
 
+## Optional: OCR and Benchmarks
+
+Screenshot OCR is disabled by default. To validate a production OCR setup:
+
+```powershell
+research-agent validate-ocr --force --fixtures tests/fixtures/ocr --format markdown
+```
+
+Run a true live pipeline benchmark only when your providers/search configuration is ready:
+
+```powershell
+research-agent benchmark --live --live-limit 1 --format markdown
+```
+
+Use `--baseline path\to\baseline.json --fail-on-regression` to make persisted diagnostics thresholds fail the command.
+
+---
+
 ## Troubleshooting
 
 ### "No API key configured"
@@ -212,6 +237,9 @@ pip install -e ".[dev]"
 | Action | Command |
 |--------|---------|
 | Initialize DB | `research-agent init` |
+| Health check | `research-agent health --strict` |
+| Validate OCR | `research-agent validate-ocr --force` |
+| Live benchmark | `research-agent benchmark --live --live-limit 1` |
 | Test LLM | `research-agent test-llm` |
 | Discover | `research-agent discover` |
 | Start API (dev) | `uvicorn src.api.main:app --reload` |

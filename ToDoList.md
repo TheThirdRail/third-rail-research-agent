@@ -10,6 +10,19 @@ Use this as a coding-agent implementation checklist.
 
 ---
 
+# 2026-05-03 Implementation Update
+
+The remaining non-LanceDB work has been implemented as operational hardening:
+
+- Alembic remains explicit through `research-agent init`; `research-agent health --strict` now checks current database revision against Alembic head.
+- OCR has a reproducible validation command: `research-agent validate-ocr --force --fixtures tests/fixtures/ocr`.
+- Live full-pipeline benchmarking is exposed through `research-agent benchmark --live`, with optional baseline thresholds and `--fail-on-regression`.
+- Semantic query expansion remains current-story only. It does not read or reuse previous queries, older query history, or cross-story query memory. LLM-generated phrases are sanitized against current story anchors and fail open to deterministic query families.
+
+LanceDB production validation remains intentionally out of scope.
+
+---
+
 # Status Legend
 
 - **Incomplete**: Not implemented in a functional way yet.
@@ -167,7 +180,7 @@ Start simple:
 
 ## 4. Complete social-post visual evidence resolution
 
-**Status:** Partially implemented
+**Status:** Mostly implemented
 
 ### Current state
 
@@ -728,7 +741,7 @@ Add regression tests for:
 
 ### Current state
 
-The repo has diagnostics and observability hooks, benchmark fixtures, and a deterministic benchmark runner. It does not yet have a tuning dashboard or live end-to-end benchmark execution against real providers/search.
+The repo has diagnostics and observability hooks, benchmark fixtures, a deterministic benchmark runner, persisted diagnostics export, a static HTML benchmark dashboard, and an opt-in live pipeline benchmark mode. Live mode runs fixture seeds through `AnalysisService.analyze()` and folds completed story IDs into the same persisted diagnostics metrics.
 
 ### What needs to be implemented
 
@@ -763,15 +776,18 @@ The benchmark should track:
 
 - `python scripts/run_retrieval_benchmark.py --format markdown`
 - `python scripts/run_retrieval_benchmark.py --format json`
+- `python scripts/run_retrieval_benchmark.py --format html`
+- `python scripts/run_retrieval_benchmark.py --diagnostics-story-id <story_id> --format html --output benchmark.html`
+- `python scripts/run_retrieval_benchmark.py --live-run --live-limit 1 --format markdown`
 - Optional CI-strict mode: `--fail-on-regression`
 
-The runner reports fixture count, candidate count, precision, recall, accuracy, false positives, false negatives, bucket coverage, warnings, and failed fixture count. Current fixture output makes existing wrong-event false positives visible.
+The runner reports fixture count, candidate count, precision, recall, accuracy, false positives, false negatives, bucket coverage, warnings, and failed fixture count. It can also include persisted diagnostics metrics for selected story IDs, including RSS acceptance, semantic-scored candidate count, visual fallback rate, report-validation warning count, failed story count, and runtime. Live mode is intentionally opt-in because it can call configured providers/search/screenshot capture and writes to the configured database. Completed analyses now persist a dedicated `report_validation_warnings_json` snapshot, and diagnostics export falls back to visual limitations plus missing buckets only for older runs without that snapshot. Current fixture output makes existing wrong-event false positives visible.
 
 ### Remaining work
 
-- Add live benchmark execution against the full retrieval pipeline, not only deterministic fixture scoring.
-- Add RSS precision, semantic retrieval quality, visual fallback rate, report validation warning, and runtime metrics from real analysis diagnostics.
-- Optionally add HTML/dashboard export.
+- Validate live benchmark mode against the intended provider/search configuration and capture representative baseline outputs.
+- Backfill or ignore older runs that predate `report_validation_warnings_json`.
+- Decide whether the static HTML export should grow into an interactive dashboard.
 
 ---
 

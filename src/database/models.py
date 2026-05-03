@@ -172,6 +172,7 @@ class Analysis(Base):
     coverage_snapshot_json: Mapped[str] = mapped_column(Text, default="{}")
     candidate_census_json: Mapped[str] = mapped_column(Text, default="{}")
     visual_evidence_json: Mapped[str] = mapped_column(Text, default="{}")
+    report_validation_warnings_json: Mapped[str] = mapped_column(Text, default="[]")
     agent_handoff_snapshot_json: Mapped[str] = mapped_column(Text, default="{}")
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -211,6 +212,7 @@ class AnalysisRun(Base):
     options_snapshot_json: Mapped[str] = mapped_column(Text, default="{}")
     coverage_snapshot_json: Mapped[str] = mapped_column(Text, default="{}")
     candidate_census_json: Mapped[str] = mapped_column(Text, default="{}")
+    report_validation_warnings_json: Mapped[str] = mapped_column(Text, default="[]")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

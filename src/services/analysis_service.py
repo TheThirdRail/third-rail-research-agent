@@ -441,6 +441,7 @@ class AnalysisService:
                 coverage_snapshot_json=coverage,
                 candidate_census_json=candidate_census.model_dump(mode="json"),
                 visual_evidence_json=visual_bundle.model_dump(mode="json"),
+                report_validation_warnings_json=all_warnings,
             )
             source_ids_by_ref = {
                 f"S{index}": source.id
@@ -495,6 +496,13 @@ class AnalysisService:
                 sections=structured_sections,
                 coverage=coverage,
                 options_snapshot=options_snapshot,
+            )
+            self._analysis_run_crud.complete(
+                analysis_run.id,
+                status="retrieval_complete",
+                coverage_snapshot=coverage,
+                candidate_census=candidate_census.model_dump(mode="json"),
+                report_validation_warnings=all_warnings,
             )
 
             logger.info("Analysis complete for story %s", story.id[:8])
@@ -606,18 +614,44 @@ class AnalysisService:
             .order_by(RetrievalCandidate.created_at.asc())
             .all()
         )
+        analysis_run_payload = self._analysis_run_payload(latest_run)
+        run_coverage = (
+            analysis_run_payload.get("coverage_snapshot", {})
+            if analysis_run_payload
+            else {}
+        )
+        run_census = (
+            analysis_run_payload.get("candidate_census", {})
+            if analysis_run_payload
+            else {}
+        )
+        parsed_metadata = self._json_loads(story.parsed_metadata or "{}")
         return {
             "story_id": story_id,
             "analysis_id": analysis.id if analysis else None,
-            "analysis_run": self._analysis_run_payload(latest_run),
+            "analysis_run": analysis_run_payload,
+            "query_expansion_diagnostics": parsed_metadata.get(
+                "query_expansion_diagnostics",
+                {},
+            ),
             "coverage": self._json_loads(
                 analysis.coverage_snapshot_json if analysis else "{}"
-            ),
+            )
+            or run_coverage,
             "candidate_census": self._json_loads(
                 analysis.candidate_census_json if analysis else "{}"
-            ),
+            )
+            or run_census,
             "visual_evidence": self._json_loads(
                 analysis.visual_evidence_json if analysis else "{}"
+            ),
+            "report_validation_warnings": self._json_loads(
+                analysis.report_validation_warnings_json if analysis else "[]"
+            )
+            or (
+                analysis_run_payload.get("report_validation_warnings", [])
+                if analysis_run_payload
+                else []
             ),
             "agent_handoff_snapshot": self._json_loads(
                 analysis.agent_handoff_snapshot_json if analysis else "{}"
@@ -1172,6 +1206,9 @@ class AnalysisService:
             "options_snapshot": cls._json_loads(run.options_snapshot_json),
             "coverage_snapshot": cls._json_loads(run.coverage_snapshot_json),
             "candidate_census": cls._json_loads(run.candidate_census_json),
+            "report_validation_warnings": cls._json_loads(
+                run.report_validation_warnings_json
+            ),
             "error": run.error,
             "started_at": run.started_at.isoformat() if run.started_at else None,
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,

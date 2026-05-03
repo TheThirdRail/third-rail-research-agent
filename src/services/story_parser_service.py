@@ -111,9 +111,17 @@ class StoryParserService:
             must_not_have_terms=negative_clues,
             query_pack=queries,
             query_families={},
+            query_expansion_diagnostics={},
             disambiguation_notes="",
         )
         packet.query_families = query_expander.build_families(packet)
+        packet.query_expansion_diagnostics = self._query_expansion_diagnostics(
+            packet,
+            deterministic_used=True,
+            llm_status="disabled",
+            llm_added_count=0,
+            llm_rejected_count=0,
+        )
         packet.query_pack = self._dedupe_terms(
             packet.query_pack + query_expander.flatten(packet.query_families)
         )[:12]
@@ -156,7 +164,11 @@ class StoryParserService:
             )
             data = self._parse_llm_json(raw)
             max_queries = self._semantic_query_limit()
-            queries = self._sanitize_semantic_queries(data.get("queries"), max_queries)
+            queries, rejected_count = self._sanitize_semantic_queries(
+                data.get("queries"),
+                max_queries,
+                packet,
+            )
             aliases = self._sanitize_semantic_aliases(data.get("aliases"))
             if queries:
                 semantic_queries = packet.query_families.setdefault(
@@ -175,8 +187,22 @@ class StoryParserService:
                 ]
             if aliases:
                 packet.aliases = self._dedupe_terms(packet.aliases + aliases)[:10]
+            packet.query_expansion_diagnostics = self._query_expansion_diagnostics(
+                packet,
+                deterministic_used=True,
+                llm_status="expanded" if queries else "no_current_story_queries",
+                llm_added_count=len(queries),
+                llm_rejected_count=rejected_count,
+            )
         except Exception as exc:
             logger.warning("Semantic query expansion failed; using deterministic queries: %s", exc)
+            packet.query_expansion_diagnostics = self._query_expansion_diagnostics(
+                packet,
+                deterministic_used=True,
+                llm_status="failed_open",
+                llm_added_count=0,
+                llm_rejected_count=0,
+            )
 
     def _semantic_query_messages(
         self,
@@ -236,20 +262,60 @@ class StoryParserService:
         self,
         value: object,
         max_queries: int,
-    ) -> list[str]:
+        packet: StoryPacket,
+    ) -> tuple[list[str], int]:
         if not isinstance(value, list) or max_queries <= 0:
-            return []
+            return [], 0
         sanitized: list[str] = []
+        rejected_count = 0
         for item in value:
             if not isinstance(item, str):
+                rejected_count += 1
                 continue
             query = self._clean_search_phrase(item)
             if not query:
+                rejected_count += 1
                 continue
             word_count = len(query.split())
-            if 3 <= word_count <= 9:
+            if 3 <= word_count <= 9 and self._matches_current_story(packet, query):
                 sanitized.append(query)
-        return self._dedupe_terms(sanitized)[:max_queries]
+            else:
+                rejected_count += 1
+        return self._dedupe_terms(sanitized)[:max_queries], rejected_count
+
+    def _matches_current_story(self, packet: StoryPacket, query: str) -> bool:
+        """Require LLM queries to share current-story anchors."""
+        query_lower = query.lower()
+        for negative in packet.must_not_have_terms:
+            if negative and negative.lower() in query_lower:
+                return False
+        anchors = self._current_story_anchors(packet)
+        if not anchors:
+            return True
+        matches = [anchor for anchor in anchors if anchor.lower() in query_lower]
+        required_matches = 2 if len(anchors) >= 4 else 1
+        return len(matches) >= required_matches
+
+    def _current_story_anchors(self, packet: StoryPacket) -> list[str]:
+        """Build current-event anchors without reading prior query history."""
+        headline_terms = [
+            term
+            for term in re.findall(r"[A-Za-z0-9]{4,}", packet.canonical_headline)
+            if term.lower()
+            not in {"about", "after", "over", "with", "from", "that", "this"}
+        ][:8]
+        anchors = (
+            packet.actors
+            + packet.aliases
+            + packet.action_verbs
+            + packet.distinctive_terms
+            + packet.quote_markers
+            + packet.number_markers
+            + packet.platform_markers
+            + packet.visual_descriptors
+            + headline_terms
+        )
+        return self._dedupe_terms([anchor for anchor in anchors if len(anchor) >= 3])
 
     def _sanitize_semantic_aliases(self, value: object) -> list[str]:
         if not isinstance(value, list):
@@ -271,6 +337,27 @@ class StoryParserService:
         phrase = re.sub(r"[\"'`]", "", phrase)
         phrase = re.sub(r"\s+", " ", phrase)
         return phrase.strip()
+
+    @staticmethod
+    def _query_expansion_diagnostics(
+        packet: StoryPacket,
+        *,
+        deterministic_used: bool,
+        llm_status: str,
+        llm_added_count: int,
+        llm_rejected_count: int,
+    ) -> dict[str, object]:
+        return {
+            "source": "current_story_only",
+            "deterministic_used": deterministic_used,
+            "llm_status": llm_status,
+            "llm_added_count": llm_added_count,
+            "llm_rejected_count": llm_rejected_count,
+            "family_counts": {
+                family: len(queries)
+                for family, queries in packet.query_families.items()
+            },
+        }
 
     def _extract_headline(self, description: str) -> str:
         """Extract or generate a canonical headline from description."""

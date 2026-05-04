@@ -11,6 +11,7 @@ from src.core.exceptions import SourceExtractionError
 from src.database.models import (
     AgentFinding,
     AgentHandoff,
+    Analysis,
     AnalysisRun,
     Base,
     RetrievalCandidate,
@@ -406,6 +407,16 @@ def test_analysis_service_indexes_retained_sources_when_semantic_memory_enabled(
             .filter(AgentHandoff.story_id == result["story_id"])
             .all()
         )
+        run = (
+            session.query(AnalysisRun)
+            .filter(AnalysisRun.story_id == result["story_id"])
+            .one()
+        )
+        analysis = (
+            session.query(Analysis)
+            .filter(Analysis.story_id == result["story_id"])
+            .one()
+        )
 
     assert {document.document_type for document in documents} == {
         "seed_story",
@@ -415,6 +426,8 @@ def test_analysis_service_indexes_retained_sources_when_semantic_memory_enabled(
         "coverage_asymmetry",
     }
     assert len(documents) == 7
+    assert run.status == "retrieval_complete"
+    assert {document.analysis_id for document in documents} == {analysis.id}
     fact_document = next(
         document for document in documents if document.document_type == "fact_claims"
     )

@@ -41,7 +41,9 @@ OPENROUTER_API_KEY=your_key_here
 # Optional semantic features
 SEMANTIC_MEMORY_ENABLED=true
 SEMANTIC_QUERY_EXPANSION_ENABLED=true
+# SQL remains the default; set lancedb to enable the Phase 3 vector index.
 SEMANTIC_VECTOR_STORE=none
+# SEMANTIC_VECTOR_STORE=lancedb
 ```
 
 ### 3. Initialize & Run

@@ -457,6 +457,11 @@ class AnalysisService:
                 findings=structured_sections.source_findings,
                 source_ids_by_ref=source_ids_by_ref,
             )
+            self._attach_semantic_memory_analysis(
+                story_id=story.id,
+                analysis_id=analysis.id,
+                options_snapshot=options_snapshot,
+            )
             for source_ref, source_id in source_ids_by_ref.items():
                 key_framing = self._source_finding_value(
                     structured_sections,
@@ -777,6 +782,42 @@ class AnalysisService:
                 exc,
             )
             return False
+
+    def _attach_semantic_memory_analysis(
+        self,
+        *,
+        story_id: str,
+        analysis_id: str,
+        options_snapshot: dict[str, Any] | None = None,
+    ) -> None:
+        options_snapshot = options_snapshot or {}
+        if not options_snapshot.get(
+            "enable_semantic_memory",
+            getattr(settings, "semantic_memory_enabled", False),
+        ):
+            return
+        try:
+            semantic_memory = SemanticMemoryService(
+                self._session,
+                embedding_provider=get_embedding_provider(
+                    options_snapshot.get("embedding_provider"),
+                    options_snapshot.get("embedding_model"),
+                ),
+                vector_store_backend=options_snapshot.get("vector_store"),
+            )
+            attached = semantic_memory.attach_analysis(story_id, analysis_id)
+            logger.info(
+                "Semantic memory attached to analysis %s for story %s: documents=%d",
+                analysis_id[:8],
+                story_id[:8],
+                attached,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Semantic memory analysis attachment failed for story %s; continuing: %s",
+                story_id[:8],
+                exc,
+            )
 
     def _build_semantic_agent_contexts(
         self,

@@ -1,6 +1,7 @@
 import json
 
 import httpx
+import pytest
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import Session
 
@@ -9,6 +10,7 @@ from src.database.models import Base, SemanticChunk, SemanticDocument, Source, S
 from src.schemas.story_packet import StoryPacket
 from src.schemas.visual_evidence import VisualEvidenceRecord
 from src.services.candidate_semantic_scorer import CandidateSemanticScorer
+from src.services.lancedb_vector_store import LanceDBVectorStore
 from src.services.semantic_memory_service import SemanticMemoryService
 from src.services.vector_store_service import (
     VectorRecord,
@@ -476,6 +478,235 @@ def test_semantic_memory_search_uses_vector_store_when_configured(tmp_path):
         assert results[0].source_id == second.id
         assert results[0].similarity == 0.91
         assert results[0].metadata["source_ref"] == "S2"
+
+
+def test_semantic_memory_uses_real_lancedb_backend_with_sql_linked_metadata(tmp_path):
+    pytest.importorskip("lancedb")
+
+    class KeywordEmbeddingProvider:
+        provider_name = "keyword"
+        model_name = "keyword-v1"
+        dimensions = 3
+
+        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            vectors = []
+            for text in texts:
+                lowered = text.lower()
+                if "health" in lowered:
+                    vectors.append([1.0, 0.0, 0.0])
+                elif "sports" in lowered:
+                    vectors.append([0.0, 1.0, 0.0])
+                else:
+                    vectors.append([0.0, 0.0, 1.0])
+            return vectors
+
+    db_path = tmp_path / "semantic_lancedb.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    Base.metadata.create_all(bind=engine)
+
+    with Session(engine) as session:
+        story = Story(title="Health policy", description="seed")
+        session.add(story)
+        session.commit()
+        session.refresh(story)
+
+        source = Source(
+            story_id=story.id,
+            domain="health.example",
+            url="https://health.example/story",
+            title="Health policy source",
+            full_text="Health policy coverage discusses agency rules.",
+            political_bias=2,
+        )
+        session.add(source)
+        session.commit()
+        session.refresh(source)
+
+        service = SemanticMemoryService(
+            session,
+            embedding_provider=KeywordEmbeddingProvider(),
+            vector_store=LanceDBVectorStore(
+                db_path=tmp_path / "lancedb",
+                table_name="semantic_chunks",
+            ),
+        )
+        packet = StoryPacket(
+            canonical_headline="Health policy rule advances",
+            actors=["Health agency"],
+            action_verbs=["advances"],
+            distinctive_terms=["health"],
+            must_have_terms=["health"],
+            query_pack=["health policy"],
+        )
+        service.index_seed_story(
+            story.id,
+            packet,
+            "Health policy rule advances.",
+            {"source_ref": "seed"},
+            analysis_id="run-123",
+        )
+        document = service.index_source_article(
+            story_id=story.id,
+            source_id=source.id,
+            title=source.title,
+            text=source.full_text,
+            metadata={
+                "source_ref": "S1",
+                "domain": source.domain,
+                "bias_bucket": "right_side",
+                "bias_score": source.political_bias,
+            },
+            analysis_id="run-123",
+        )
+
+        results = service.search_similar_to_story(
+            story.id,
+            "health agency rules",
+            filters={"document_types": ["source_article"]},
+            top_k=1,
+        )
+
+        saved_document = session.get(SemanticDocument, document.id)
+        assert saved_document is not None
+        assert saved_document.analysis_id == "run-123"
+        assert len(results) == 1
+        assert results[0].source_id == source.id
+        assert results[0].metadata["analysis_id"] == "run-123"
+        assert results[0].metadata["semantic_document_id"] == document.id
+        assert results[0].metadata["semantic_chunk_id"]
+        assert results[0].metadata["source_id"] == source.id
+        assert results[0].metadata["source_ref"] == "S1"
+        assert results[0].metadata["document_type"] == "source_article"
+        assert results[0].metadata["domain"] == "health.example"
+        assert results[0].metadata["bias_bucket"] == "right_side"
+        assert str(results[0].metadata["exact_bias"]) == "2"
+
+
+def test_semantic_memory_falls_back_to_sql_when_vector_search_fails(
+    monkeypatch,
+    tmp_path,
+):
+    class KeywordEmbeddingProvider:
+        provider_name = "keyword"
+        model_name = "keyword-v1"
+        dimensions = 3
+
+        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            return [
+                [1.0, 0.0, 0.0] if "AI" in text else [0.0, 1.0, 0.0]
+                for text in texts
+            ]
+
+    class FailingVectorStore:
+        backend_name = "failing-vector"
+
+        def upsert(self, records: list[VectorRecord]) -> None:
+            return None
+
+        def search(self, query_vector, *, story_id, filters=None, top_k=4):
+            raise RuntimeError("vector index unavailable")
+
+        def delete_story(self, story_id: str) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "src.services.semantic_memory_service.settings.semantic_fail_open",
+        True,
+    )
+    db_path = tmp_path / "semantic_vector_fail_open.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    Base.metadata.create_all(bind=engine)
+
+    with Session(engine) as session:
+        story = Story(title="AI order", description="seed")
+        session.add(story)
+        session.commit()
+        session.refresh(story)
+
+        service = SemanticMemoryService(
+            session,
+            embedding_provider=KeywordEmbeddingProvider(),
+            vector_store=FailingVectorStore(),
+        )
+        document = service.index_source_article(
+            story_id=story.id,
+            source_id=None,
+            title="AI source",
+            text="AI order source text.",
+            metadata={"source_ref": "S1"},
+            analysis_id="run-fallback",
+        )
+
+        results = service.search_similar_to_story(
+            story.id,
+            "AI order",
+            filters={"document_types": ["source_article"]},
+            top_k=1,
+        )
+
+        assert session.get(SemanticDocument, document.id).analysis_id == "run-fallback"
+        assert len(results) == 1
+        assert results[0].metadata["source_ref"] == "S1"
+
+
+def test_semantic_memory_surfaces_vector_errors_when_fail_open_disabled(
+    monkeypatch,
+    tmp_path,
+):
+    class KeywordEmbeddingProvider:
+        provider_name = "keyword"
+        model_name = "keyword-v1"
+        dimensions = 3
+
+        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            return [[1.0, 0.0, 0.0] for _ in texts]
+
+    class FailingVectorStore:
+        backend_name = "failing-vector"
+
+        def upsert(self, records: list[VectorRecord]) -> None:
+            return None
+
+        def search(self, query_vector, *, story_id, filters=None, top_k=4):
+            raise RuntimeError("vector index unavailable")
+
+        def delete_story(self, story_id: str) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "src.services.semantic_memory_service.settings.semantic_fail_open",
+        False,
+    )
+    db_path = tmp_path / "semantic_vector_fail_closed.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    Base.metadata.create_all(bind=engine)
+
+    with Session(engine) as session:
+        story = Story(title="AI order", description="seed")
+        session.add(story)
+        session.commit()
+        session.refresh(story)
+
+        service = SemanticMemoryService(
+            session,
+            embedding_provider=KeywordEmbeddingProvider(),
+            vector_store=FailingVectorStore(),
+        )
+        service.index_source_article(
+            story_id=story.id,
+            source_id=None,
+            title="AI source",
+            text="AI order source text.",
+            metadata={"source_ref": "S1"},
+        )
+
+        with pytest.raises(RuntimeError, match="vector index unavailable"):
+            service.search_similar_to_story(
+                story.id,
+                "AI order",
+                filters={"document_types": ["source_article"]},
+                top_k=1,
+            )
 
 
 def test_semantic_memory_builds_agent_contexts_without_full_article_dumps(tmp_path):

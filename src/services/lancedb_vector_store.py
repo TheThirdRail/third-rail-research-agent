@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 from typing import Any
@@ -60,8 +61,15 @@ class LanceDBVectorStore:
         top_k: int = 4,
     ) -> list[VectorSearchResult]:
         table = self._open_table()
-        query = table.search(query_vector).limit(max(1, top_k * 4))
-        rows = query.to_list()
+        limit = max(1, top_k * 4)
+        where_clause = self._where_clause(story_id, filters or {})
+        try:
+            query = table.search(query_vector)
+            if where_clause:
+                query = query.where(where_clause)
+            rows = query.limit(limit).to_list()
+        except Exception:
+            rows = table.search(query_vector).limit(limit).to_list()
         results: list[VectorSearchResult] = []
         for row in rows:
             metadata = self._metadata(row)
@@ -85,7 +93,7 @@ class LanceDBVectorStore:
             table = self._open_table()
         except RuntimeError:
             return
-        self._delete_where(table, f"story_id = '{self._escape(story_id)}'")
+        self._delete_where(table, self._equals("story_id", story_id))
 
     def _open_db(self):
         self._db_path.mkdir(parents=True, exist_ok=True)
@@ -103,27 +111,77 @@ class LanceDBVectorStore:
         try:
             return db.open_table(self._table_name)
         except Exception:
-            return db.create_table(self._table_name, data=[self._row(sample)])
+            return db.create_table(
+                self._table_name,
+                schema=self._schema(len(sample.vector)),
+            )
+
+    @staticmethod
+    def _schema(vector_dimensions: int):
+        import pyarrow as pa
+
+        return pa.schema(
+            [
+                pa.field("id", pa.string()),
+                pa.field("vector", pa.list_(pa.float32(), vector_dimensions)),
+                pa.field("text", pa.string()),
+                pa.field("story_id", pa.string()),
+                pa.field("analysis_id", pa.string()),
+                pa.field("semantic_document_id", pa.string()),
+                pa.field("semantic_chunk_id", pa.string()),
+                pa.field("source_id", pa.string()),
+                pa.field("source_ref", pa.string()),
+                pa.field("document_type", pa.string()),
+                pa.field("domain", pa.string()),
+                pa.field("bias_bucket", pa.string()),
+                pa.field("exact_bias", pa.string()),
+                pa.field("metadata_json", pa.string()),
+            ]
+        )
 
     def _row(self, record: VectorRecord) -> dict[str, Any]:
         metadata = dict(record.metadata)
-        for key, value in metadata.items():
-            if isinstance(value, (dict, list, tuple, set)):
-                metadata[key] = str(value)
+        required = {
+            "story_id": self._string_value(metadata.get("story_id")),
+            "analysis_id": self._string_value(metadata.get("analysis_id")),
+            "semantic_document_id": self._string_value(
+                metadata.get("semantic_document_id")
+            ),
+            "semantic_chunk_id": self._string_value(
+                metadata.get("semantic_chunk_id", record.id)
+            ),
+            "source_id": self._string_value(metadata.get("source_id")),
+            "source_ref": self._string_value(metadata.get("source_ref")),
+            "document_type": self._string_value(metadata.get("document_type")),
+            "domain": self._string_value(metadata.get("domain")),
+            "bias_bucket": self._string_value(metadata.get("bias_bucket")),
+            "exact_bias": self._string_value(metadata.get("exact_bias")),
+        }
         return {
             "id": record.id,
             "vector": record.vector,
             "text": record.text,
-            **metadata,
+            **required,
+            "metadata_json": json.dumps(metadata, sort_keys=True, default=str),
         }
 
     @staticmethod
     def _metadata(row: dict[str, Any]) -> dict[str, Any]:
-        return {
+        metadata_json = row.get("metadata_json")
+        parsed: dict[str, Any] = {}
+        if metadata_json:
+            try:
+                loaded = json.loads(str(metadata_json))
+                if isinstance(loaded, dict):
+                    parsed = loaded
+            except json.JSONDecodeError:
+                parsed = {}
+        row_metadata = {
             key: value
             for key, value in row.items()
-            if key not in {"vector", "_distance", "_score"}
+            if key not in {"vector", "_distance", "_score", "metadata_json"}
         }
+        return {**parsed, **row_metadata}
 
     @staticmethod
     def _score(row: dict[str, Any]) -> float:
@@ -143,9 +201,11 @@ class LanceDBVectorStore:
             if key.endswith("s") and key[:-1] in metadata:
                 actual = metadata.get(key[:-1])
             if isinstance(expected, (list, tuple, set, frozenset)):
-                if actual not in expected:
+                if actual not in expected and str(actual) not in {
+                    str(item) for item in expected
+                }:
                     return False
-            elif actual != expected:
+            elif actual != expected and str(actual) != str(expected):
                 return False
         return True
 
@@ -153,8 +213,10 @@ class LanceDBVectorStore:
     def _delete_ids(table: Any, ids: list[str]) -> None:
         if not ids:
             return
-        quoted = ", ".join(f"'{LanceDBVectorStore._escape(item)}'" for item in ids)
-        LanceDBVectorStore._delete_where(table, f"id IN ({quoted})")
+        LanceDBVectorStore._delete_where(
+            table,
+            LanceDBVectorStore._in_values("id", ids),
+        )
 
     @staticmethod
     def _delete_where(table: Any, where: str) -> None:
@@ -166,3 +228,63 @@ class LanceDBVectorStore:
     @staticmethod
     def _escape(value: str) -> str:
         return value.replace("'", "''")
+
+    @staticmethod
+    def _string_value(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, (dict, list, tuple, set)):
+            return json.dumps(value, sort_keys=True, default=str)
+        return str(value)
+
+    @staticmethod
+    def _filter_column(key: str) -> str | None:
+        aliases = {
+            "document_types": "document_type",
+            "source_ids": "source_id",
+            "source_refs": "source_ref",
+            "agent_names": "agent_name",
+        }
+        column = aliases.get(key, key)
+        if column in {
+            "story_id",
+            "analysis_id",
+            "semantic_document_id",
+            "semantic_chunk_id",
+            "source_id",
+            "source_ref",
+            "document_type",
+            "domain",
+            "bias_bucket",
+            "exact_bias",
+        }:
+            return column
+        return None
+
+    @staticmethod
+    def _equals(column: str, value: Any) -> str:
+        return f"{column} = '{LanceDBVectorStore._escape(str(value))}'"
+
+    @staticmethod
+    def _in_values(column: str, values: list[Any]) -> str:
+        quoted = ", ".join(
+            f"'{LanceDBVectorStore._escape(str(item))}'" for item in values
+        )
+        return f"{column} IN ({quoted})"
+
+    @staticmethod
+    def _where_clause(story_id: str, filters: dict[str, Any]) -> str:
+        clauses = [LanceDBVectorStore._equals("story_id", story_id)]
+        for key, expected in filters.items():
+            if expected is None:
+                continue
+            column = LanceDBVectorStore._filter_column(key)
+            if column is None or column == "story_id":
+                continue
+            if isinstance(expected, (list, tuple, set, frozenset)):
+                values = [item for item in expected if item is not None]
+                if values:
+                    clauses.append(LanceDBVectorStore._in_values(column, values))
+            else:
+                clauses.append(LanceDBVectorStore._equals(column, expected))
+        return " AND ".join(clauses)

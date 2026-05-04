@@ -89,13 +89,15 @@ class SemanticMemoryService:
         story_packet: StoryPacket,
         seed_text: str,
         metadata: dict[str, Any] | None = None,
+        *,
+        analysis_id: str | None = None,
     ) -> SemanticDocument:
         """Create a semantic document and chunks for a parsed seed story."""
         canonical_text = self._seed_story_text(story_packet, seed_text)
         return self._index_document(
             story_id=story_id,
             source_id=None,
-            analysis_id=None,
+            analysis_id=analysis_id,
             agent_name=None,
             document_type="seed_story",
             title=story_packet.canonical_headline,
@@ -110,12 +112,14 @@ class SemanticMemoryService:
         title: str,
         text: str,
         metadata: dict[str, Any] | None = None,
+        *,
+        analysis_id: str | None = None,
     ) -> SemanticDocument:
         """Create a semantic document and chunks for a retained source article."""
         return self._index_document(
             story_id=story_id,
             source_id=source_id,
-            analysis_id=None,
+            analysis_id=analysis_id,
             agent_name=None,
             document_type="source_article",
             title=title,
@@ -202,7 +206,6 @@ class SemanticMemoryService:
             metadata=merged_metadata,
         )
 
-
     def get_chunks_for_story(self, story_id: str) -> list[SemanticChunk]:
         """Return semantic chunks for a story ordered by document and chunk index."""
         return (
@@ -211,6 +214,39 @@ class SemanticMemoryService:
             .order_by(SemanticChunk.semantic_document_id, SemanticChunk.chunk_index)
             .all()
         )
+
+    def attach_analysis(self, story_id: str, analysis_id: str) -> int:
+        """Attach existing story memory to a persisted analysis record."""
+        documents = (
+            self._db.query(SemanticDocument)
+            .filter(SemanticDocument.story_id == story_id)
+            .all()
+        )
+        indexed_chunks: list[tuple[SemanticChunk, list[float]]] = []
+        for document in documents:
+            document.analysis_id = analysis_id
+            for chunk in document.chunks:
+                metadata = self._metadata_for_chunk(chunk)
+                metadata["analysis_id"] = analysis_id
+                chunk.metadata_json = json.dumps(metadata, sort_keys=True)
+                indexed_chunks.append((chunk, []))
+
+        self._db.flush()
+        if self._vector_store is not None and indexed_chunks:
+            embeddings = self._embed_texts(
+                [chunk.chunk_text for chunk, _ in indexed_chunks]
+            )
+            indexed_chunks = [
+                (chunk, embedding)
+                for (chunk, _old_embedding), embedding in zip(
+                    indexed_chunks,
+                    embeddings,
+                    strict=True,
+                )
+            ]
+            self._upsert_vector_records(indexed_chunks)
+        self._db.commit()
+        return len(documents)
 
     def search_similar_to_story(
         self,
@@ -588,9 +624,20 @@ class SemanticMemoryService:
         metadata.setdefault("document_type", getattr(document, "document_type", ""))
         metadata.setdefault("title", getattr(document, "title", ""))
         metadata.setdefault("agent_name", getattr(document, "agent_name", None))
+        metadata.setdefault("story_id", chunk.story_id)
+        metadata.setdefault("analysis_id", getattr(document, "analysis_id", None))
+        metadata.setdefault("semantic_document_id", chunk.semantic_document_id)
+        metadata.setdefault("semantic_chunk_id", chunk.id)
+        metadata.setdefault("source_id", chunk.source_id)
         metadata.setdefault("chunk_index", chunk.chunk_index)
         if "bias_bucket" not in metadata and "bias_score" in metadata:
             metadata["bias_bucket"] = self._bias_bucket(metadata.get("bias_score"))
+        if "exact_bias" not in metadata:
+            source = getattr(document, "source", None)
+            metadata["exact_bias"] = metadata.get(
+                "bias_score",
+                getattr(source, "exact_bias", None) if source is not None else None,
+            )
         return metadata
 
     def _metadata_matches(
@@ -815,6 +862,7 @@ class SemanticMemoryService:
                 metadata_json=json.dumps(
                     {
                         **metadata,
+                        "analysis_id": analysis_id,
                         "document_type": document_type,
                         "agent_name": agent_name,
                         "chunk_index": index,

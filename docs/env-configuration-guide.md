@@ -263,6 +263,7 @@ OLLAMA_BASE_URL=http://localhost:11434
 ```ini
 SEMANTIC_MEMORY_ENABLED=false
 SEMANTIC_QUERY_EXPANSION_ENABLED=false
+# SQL remains the default; use lancedb to enable the Phase 3 vector index.
 SEMANTIC_VECTOR_STORE=none
 SCREENSHOT_CAPTURE_ENABLED=false
 SCREENSHOT_OCR_ENABLED=false
@@ -272,7 +273,7 @@ SCREENSHOT_OCR_ENGINE=pytesseract
 | Variable | Purpose |
 | :--- | :--- |
 | `SEMANTIC_QUERY_EXPANSION_ENABLED` | Enables LLM-generated search phrases from the current requested story only. It does not reuse prior queries. |
-| `SEMANTIC_VECTOR_STORE` | Keep `none` for the default SQL-backed semantic memory path. LanceDB is optional and not part of the default setup. |
+| `SEMANTIC_VECTOR_STORE` | Keep `none` for the default SQL-backed semantic memory path. Set `lancedb` to enable the opt-in Phase 3 vector index backed by SQL-linked metadata. |
 | `SCREENSHOT_CAPTURE_ENABLED` | Enables restricted Playwright screenshot capture for supported public visual/social evidence URLs. |
 | `SCREENSHOT_OCR_ENABLED` | Enables OCR extraction from captured screenshots when Tesseract is installed. |
 

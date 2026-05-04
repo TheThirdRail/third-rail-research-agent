@@ -44,6 +44,7 @@ dependencies = [
     # Database
     "sqlalchemy>=2.0.0",
     "alembic>=1.14.0",
+    "lancedb>=0.30.0",
     
     # API
     "fastapi>=0.115.0",

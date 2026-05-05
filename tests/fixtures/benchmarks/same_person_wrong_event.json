@@ -7,10 +7,12 @@
   },
   "story_packet_overrides": {
     "actors": ["James Comey"],
-    "must_have_terms": ["indictment", "indicted"],
+    "action_verbs": ["indicted", "indictment", "charged"],
+    "must_have_terms": ["indicted", "8647"],
     "must_not_have_terms": ["memoir", "book tour", "fired", "2017"],
     "number_markers": ["8647"],
-    "platform_markers": ["X", "Twitter"]
+    "platform_markers": ["X", "Twitter"],
+    "distinctive_terms": ["8647", "seashells"]
   },
   "simulated_candidates": [
     {

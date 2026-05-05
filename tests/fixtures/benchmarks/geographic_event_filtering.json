@@ -1,0 +1,88 @@
+{
+  "name": "geographic_event_filtering",
+  "description": "Benchmark for verifying location-based disambiguation when the same type of event occurs in different places",
+  "seed": {
+    "description": "Magnitude 6.2 earthquake strikes central Italy near Perugia, multiple buildings collapsed",
+    "url": null
+  },
+  "story_packet_overrides": {
+    "actors": ["earthquake", "Italy"],
+    "action_verbs": ["strikes", "struck", "hit"],
+    "location": "central italy",
+    "must_have_terms": ["earthquake", "Italy"],
+    "must_not_have_terms": ["Japan", "California", "Turkey", "Taiwan"],
+    "number_markers": ["6.2"],
+    "distinctive_terms": ["Perugia", "6.2"]
+  },
+  "simulated_candidates": [
+    {
+      "url": "https://apnews.com/italy-earthquake-perugia-2026",
+      "domain": "apnews.com",
+      "title": "Magnitude 6.2 Earthquake Strikes Central Italy Near Perugia",
+      "bias": 0,
+      "stage": "rss",
+      "text_excerpt": "A magnitude 6.2 earthquake struck central Italy near the city of Perugia early Tuesday, causing multiple buildings to collapse and injuring dozens.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.bbc.com/italy-quake-perugia",
+      "domain": "bbc.com",
+      "title": "Italy Earthquake: Buildings Collapse Near Perugia After 6.2 Tremor",
+      "bias": 0,
+      "stage": "site_search",
+      "text_excerpt": "Multiple buildings collapsed near Perugia, Italy after a 6.2 magnitude earthquake struck the central region, with rescue operations underway.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.foxnews.com/italy-earthquake-damage",
+      "domain": "foxnews.com",
+      "title": "Devastating Earthquake Hits Italy, Rescue Efforts Underway Near Perugia",
+      "bias": 2,
+      "stage": "site_search",
+      "text_excerpt": "A powerful 6.2 magnitude earthquake hit central Italy near Perugia, with emergency responders racing to rescue people trapped under collapsed buildings.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.cnn.com/japan-earthquake-march-2026",
+      "domain": "cnn.com",
+      "title": "Strong Earthquake Shakes Northern Japan, Tsunami Warning Issued",
+      "bias": -1,
+      "stage": "open_web",
+      "text_excerpt": "A magnitude 7.1 earthquake struck off the coast of northern Japan on Monday, prompting tsunami warnings across the Pacific coast.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "contains_disambiguation_exclusion"
+    },
+    {
+      "url": "https://www.reuters.com/california-quake-2026",
+      "domain": "reuters.com",
+      "title": "Moderate Earthquake Rattles Southern California",
+      "bias": 0,
+      "stage": "open_web",
+      "text_excerpt": "A moderate 4.8 magnitude earthquake was felt across southern California early Thursday morning. No major damage reported.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "contains_disambiguation_exclusion"
+    },
+    {
+      "url": "https://www.aljazeera.com/turkey-earthquake-2023",
+      "domain": "aljazeera.com",
+      "title": "Turkey Earthquake Death Toll Rises as Recovery Continues",
+      "bias": -1,
+      "stage": "open_web",
+      "text_excerpt": "The death toll from the devastating Turkey earthquake continues to rise as recovery operations enter their third week.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "contains_disambiguation_exclusion"
+    }
+  ],
+  "expectations": {
+    "correct_event_retained_min": 3,
+    "wrong_event_rejected_min": 3,
+    "must_have_terms_enforced": true,
+    "must_not_have_terms_enforced": true,
+    "location_filtering_effective": true,
+    "retained_must_include_buckets": ["center"],
+    "description": "Earthquakes are common events worldwide. The system must use geographic markers (Italy, Perugia), magnitude (6.2), and must-not-have terms (Japan, California, Turkey, Taiwan) to isolate only the specific Italian earthquake."
+  }
+}

@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -17,9 +17,31 @@ from scripts.export_diagnostics_report import (
 )
 from src.schemas.story_packet import StoryPacket
 from src.services.relevance_scorer_service import RelevanceScorerService
+from src.services.semantic_query_expansion_service import SemanticQueryExpansionService
 
 DEFAULT_FIXTURE_DIR = Path("tests/fixtures/benchmarks")
 PASSING_RELEVANCE_SCORE = 0.20
+
+# Default relevance weight profiles for tuning
+DEFAULT_WEIGHTS_NO_SEMANTIC = {
+    "entity_overlap": 0.30,
+    "event_overlap": 0.25,
+    "time_overlap": 0.15,
+    "place_overlap": 0.10,
+    "topic_match": 0.10,
+    "novelty": 0.10,
+}
+
+DEFAULT_WEIGHTS_SEMANTIC = {
+    "entity_overlap": 0.20,
+    "event_overlap": 0.15,
+    "time_overlap": 0.10,
+    "place_overlap": 0.05,
+    "topic_match": 0.10,
+    "distinctive_term_overlap": 0.15,
+    "semantic_similarity": 0.20,
+    "novelty": 0.05,
+}
 
 
 @dataclass(frozen=True)
@@ -39,6 +61,13 @@ class BenchmarkResult:
     accuracy: float
     bucket_coverage: dict[str, int]
     warnings: list[str]
+    rejection_reasons: dict[str, int] = field(default_factory=dict)
+    coverage_type_accuracy: float = 0.0
+    coverage_type_breakdown: dict[str, int] = field(default_factory=dict)
+    query_family_counts: dict[str, int] = field(default_factory=dict)
+    visual_evidence_expected: int = 0
+    visual_evidence_evaluated: bool = False
+    score_distribution: dict[str, float] = field(default_factory=dict)
 
     @property
     def passed(self) -> bool:
@@ -212,6 +241,13 @@ def evaluate_fixture(fixture: dict[str, Any]) -> BenchmarkResult:
     expected_retained = 0
     expected_rejected = 0
 
+    # Enhanced tracking
+    rejection_reasons: dict[str, int] = {}
+    coverage_type_correct = 0
+    coverage_type_total = 0
+    coverage_type_breakdown: dict[str, int] = {}
+    all_scores: list[float] = []
+
     for candidate in candidates:
         expected_state = candidate.get("expected_state")
         if expected_state not in {"retained", "relevance_rejected"}:
@@ -223,8 +259,27 @@ def evaluate_fixture(fixture: dict[str, Any]) -> BenchmarkResult:
             candidate_date=None,
             story_packet=packet,
         )
-        predicted_retained = result.total >= PASSING_RELEVANCE_SCORE
+        # A candidate is retained only if it scores above threshold AND has no rejection reason
+        predicted_retained = (
+            result.total >= PASSING_RELEVANCE_SCORE and result.rejection_reason is None
+        )
         expected_is_retained = expected_state == "retained"
+        all_scores.append(result.total)
+
+        # Track coverage type classification
+        coverage_type_breakdown[result.coverage_type] = (
+            coverage_type_breakdown.get(result.coverage_type, 0) + 1
+        )
+        expected_coverage = candidate.get("expected_coverage_type")
+        if expected_coverage:
+            coverage_type_total += 1
+            if result.coverage_type == expected_coverage:
+                coverage_type_correct += 1
+
+        # Track rejection reasons
+        if result.rejection_reason:
+            reason_key = result.rejection_reason.split(":")[0].strip()
+            rejection_reasons[reason_key] = rejection_reasons.get(reason_key, 0) + 1
 
         if expected_is_retained:
             expected_retained += 1
@@ -232,16 +287,49 @@ def evaluate_fixture(fixture: dict[str, Any]) -> BenchmarkResult:
                 true_positive += 1
             else:
                 false_negative += 1
+                warnings.append(
+                    f"FN: '{candidate.get('title', '')[:40]}' "
+                    f"scored {result.total:.3f} (rejected: {result.rejection_reason})"
+                )
         else:
             expected_rejected += 1
             if predicted_retained:
                 false_positive += 1
+                warnings.append(
+                    f"FP: '{candidate.get('title', '')[:40]}' "
+                    f"scored {result.total:.3f} (should reject)"
+                )
             else:
                 true_negative += 1
 
     precision = _ratio(true_positive, true_positive + false_positive)
     recall = _ratio(true_positive, true_positive + false_negative)
     accuracy = _ratio(true_positive + true_negative, expected_retained + expected_rejected)
+    coverage_type_accuracy = (
+        _ratio(coverage_type_correct, coverage_type_total)
+        if coverage_type_total > 0
+        else 0.0
+    )
+
+    # Query family evaluation
+    query_family_counts = _evaluate_query_families(packet)
+
+    # Visual evidence evaluation
+    media_pointers = fixture.get("media_pointers", [])
+    expectations = fixture.get("expectations", {})
+    visual_expected = expectations.get("visual_evidence_records_min", 0)
+    visual_evaluated = bool(media_pointers)
+
+    # Score distribution summary
+    score_distribution: dict[str, float] = {}
+    if all_scores:
+        sorted_scores = sorted(all_scores)
+        score_distribution = {
+            "min": round(sorted_scores[0], 4),
+            "max": round(sorted_scores[-1], 4),
+            "mean": round(sum(sorted_scores) / len(sorted_scores), 4),
+            "median": round(sorted_scores[len(sorted_scores) // 2], 4),
+        }
 
     return BenchmarkResult(
         name=str(fixture.get("name", "unknown")),
@@ -257,6 +345,13 @@ def evaluate_fixture(fixture: dict[str, Any]) -> BenchmarkResult:
         accuracy=accuracy,
         bucket_coverage=_bucket_coverage(candidates),
         warnings=warnings,
+        rejection_reasons=rejection_reasons,
+        coverage_type_accuracy=coverage_type_accuracy,
+        coverage_type_breakdown=coverage_type_breakdown,
+        query_family_counts=query_family_counts,
+        visual_evidence_expected=visual_expected,
+        visual_evidence_evaluated=visual_evaluated,
+        score_distribution=score_distribution,
     )
 
 
@@ -276,21 +371,76 @@ def format_markdown(report: dict[str, Any]) -> str:
         f"| Precision | {aggregate['precision']:.3f} |",
         f"| Recall | {aggregate['recall']:.3f} |",
         f"| Accuracy | {aggregate['accuracy']:.3f} |",
+        f"| Coverage Type Accuracy | {aggregate.get('coverage_type_accuracy', 0):.3f} |",
         f"| Failed Fixtures | {aggregate['failed_fixture_count']} |",
         "",
-        "| Fixture | Precision | Recall | Accuracy | FP | FN | Warnings |",
-        "|---|---:|---:|---:|---:|---:|---|",
+        "| Fixture | Precision | Recall | Accuracy | FP | FN | Cov.Type Acc. |",
+        "|---|---:|---:|---:|---:|---:|---:|",
     ]
     for result in report["results"]:
-        warning_text = "; ".join(result["warnings"]) if result["warnings"] else ""
-        row = dict(result)
-        row["warnings"] = warning_text
         lines.append(
             "| {name} | {precision:.3f} | {recall:.3f} | {accuracy:.3f} | "
-            "{false_positive} | {false_negative} | {warnings} |".format(
-                **row,
+            "{false_positive} | {false_negative} | {cov_acc:.3f} |".format(
+                name=result["name"],
+                precision=result["precision"],
+                recall=result["recall"],
+                accuracy=result["accuracy"],
+                false_positive=result["false_positive"],
+                false_negative=result["false_negative"],
+                cov_acc=result.get("coverage_type_accuracy", 0),
             )
         )
+
+    # Rejection reason breakdown
+    rejection_reasons = aggregate.get("rejection_reasons", {})
+    if rejection_reasons:
+        lines.extend([
+            "",
+            "## Rejection Reason Breakdown",
+            "",
+            "| Reason | Count |",
+            "|---|---:|",
+        ])
+        for reason, count in sorted(rejection_reasons.items(), key=lambda x: -x[1]):
+            lines.append(f"| {reason} | {count} |")
+
+    # Coverage type distribution
+    coverage_types = aggregate.get("coverage_type_breakdown", {})
+    if coverage_types:
+        lines.extend([
+            "",
+            "## Coverage Type Distribution",
+            "",
+            "| Type | Count |",
+            "|---|---:|",
+        ])
+        for ctype, count in sorted(coverage_types.items(), key=lambda x: -x[1]):
+            lines.append(f"| {ctype} | {count} |")
+
+    # Query family counts
+    query_families = aggregate.get("query_family_counts", {})
+    if query_families:
+        lines.extend([
+            "",
+            "## Query Family Generation",
+            "",
+            "| Family | Total Queries |",
+            "|---|---:|",
+        ])
+        for family, count in sorted(query_families.items()):
+            lines.append(f"| {family} | {count} |")
+
+    # Visual evidence summary
+    visual_count = aggregate.get("visual_fixtures_count", 0)
+    if visual_count:
+        lines.extend([
+            "",
+            "## Visual Evidence",
+            "",
+            f"| Visual Fixtures | {visual_count} |",
+            f"| Expected Records | {aggregate.get('visual_evidence_expected_total', 0)} |",
+        ])
+
     if report.get("regressions"):
         lines.extend(["", format_regression_markdown(report["regressions"]).rstrip()])
     return "\n".join(lines) + "\n"
@@ -579,14 +729,24 @@ def _story_packet(fixture: dict[str, Any]) -> StoryPacket:
     return StoryPacket(
         canonical_headline=str(description),
         actors=overrides.get("actors", []),
-        primary_action=str(overrides.get("primary_action", "")),
+        action_verbs=overrides.get("action_verbs", []),
+        location=overrides.get("location", ""),
         query_pack=overrides.get("query_pack", [str(description)]),
         must_have_terms=overrides.get("must_have_terms", []),
         must_not_have_terms=overrides.get("must_not_have_terms", []),
         number_markers=overrides.get("number_markers", []),
         platform_markers=overrides.get("platform_markers", []),
         visual_descriptors=overrides.get("visual_descriptors", []),
+        distinctive_terms=overrides.get("distinctive_terms", []),
+        aliases=overrides.get("aliases", []),
     )
+
+
+def _evaluate_query_families(packet: StoryPacket) -> dict[str, int]:
+    """Evaluate query family generation for a story packet."""
+    expander = SemanticQueryExpansionService()
+    families = expander.build_families(packet)
+    return {family: len(queries) for family, queries in families.items()}
 
 
 def _fixture_warnings(fixture: dict[str, Any]) -> list[str]:
@@ -626,6 +786,41 @@ def _aggregate(results: list[BenchmarkResult]) -> dict[str, Any]:
     fp = sum(result.false_positive for result in results)
     fn = sum(result.false_negative for result in results)
     candidate_count = sum(result.candidate_count for result in results)
+
+    # Aggregate rejection reasons across all fixtures
+    all_rejection_reasons: dict[str, int] = {}
+    for result in results:
+        for reason, count in result.rejection_reasons.items():
+            all_rejection_reasons[reason] = all_rejection_reasons.get(reason, 0) + count
+
+    # Aggregate coverage type breakdown
+    all_coverage_types: dict[str, int] = {}
+    for result in results:
+        for ctype, count in result.coverage_type_breakdown.items():
+            all_coverage_types[ctype] = all_coverage_types.get(ctype, 0) + count
+
+    # Aggregate query family counts
+    all_query_families: dict[str, int] = {}
+    for result in results:
+        for family, count in result.query_family_counts.items():
+            all_query_families[family] = all_query_families.get(family, 0) + count
+
+    # Coverage type accuracy across fixtures that have expected_coverage_type
+    coverage_type_results = [r for r in results if r.coverage_type_accuracy > 0]
+    avg_coverage_type_accuracy = (
+        round(
+            sum(r.coverage_type_accuracy for r in coverage_type_results)
+            / len(coverage_type_results),
+            6,
+        )
+        if coverage_type_results
+        else 0.0
+    )
+
+    # Visual evidence tracking
+    visual_fixtures = [r for r in results if r.visual_evidence_evaluated]
+    visual_expected_total = sum(r.visual_evidence_expected for r in results)
+
     return {
         "fixture_count": len(results),
         "candidate_count": candidate_count,
@@ -637,6 +832,12 @@ def _aggregate(results: list[BenchmarkResult]) -> dict[str, Any]:
         "recall": _ratio(tp, tp + fn),
         "accuracy": _ratio(tp + tn, tp + tn + fp + fn),
         "failed_fixture_count": sum(0 if result.passed else 1 for result in results),
+        "rejection_reasons": all_rejection_reasons,
+        "coverage_type_breakdown": all_coverage_types,
+        "coverage_type_accuracy": avg_coverage_type_accuracy,
+        "query_family_counts": all_query_families,
+        "visual_fixtures_count": len(visual_fixtures),
+        "visual_evidence_expected_total": visual_expected_total,
     }
 
 

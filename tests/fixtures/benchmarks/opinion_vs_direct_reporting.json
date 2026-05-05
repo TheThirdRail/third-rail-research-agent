@@ -1,0 +1,100 @@
+{
+  "name": "opinion_vs_direct_reporting",
+  "description": "Benchmark for verifying coverage type classification distinguishes opinion/editorial content from direct reporting, and that only direct coverage is retained",
+  "seed": {
+    "description": "EPA announces new emissions standards for power plants effective 2028",
+    "url": null
+  },
+  "story_packet_overrides": {
+    "actors": ["EPA", "Environmental Protection Agency"],
+    "action_verbs": ["announces", "announced", "issued"],
+    "must_have_terms": ["emissions standards", "power plants"],
+    "must_not_have_terms": ["water quality", "superfund", "pesticide"],
+    "number_markers": ["2028"],
+    "distinctive_terms": ["2028", "emissions standards"]
+  },
+  "simulated_candidates": [
+    {
+      "url": "https://apnews.com/epa-emissions-standards-2028",
+      "domain": "apnews.com",
+      "title": "EPA Announces New Emissions Standards for Power Plants Effective 2028",
+      "bias": 0,
+      "stage": "rss",
+      "text_excerpt": "The Environmental Protection Agency announced new emissions standards for power plants that will take effect in 2028, targeting carbon output from coal and natural gas facilities.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.nytimes.com/epa-power-plant-emissions",
+      "domain": "nytimes.com",
+      "title": "New EPA Rules Require Power Plants to Cut Emissions by 2028",
+      "bias": -1,
+      "stage": "site_search",
+      "text_excerpt": "The EPA issued sweeping new emissions standards requiring power plants to dramatically reduce carbon emissions by 2028 or face penalties.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.foxnews.com/epa-emissions-standards-report",
+      "domain": "foxnews.com",
+      "title": "EPA Emissions Standards for Power Plants: What It Means for 2028",
+      "bias": 2,
+      "stage": "site_search",
+      "text_excerpt": "The EPA announced new emissions standards for power plants effective 2028 that industry experts warn will impact coal-dependent communities across the midwest.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.wsj.com/opinion-epa-overreach-power-plants",
+      "domain": "wsj.com",
+      "title": "Opinion: EPA's Power Plant Rules Are Unconstitutional Overreach",
+      "bias": 2,
+      "stage": "site_search",
+      "text_excerpt": "Opinion: The EPA's new emissions standards for power plants represent an unconstitutional expansion of agency power that will raise energy costs for all Americans by 2028.",
+      "expected_state": "relevance_rejected",
+      "expected_coverage_type": "opinion",
+      "expected_rejection_reason": "coverage_type_not_direct"
+    },
+    {
+      "url": "https://www.huffpost.com/editorial-epa-not-enough",
+      "domain": "huffpost.com",
+      "title": "Editorial: EPA Emissions Standards Don't Go Far Enough for 2028",
+      "bias": -3,
+      "stage": "open_web",
+      "text_excerpt": "Editorial: While the EPA's new emissions standards for power plants are a step forward, the 2028 timeline is far too slow given the urgency of the climate crisis.",
+      "expected_state": "relevance_rejected",
+      "expected_coverage_type": "opinion",
+      "expected_rejection_reason": "coverage_type_not_direct"
+    },
+    {
+      "url": "https://www.epa.gov/water-quality-report-2026",
+      "domain": "epa.gov",
+      "title": "EPA Releases Annual Water Quality Standards Update",
+      "bias": 0,
+      "stage": "open_web",
+      "text_excerpt": "The EPA released its annual water quality standards report, addressing lead contamination and PFAS levels across municipal water systems.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "contains_disambiguation_exclusion"
+    },
+    {
+      "url": "https://www.sciencedaily.com/epa-superfund-cleanup",
+      "domain": "sciencedaily.com",
+      "title": "EPA Superfund Sites See Record Cleanup Progress",
+      "bias": 0,
+      "stage": "open_web",
+      "text_excerpt": "The EPA announced record progress on superfund site remediation across 14 states in 2026.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "contains_disambiguation_exclusion"
+    }
+  ],
+  "expectations": {
+    "correct_event_retained_min": 3,
+    "wrong_event_rejected_min": 2,
+    "opinion_correctly_classified_min": 2,
+    "direct_coverage_retained_min": 3,
+    "must_have_terms_enforced": true,
+    "must_not_have_terms_enforced": true,
+    "retained_must_include_buckets": ["left_side", "right_side", "center"],
+    "description": "The system must retain direct reporting about the event from multiple perspectives and correctly reject opinion/editorial articles as non-direct coverage. Unrelated EPA articles must be rejected via disambiguation."
+  }
+}

@@ -5,16 +5,103 @@
     "description": "Federal judge blocks executive order on immigration enforcement",
     "url": null
   },
+  "story_packet_overrides": {
+    "actors": ["federal judge", "executive order"],
+    "action_verbs": ["blocks", "blocked", "strikes down", "halts", "overrules"],
+    "must_have_terms": ["immigration", "executive order"],
+    "must_not_have_terms": ["asylum seeker memoir", "DACA renewal"]
+  },
   "simulated_candidates": [
-    {"url": "https://www.cnn.com/immigration-order-blocked", "domain": "cnn.com", "title": "Judge Strikes Down Immigration Executive Order", "bias": -1, "stage": "site_search"},
-    {"url": "https://www.msnbc.com/immigration-ruling", "domain": "msnbc.com", "title": "Federal Court Blocks Immigration Crackdown", "bias": -2, "stage": "site_search"},
-    {"url": "https://www.nytimes.com/immigration-court-order", "domain": "nytimes.com", "title": "Court Ruling Halts Immigration Enforcement Changes", "bias": -1, "stage": "site_search"},
-    {"url": "https://www.washingtonpost.com/immigration-legal-battle", "domain": "washingtonpost.com", "title": "Legal Challenge Succeeds Against Immigration Order", "bias": -1, "stage": "site_search"},
-    {"url": "https://www.huffpost.com/immigration-victory", "domain": "huffpost.com", "title": "Major Win for Immigration Rights in Federal Court", "bias": -3, "stage": "open_web"},
-    {"url": "https://www.theguardian.com/us-immigration-ruling", "domain": "theguardian.com", "title": "US Judge Rules Against Immigration Executive Order", "bias": -2, "stage": "open_web"},
-    {"url": "https://apnews.com/immigration-court-ruling", "domain": "apnews.com", "title": "Federal Judge Blocks Executive Order on Immigration", "bias": 0, "stage": "rss"},
-    {"url": "https://www.foxnews.com/immigration-order-blocked", "domain": "foxnews.com", "title": "Activist Judge Blocks Immigration Enforcement Order", "bias": 2, "stage": "site_search"},
-    {"url": "https://www.dailywire.com/immigration-order", "domain": "dailywire.com", "title": "Federal Court Overrules Immigration Policy", "bias": 3, "stage": "open_web"}
+    {
+      "url": "https://www.cnn.com/immigration-order-blocked",
+      "domain": "cnn.com",
+      "title": "Judge Strikes Down Immigration Executive Order",
+      "bias": -1,
+      "stage": "site_search",
+      "text_excerpt": "A federal judge blocked the executive order on immigration enforcement, ruling it exceeds presidential authority.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.msnbc.com/immigration-ruling",
+      "domain": "msnbc.com",
+      "title": "Federal Court Blocks Immigration Crackdown",
+      "bias": -2,
+      "stage": "site_search",
+      "text_excerpt": "The federal court blocked the immigration enforcement executive order, calling it an unconstitutional overreach.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.nytimes.com/immigration-court-order",
+      "domain": "nytimes.com",
+      "title": "Court Ruling Halts Immigration Enforcement Changes",
+      "bias": -1,
+      "stage": "site_search",
+      "text_excerpt": "A federal court halted executive order changes to immigration enforcement policy, issuing a nationwide injunction.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.washingtonpost.com/immigration-legal-battle",
+      "domain": "washingtonpost.com",
+      "title": "Legal Challenge Succeeds Against Immigration Order",
+      "bias": -1,
+      "stage": "site_search",
+      "text_excerpt": "Legal challengers succeeded in blocking the immigration executive order in federal court, with the judge citing statutory limits.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.huffpost.com/immigration-victory",
+      "domain": "huffpost.com",
+      "title": "Major Win for Immigration Rights in Federal Court",
+      "bias": -3,
+      "stage": "open_web",
+      "text_excerpt": "Advocates celebrated a major victory after a federal judge blocked the immigration enforcement executive order on constitutional grounds.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.theguardian.com/us-immigration-ruling",
+      "domain": "theguardian.com",
+      "title": "US Judge Rules Against Immigration Executive Order",
+      "bias": -2,
+      "stage": "open_web",
+      "text_excerpt": "A US federal judge ruled against the executive order on immigration enforcement, blocking implementation nationwide.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://apnews.com/immigration-court-ruling",
+      "domain": "apnews.com",
+      "title": "Federal Judge Blocks Executive Order on Immigration",
+      "bias": 0,
+      "stage": "rss",
+      "text_excerpt": "A federal judge blocked the executive order on immigration enforcement Tuesday, issuing a temporary restraining order.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.foxnews.com/immigration-order-blocked",
+      "domain": "foxnews.com",
+      "title": "Activist Judge Blocks Immigration Enforcement Order",
+      "bias": 2,
+      "stage": "site_search",
+      "text_excerpt": "An activist federal judge blocked the executive order on immigration enforcement, overruling the administration's border security priorities.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.dailywire.com/immigration-order",
+      "domain": "dailywire.com",
+      "title": "Federal Court Overrules Immigration Policy",
+      "bias": 3,
+      "stage": "open_web",
+      "text_excerpt": "A federal court blocked the executive order on immigration policy, with the judge issuing a sweeping injunction against enforcement.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    }
   ],
   "expectations": {
     "retained_must_include_buckets": ["left_side", "right_side"],

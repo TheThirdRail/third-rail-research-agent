@@ -5,13 +5,14 @@ Built to provide multi-source aggregation, a 9-point bias classification, semant
 
 ## Features
 
-- **Multi-Source Aggregation**: Pulls and extracts coverage across the political spectrum using curated RSS feeds and DuckDuckGo search with current-story **Semantic Query Expansion**.
-- **Semantic Memory**: Indexes source-grounded chunks in SQL by default so agent reasoning can retrieve original facts rather than only summaries. Optional external vector backends are configured separately.
+- **Multi-Source Aggregation**: Pulls and extracts coverage across the political spectrum using curated RSS feeds and DuckDuckGo search.
+- **Hardened Semantic Memory**: Uses **LanceDB** as a high-performance vector store for indexing source-grounded chunks, enabling agents to retrieve original facts and evidence.
 - **9-Point Bias Classification**: Rates sources from Far Left (-4) to Far Right (+4) using local datasets and LLM fallback, enforcing ideological balance in research.
-- **Fact vs. Opinion & Visual Evidence**: Distinguishes verifiable facts and directly observable visual evidence from editorial interpretation and legal characterization.
-- **Multi-LLM Support**: Supports OpenRouter, Gemini, Anthropic, Groq, Mistral, Cerebras, SambaNova, OpenAI, and local Ollama (via LiteLLM).
-- **Channel Scope Profiling**: Upload your channel profile (worldview, topics) to personalize story discovery and receive tailored outlines.
-- **Docker & Local Deployment**: One-command deployment with Docker Compose, or run locally via `uvicorn`.
+- **Fact vs. Opinion & Visual Evidence**: Distinguishes verifiable facts and directly observable visual evidence from editorial interpretation.
+- **Structured Observability**: Built-in **Diagnostics** and **Handoff** tracking for auditing agent reasoning and retrieval precision.
+- **Benchmark Harness**: Automated scenario-based testing (e.g., ideological coverage, actor overlap) to ensure pipeline stability.
+- **Multi-LLM Support**: Supports OpenRouter, Gemini, Anthropic, Groq, Mistral, Cerebras, SambaNova, OpenAI, and local Ollama.
+- **Docker & Local Deployment**: One-command deployment with Docker Compose.
 
 ## Quick Start
 
@@ -33,112 +34,84 @@ pip install -e ".[dev]"
 ```bash
 cp .env.example .env
 ```
-Edit `.env` and configure at least one LLM provider. **OpenRouter** is recommended as a unified interface.
+Edit `.env` and configure at least one LLM provider. **OpenRouter** is recommended.
 ```ini
 LLM_PROVIDER=openrouter
 OPENROUTER_API_KEY=your_key_here
 
-# Optional semantic features
+# Semantic features (Hardened P2 Configuration)
 SEMANTIC_MEMORY_ENABLED=true
 SEMANTIC_QUERY_EXPANSION_ENABLED=true
-# SQL remains the default; set lancedb to enable the Phase 3 vector index.
-SEMANTIC_VECTOR_STORE=none
-# SEMANTIC_VECTOR_STORE=lancedb
+SEMANTIC_VECTOR_STORE=lancedb
 ```
 
 ### 3. Initialize & Run
 ```bash
-# Initialize SQLite database and run Alembic migrations
+# Initialize SQLite database, LanceDB, and run Alembic migrations
 research-agent init
 
-# Verify provider, schema, migration, screenshot, and OCR readiness
+# Verify system readiness (API, migrations, OCR, Vector Store)
 research-agent health --strict
-
-# Test your LLM connection
-research-agent test-llm
 
 # Start FastAPI server
 uvicorn src.api.main:app --reload
 ```
 
-> **For more detailed setup instructions, including Docker and API keys**, please see the [Step-by-Step Guide](step-by-step.md).
+> **For more detailed setup instructions**, please see the [Step-by-Step Guide](step-by-step.md).
 
 ## Usage
 
 ### CLI Commands
 
-**Discover Stories**
+**Discovery & Analysis**
 ```bash
-research-agent discover
 research-agent discover --topics "geopolitics, economy"
-```
-
-**Analyze a Specific Story**
-```bash
 research-agent analyze --describe "New tax bill passed"
-research-agent analyze --url "https://example.com/news/article"
 ```
 
-**Operational Checks**
+**Observability & Debugging**
 ```bash
-research-agent health --strict
+# Show detailed diagnostics for an analysis run
+research-agent diagnostics <story_id>
+
+# Inspect agent handoffs at specific stages
+research-agent handoff <story_id> --stage post-retrieval
+```
+
+**Quality Control**
+```bash
+# Run scenario benchmarks
+research-agent benchmark --live --live-limit 1
+
+# Validate OCR pipeline
 research-agent validate-ocr --force
-research-agent benchmark --live --live-limit 1 --format markdown
-```
-
-**Manage Your Channel Profile**
-```bash
-research-agent profile upload -f my-channel.yaml
-research-agent profile show
 ```
 
 ## Architecture & Project Structure
 
-Research Agent uses **CrewAI** for multi-agent orchestration, **FastAPI** for its backend API, and **SQLAlchemy/Alembic** for SQLite data persistence. SQL-backed semantic memory is the default local retrieval path; LanceDB remains optional and out of the default setup.
+Research Agent uses **CrewAI** for orchestration, **FastAPI** for the backend, and **LanceDB** for semantic memory.
 
 ```
 research-agent/
 ├── src/
-│   ├── agents/        # CrewAI agents (Profile Reader, Fact Extractor, etc.)
-│   ├── crews/         # Agent orchestrations (Discovery Crew, Analysis Crew)
-│   ├── tools/         # RSS, DuckDuckGo search, Bias Classification, Extractor
+│   ├── agents/        # CrewAI agents
+│   ├── crews/         # Agent orchestrations
+│   ├── tools/         # RSS, Search, Bias, Extractor
 │   ├── database/      # SQLAlchemy models & migrations
-│   ├── api/           # FastAPI backend & routes
-│   ├── cli/           # Click-based command line interface
-│   ├── core/          # Configuration, LLMRouter, EmbeddingProvider 
-│   └── services/      # Business logic (SemanticMemoryService, StoryParserService)
+│   ├── services/      # Analysis, SemanticMemory, VisualEvidence
+│   ├── core/          # Configuration & LLM Routing
+│   └── api/           # FastAPI backend
+├── benchmarks/        # Scenario-based test fixtures
 ├── config/            # YAML configs (bias_sources, rss_feeds)
-├── data/              # SQLite DB and local artifacts
-├── docs/              # Implementation guides (Semantic Search, etc.)
-├── tests/             # Pytest test suite
-├── web/               # Next.js frontend (in development)
-├── Dockerfile         # Multi-stage build definition
-├── docker-compose.yml # Compose config for Backend, Frontend, and Ollama
-├── step-by-step.md    # Detailed run instructions
-└── pyproject.toml     # Project metadata and tool configuration
+├── docs/              # Technical documentation
+├── tests/             # Pytest suite
+└── web/               # Next.js frontend
 ```
-
-## Advanced Analytics Flow
-Our evidence gathering is treated as four separate layers:
-1. **Observable Facts** (what is directly seen in an image/video/post)
-2. **Direct News Reporting** (what happened)
-3. **Ideological Framing** (how left/center/right buckets interpret it)
-4. **Creator-Facing Synthesis** (video outlines)
 
 ## Current Status
-- **Phase 1-5**: Core Foundation, LLM Integration, CLI Tools, and Agents are **Complete**.
-- **Phase 6**: CLI Interface is **Complete**.
-- **Phase 7**: FastAPI Backend & Semantic Memory architecture are **In Progress**.
-- **Phase 8**: Next.js Web Interface is **Pending**.
-
-## Local Quality Control & Testing
-We use strict typing and formatting standards:
-```bash
-ruff format src/
-ruff check src/ --fix
-mypy src/
-pytest tests/ -v
-```
+- **Hardening P2**: **Complete**. System is production-ready with structured diagnostics and LanceDB integration.
+- **Backend API**: **Complete**.
+- **Web Interface**: **In Progress**. (Next.js frontend in development).
 
 ## License
 MIT License.

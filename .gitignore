@@ -56,6 +56,9 @@ Thumbs.db
 # AI/Agent Generated Folders (DO NOT COMMIT)
 education/
 research/
+Agent-Context/
+project_archive.md
+dev-branch-hardening-checklist.md
 
 # Testing
 coverage/
@@ -71,11 +74,16 @@ temp/
 *.tmp
 .cache/
 
-# Database
+# Database & Vector Stores
 *.db
 *.sqlite
 *.sqlite3
-data/performance.db
+data/
+!data/.gitkeep
+
+# Benchmarks Results
+benchmarks/*.json
+benchmarks/*.html
 
 # Model files (too large for git)
 *.bin

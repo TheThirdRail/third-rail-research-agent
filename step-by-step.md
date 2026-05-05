@@ -1,6 +1,6 @@
 # Step-by-Step: Running Research Agent
 
-This guide covers all methods to set up, configure, and run the Research Agent locally and in Docker. It integrates our environment configuration and deployment steps.
+This guide covers all methods to set up, configure, and run the Research Agent locally and in Docker. It integrates our environment configuration and deployment steps for the hardened P2 release.
 
 ---
 
@@ -47,28 +47,24 @@ Copy the example environment file:
 ```bash
 cp .env.example .env
 ```
-Open `.env` in your editor. The crucial setting is your `LLM_PROVIDER` and corresponding API key. **OpenRouter is recommended** as it provides access to many models using a single key.
+Open `.env` in your editor. **OpenRouter is recommended**.
 
 ```ini
 LLM_PROVIDER=openrouter
-OPENROUTER_API_KEY=mock-or-v1-xxxxxxxx
+OPENROUTER_API_KEY=your-api-key
 
-# Optional Semantic Memory Configuration
+# Semantic Memory Configuration (P2 Hardened)
 SEMANTIC_MEMORY_ENABLED=true
 SEMANTIC_QUERY_EXPANSION_ENABLED=true
-SEMANTIC_VECTOR_STORE=none
+SEMANTIC_VECTOR_STORE=lancedb
 ```
-
-*Other valid `LLM_PROVIDER` options: `openai`, `anthropic`, `gemini`, `groq`, `cerebras`, `sambanova`, `mistral`, `ollama`.*
-
-> **Note**: Model Selection is done via the UI or CLI parameters. You do not need to set `SELECTED_MODEL` or `ANALYSIS_MODEL` in your `.env` manually unless you specifically want to override defaults.
 
 ### Step 5: Initialize and Test
 ```bash
-# Initialize SQLite database and run Alembic migrations
+# Initialize SQLite database, LanceDB, and run Alembic migrations
 research-agent init
 
-# Verify schema, migration revision, providers, screenshot, and OCR readiness
+# Verify system health (Providers, DB, Vector Store, OCR)
 research-agent health --strict
 
 # Test LLM connection
@@ -85,150 +81,55 @@ Access the API Docs at: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ## Option 2: Docker Deployment
 
-### Step 1: Clone and Configure
-Follow Steps 1 and 4 from above to clone the repository and configure your `.env` file with the necessary API keys.
-
-### Step 2: Build and Start Services
-Run the following to build the images and run the containers in detached mode:
-```powershell
+### Step 1: Build and Start Services
+```bash
 docker compose up --build -d
 ```
 
-This spins up the following network:
-- **Backend API**: [http://localhost:8000](http://localhost:8000)
-- **Frontend UI**: [http://localhost:3000](http://localhost:3000) *(in development)*
-
-### Step 3: Verify Services
-```powershell
-docker compose ps
-docker compose logs -f backend
+### Step 2: Initialize and Verify
+```bash
 docker compose exec backend research-agent init
 docker compose exec backend research-agent health --strict
 ```
-Check health: `curl http://localhost:8000/health`
-
-> Alembic migrations are explicit. Run `research-agent init` before serving a new build or after pulling schema changes. Runtime startup keeps a compatibility schema-sync fallback, but deployment should not rely on it as the primary migration path.
-
-### Step 4: Using with Local Ollama
-To run completely offline or use free local inference, start the `local-llm` profile:
-```powershell
-docker compose --profile local-llm up --build -d
-```
-This adds the `ollama` container at `http://localhost:11434`. Pull a model into the container:
-```powershell
-docker exec research-agent-ollama ollama pull llama3
-```
-Update your `.env` to point to it:
-```ini
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL=http://ollama:11434
-```
-
-### Step 5: Stop Containers
-```powershell
-docker compose down
-```
 
 ---
 
-## Option 3: API-Only Mode
+## Advanced CLI & Observability
 
-Run just the backend API without Docker or Frontend components:
+The hardened P2 release includes deep diagnostics and agent handoff inspection.
+
+### Diagnostics
+Inspect the retrieval lifecycle, extraction status, and relevance scoring for a specific run:
 ```bash
-# Terminal 1: Start API
-uvicorn src.api.main:app --host 0.0.0.0 --port 8000
-
-# Terminal 2: Test endpoints
-curl http://localhost:8000/api/config
-curl http://localhost:8000/api/models
+research-agent diagnostics <story_id>
 ```
 
----
-
-## Optional: Codex OAuth Testing (Advanced)
-
-For local development involving a locally authenticated Codex/OAuth workflow. *Do not use in production or expose publicly.*
-
-### Enabling Bridge Mode:
-1. Set the following in your `.env`:
-   ```ini
-   LLM_PROVIDER=openai
-   OPENAI_BASE_URL=http://host.docker.internal:8787/v1
-   OPENAI_API_KEY=local-placeholder
-   SELECTED_MODEL=gpt-5.3-codex
-   CODEX_OAUTH_TESTING_ENABLED=true
-   CODEX_OAUTH_MODE=openai_compatible_bridge
-   CODEX_REQUIRE_LOCALHOST=true
-   CODEX_ALLOW_PUBLIC_API=false
-   ```
-2. Start the bridge on the host **before** running the backend:
-   ```powershell
-   research-agent codex-oauth bridge --host 127.0.0.1 --port 8787
-   ```
-   *(If the backend runs directly on Windows instead of Docker, use `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`)*
-
-### Enabling CLI Mode:
-1. Login via Codex CLI: `codex login`
-2. Update `.env`:
-   ```ini
-   CODEX_OAUTH_TESTING_ENABLED=true
-   CODEX_OAUTH_MODE=codex_cli
-   ```
-3. Test the connection:
-   ```powershell
-   research-agent codex-oauth status
-   research-agent codex-oauth diagnose
-   research-agent codex-oauth test "Say hello from Codex OAuth in one sentence."
-   ```
-
-### Disabling Codex OAuth:
-```ini
-CODEX_OAUTH_TESTING_ENABLED=false
-CODEX_OAUTH_MODE=disabled
+### Agent Handoffs
+Inspect the data bundles passed between agent stages:
+```bash
+research-agent handoff <story_id> --stage post-retrieval
+research-agent handoff <story_id> --stage fact-extraction
 ```
 
----
-
-## Optional: OCR and Benchmarks
-
-Screenshot OCR is disabled by default. To validate a production OCR setup:
-
-```powershell
-research-agent validate-ocr --force --fixtures tests/fixtures/ocr --format markdown
-```
-
-Run a true live pipeline benchmark only when your providers/search configuration is ready:
-
-```powershell
+### Benchmarks
+Run scenario-based benchmarks to verify pipeline stability:
+```bash
 research-agent benchmark --live --live-limit 1 --format markdown
 ```
-
-Use `--baseline path\to\baseline.json --fail-on-regression` to make persisted diagnostics thresholds fail the command.
 
 ---
 
 ## Troubleshooting
 
 ### "No API key configured"
-Ensure your `.env` file contains your chosen provider's key:
+Ensure your `.env` file contains your chosen provider's key.
+
+### "Database error"
+The SQLite database is in `./data/research_agent.db` and LanceDB data is in `./data/lancedb`. To reset:
 ```powershell
-cat .env
+rm -Recurse data/*
+research-agent init
 ```
-
-### "Module not found"
-Ensure you are using your virtual environment and the project is installed in editable mode:
-```bash
-pip install -e ".[dev]"
-```
-
-### Backend won't start in Docker
-- Port 8000 might already be in use. Update `API_PORT` in `.env`.
-- Missing API keys in `.env`.
-- Database error: The SQLite database is stored in `./data/research_agent.db`. To reset:
-  ```powershell
-  rm data/research_agent.db
-  docker compose restart backend
-  ```
 
 ---
 
@@ -236,14 +137,11 @@ pip install -e ".[dev]"
 
 | Action | Command |
 |--------|---------|
-| Initialize DB | `research-agent init` |
+| Initialize DB/Vector Store | `research-agent init` |
 | Health check | `research-agent health --strict` |
-| Validate OCR | `research-agent validate-ocr --force` |
-| Live benchmark | `research-agent benchmark --live --live-limit 1` |
+| Diagnostics | `research-agent diagnostics <id>` |
+| Handoff check | `research-agent handoff <id> --stage <stage>` |
+| Live benchmark | `research-agent benchmark --live` |
 | Test LLM | `research-agent test-llm` |
-| Discover | `research-agent discover` |
 | Start API (dev) | `uvicorn src.api.main:app --reload` |
-| Start Docker | `docker compose up -d` |
-| View logs | `docker compose logs -f backend` |
 | Run tests | `pytest tests/ -v` |
-| Lint code | `ruff check src/ --fix` |

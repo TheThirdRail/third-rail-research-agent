@@ -1,0 +1,87 @@
+{
+  "name": "temporal_proximity_disambiguation",
+  "description": "Benchmark for verifying correct event filtering when the same actors appear in temporally close but distinct events",
+  "seed": {
+    "description": "Senate Republicans block bipartisan border security bill for second time in April 2026",
+    "url": null
+  },
+  "story_packet_overrides": {
+    "actors": ["Senate Republicans", "border security"],
+    "action_verbs": ["block", "blocked", "filibuster"],
+    "must_have_terms": ["border security bill", "April 2026"],
+    "must_not_have_terms": ["government shutdown", "continuing resolution", "defense spending"],
+    "number_markers": ["60-vote"],
+    "time_window": "2026-04-20/2026-04-30"
+  },
+  "simulated_candidates": [
+    {
+      "url": "https://apnews.com/senate-border-bill-blocked-april-2026",
+      "domain": "apnews.com",
+      "title": "Senate Republicans Block Border Security Bill for Second Time in April 2026",
+      "bias": 0,
+      "stage": "rss",
+      "text_excerpt": "Senate Republicans blocked the bipartisan border security bill on a 60-vote threshold in April 2026, marking the second failed attempt this month.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.foxnews.com/senate-border-bill-opposition",
+      "domain": "foxnews.com",
+      "title": "GOP Senators Stand Firm Against Flawed Border Security Bill",
+      "bias": 2,
+      "stage": "site_search",
+      "text_excerpt": "Senate Republicans blocked the border security bill in April 2026, arguing it does not adequately address enforcement at the southern border.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.msnbc.com/border-bill-failure-april",
+      "domain": "msnbc.com",
+      "title": "Border Deal Collapses Again as Senate Republicans Block Vote",
+      "bias": -2,
+      "stage": "site_search",
+      "text_excerpt": "The bipartisan border security bill failed again in April 2026 when Senate Republicans blocked the legislation from reaching the 60-vote threshold.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.washingtonpost.com/government-shutdown-2026",
+      "domain": "washingtonpost.com",
+      "title": "Senate Republicans Block Continuing Resolution, Government Shutdown Looms",
+      "bias": -1,
+      "stage": "open_web",
+      "text_excerpt": "Senate Republicans blocked the continuing resolution in March 2026, bringing the government closer to a shutdown over defense spending disagreements.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "contains_disambiguation_exclusion"
+    },
+    {
+      "url": "https://www.cnn.com/senate-defense-bill-filibuster",
+      "domain": "cnn.com",
+      "title": "Senate Republicans Filibuster Defense Authorization Bill",
+      "bias": -1,
+      "stage": "open_web",
+      "text_excerpt": "Senate Republicans filibustered the defense spending authorization bill in February 2026 over concerns about military readiness priorities.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "contains_disambiguation_exclusion"
+    },
+    {
+      "url": "https://www.reuters.com/border-bill-january-2026",
+      "domain": "reuters.com",
+      "title": "Senate Fails to Advance Border Security Measure in January",
+      "bias": 0,
+      "stage": "open_web",
+      "text_excerpt": "The Senate failed to advance an earlier version of border security legislation in January 2026, setting the stage for renewed negotiations.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "missing_core_event_markers"
+    }
+  ],
+  "expectations": {
+    "correct_event_retained_min": 3,
+    "wrong_event_rejected_min": 2,
+    "must_have_terms_enforced": true,
+    "must_not_have_terms_enforced": true,
+    "time_window_enforced": true,
+    "retained_must_include_buckets": ["left_side", "right_side", "center"],
+    "description": "Multiple Senate Republican actions exist close in time. The system must use specific event markers (border security bill, April 2026) and must-not-have exclusions to filter out government shutdown, defense spending, and earlier border attempts."
+  }
+}

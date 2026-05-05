@@ -1,0 +1,97 @@
+{
+  "name": "weak_topic_match_rejection",
+  "description": "Benchmark for verifying rejection of articles that match the broad topic but lack specific event evidence",
+  "seed": {
+    "description": "Tesla recalls 2.1 million vehicles over Autopilot safety defect found in NHTSA investigation",
+    "url": null
+  },
+  "story_packet_overrides": {
+    "actors": ["Tesla", "NHTSA"],
+    "action_verbs": ["recalls", "recalled"],
+    "must_have_terms": ["recall", "Autopilot"],
+    "must_not_have_terms": ["earnings", "stock price", "Cybertruck launch", "Mars"],
+    "number_markers": ["2.1 million"],
+    "distinctive_terms": ["2.1 million", "Autopilot", "NHTSA"]
+  },
+  "simulated_candidates": [
+    {
+      "url": "https://apnews.com/tesla-recall-autopilot-2026",
+      "domain": "apnews.com",
+      "title": "Tesla Recalls 2.1 Million Vehicles Over Autopilot Safety Defect",
+      "bias": 0,
+      "stage": "rss",
+      "text_excerpt": "Tesla is recalling 2.1 million vehicles in the United States after an NHTSA investigation found a safety defect in the Autopilot system's lane-keeping function.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.nytimes.com/tesla-nhtsa-recall-autopilot",
+      "domain": "nytimes.com",
+      "title": "NHTSA Forces Tesla to Recall Millions Over Autopilot Flaw",
+      "bias": -1,
+      "stage": "site_search",
+      "text_excerpt": "The NHTSA ordered Tesla to recall 2.1 million vehicles after finding that the Autopilot system failed to properly disengage in certain conditions.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.foxbusiness.com/tesla-recall-autopilot",
+      "domain": "foxbusiness.com",
+      "title": "Tesla Issues Massive Autopilot Recall Affecting 2.1 Million Cars",
+      "bias": 1,
+      "stage": "site_search",
+      "text_excerpt": "Tesla announced a recall of 2.1 million vehicles in response to an NHTSA investigation that identified a safety defect in the Autopilot driving assistance system.",
+      "expected_state": "retained",
+      "expected_coverage_type": "direct"
+    },
+    {
+      "url": "https://www.cnbc.com/tesla-q1-earnings-2026",
+      "domain": "cnbc.com",
+      "title": "Tesla Reports Mixed Q1 Earnings Amid Production Challenges",
+      "bias": 0,
+      "stage": "open_web",
+      "text_excerpt": "Tesla reported first-quarter earnings that beat revenue expectations but missed on earnings per share. The stock price dropped 4% in after-hours trading.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "contains_disambiguation_exclusion"
+    },
+    {
+      "url": "https://www.theverge.com/tesla-cybertruck-launch-review",
+      "domain": "theverge.com",
+      "title": "Tesla Cybertruck Launch: First Impressions and Range Tests",
+      "bias": 0,
+      "stage": "open_web",
+      "text_excerpt": "Tesla finally delivered the first Cybertruck launch units to customers this week. Our initial range tests show mixed results compared to official specs.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "contains_disambiguation_exclusion"
+    },
+    {
+      "url": "https://www.bloomberg.com/tesla-general-coverage",
+      "domain": "bloomberg.com",
+      "title": "Tesla Faces Growing Competition in Electric Vehicle Market",
+      "bias": 0,
+      "stage": "open_web",
+      "text_excerpt": "Tesla is facing increased competition from legacy automakers as the electric vehicle market matures. Market share has declined from 70% to 52% in two years.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "missing_core_event_markers"
+    },
+    {
+      "url": "https://www.wired.com/tesla-software-update-2026",
+      "domain": "wired.com",
+      "title": "Tesla Pushes Major Autopilot Software Update to All Vehicles",
+      "bias": 0,
+      "stage": "open_web",
+      "text_excerpt": "Tesla rolled out a significant over-the-air software update to its Autopilot system, addressing multiple known issues flagged by drivers over the past year.",
+      "expected_state": "relevance_rejected",
+      "expected_rejection_reason": "missing_core_event_markers"
+    }
+  ],
+  "expectations": {
+    "correct_event_retained_min": 3,
+    "wrong_event_rejected_min": 3,
+    "must_have_terms_enforced": true,
+    "must_not_have_terms_enforced": true,
+    "distinctive_markers_required": true,
+    "retained_must_include_buckets": ["center"],
+    "description": "Many articles mention Tesla but only the specific recall event (2.1 million, Autopilot, NHTSA) should be retained. General Tesla coverage, earnings, Cybertruck, and unrelated Autopilot updates must be rejected."
+  }
+}

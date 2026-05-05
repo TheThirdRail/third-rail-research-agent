@@ -514,12 +514,33 @@ def discover(count: int, topics: tuple[str, ...]) -> None:
 @click.option("--url", "-u", default=None, help="URL of story to analyze")
 @click.option("--describe", "-d", default=None, help="Description of story to research")
 @click.option("--output", "-o", default=None, help="Output file for report (markdown)")
-def analyze(url: str | None, describe: str | None, output: str | None) -> None:
+@click.option("--strict/--no-strict", default=None, help="Override strict bucket enforcement.")
+@click.option("--semantic-memory/--no-semantic-memory", default=None, help="Enable/disable semantic memory.")
+@click.option("--semantic-scoring/--no-semantic-scoring", default=None, help="Enable/disable semantic candidate scoring.")
+@click.option("--visual-evidence/--no-visual-evidence", default=None, help="Enable/disable visual evidence resolution.")
+@click.option("--screenshot/--no-screenshot", default=None, help="Enable/disable screenshot capture.")
+@click.option("--embedding-provider", default=None, help="Embedding provider (e.g., lmstudio, fake).")
+@click.option("--embedding-model", default=None, help="Embedding model name.")
+@click.option("--vector-store", default=None, help="Vector store backend (e.g., lancedb, none).")
+def analyze(
+    url: str | None,
+    describe: str | None,
+    output: str | None,
+    strict: bool | None,
+    semantic_memory: bool | None,
+    semantic_scoring: bool | None,
+    visual_evidence: bool | None,
+    screenshot: bool | None,
+    embedding_provider: str | None,
+    embedding_model: str | None,
+    vector_store: str | None,
+) -> None:
     """Analyze a specific story from URL or description.
 
     Aggregates sources from across the political spectrum,
     classifies bias, separates facts from opinions, and generates a report.
     """
+    from src.schemas.analysis_options import AnalysisOptions
     from src.services import AnalysisService
 
     if not url and not describe:
@@ -528,12 +549,34 @@ def analyze(url: str | None, describe: str | None, output: str | None) -> None:
 
     story_desc = describe or f"Story from URL: {url}"
 
+    # Build per-run options from CLI flags (None values are excluded)
+    option_kwargs: dict[str, object] = {}
+    if strict is not None:
+        option_kwargs["strict_bucket_enforcement"] = strict
+    if semantic_memory is not None:
+        option_kwargs["enable_semantic_memory"] = semantic_memory
+    if semantic_scoring is not None:
+        option_kwargs["enable_semantic_candidate_scoring"] = semantic_scoring
+    if visual_evidence is not None:
+        option_kwargs["enable_visual_evidence_resolution"] = visual_evidence
+    if screenshot is not None:
+        option_kwargs["enable_screenshot_capture"] = screenshot
+    if embedding_provider is not None:
+        option_kwargs["embedding_provider"] = embedding_provider
+    if embedding_model is not None:
+        option_kwargs["embedding_model"] = embedding_model
+    if vector_store is not None:
+        option_kwargs["vector_store"] = vector_store
+    options = AnalysisOptions(**option_kwargs) if option_kwargs else None
+
     console.print(Panel(f"[bold]Analyzing story:[/bold]\n{story_desc[:200]}"))
+    if options:
+        console.print(f"[dim]Per-run options: {options.model_dump(exclude_none=True)}[/dim]")
 
     with console.status("[bold green]Running multi-source analysis..."):
         try:
             service = AnalysisService()
-            result = service.analyze(story_desc, url)
+            result = service.analyze(story_desc, url, options=options)
             report = result.get("report", "No report generated")
 
             console.print("\n[bold green]Analysis Complete![/bold green]\n")
@@ -897,7 +940,19 @@ def diagnostics(story_id: str) -> None:
         run_table.add_row("Status", str(run_info.get("status", "N/A")))
         run_table.add_row("Started", str(run_info.get("started_at", "N/A")))
         run_table.add_row("Completed", str(run_info.get("completed_at", "N/A")))
+        if run_info.get("error"):
+            run_table.add_row("Error", str(run_info["error"]))
         console.print(run_table)
+
+        # Show per-run options used
+        opts = run_info.get("options_snapshot", {})
+        if opts:
+            opts_table = Table(title="Analysis Options (per-run snapshot)")
+            opts_table.add_column("Option", style="cyan")
+            opts_table.add_column("Value", style="white")
+            for key, value in sorted(opts.items()):
+                opts_table.add_row(key, str(value))
+            console.print(opts_table)
 
     # Candidate census
     census = result.get("candidate_census", {})
@@ -923,6 +978,30 @@ def diagnostics(story_id: str) -> None:
         console.print(cand_table)
         if len(candidates) > 20:
             console.print(f"[dim]... and {len(candidates) - 20} more candidates[/dim]")
+
+    # Visual evidence summary
+    visual = result.get("visual_evidence", {})
+    if visual:
+        records = visual.get("records", [])
+        limitations = visual.get("limitations", [])
+        if records or limitations:
+            console.print(f"\n[bold]Visual Evidence:[/bold] {len(records)} record(s)")
+            if limitations:
+                for lim in limitations[:5]:
+                    console.print(f"  [yellow]Limitation:[/yellow] {lim}")
+
+    # Report validation warnings
+    warnings = result.get("report_validation_warnings", [])
+    if warnings:
+        console.print(f"\n[bold]Report Validation Warnings ({len(warnings)}):[/bold]")
+        for w in warnings[:10]:
+            console.print(f"  [yellow]- {w}[/yellow]")
+
+    # Query expansion diagnostics
+    qed = result.get("query_expansion_diagnostics", {})
+    if qed:
+        console.print("\n[bold]Query Expansion:[/bold]")
+        console.print(json.dumps(qed, indent=2, default=str)[:1000])
 
 
 @cli.command()
@@ -1077,6 +1156,48 @@ def benchmark(
         or report.get("regressions", {}).get("failed_count", 0)
     ):
         raise click.Abort() from None
+
+
+@cli.command()
+@click.option(
+    "--fixtures",
+    type=click.Path(path_type=Path),
+    default=Path("tests/fixtures/benchmarks"),
+    help="Benchmark fixture directory.",
+)
+@click.option("--format", "output_format", type=click.Choice(["markdown", "json"]), default="markdown")
+@click.option("--output", type=click.Path(path_type=Path), default=None)
+@click.option("--top", type=int, default=15, help="Number of top results to display.")
+def sweep(
+    fixtures: Path,
+    output_format: str,
+    output: Path | None,
+    top: int,
+) -> None:
+    """Sweep relevance weight profiles to find optimal configurations.
+
+    Tests multiple weight combinations and passing-score thresholds across
+    all benchmark fixtures to identify the best-performing settings.
+    """
+    from scripts.sweep_relevance_weights import (
+        format_sweep_json,
+        format_sweep_markdown,
+        run_sweep,
+    )
+
+    with console.status("[bold green]Running weight sweep..."):
+        results = run_sweep(fixtures)
+
+    if output_format == "json":
+        content = format_sweep_json(results)
+    else:
+        content = format_sweep_markdown(results, top_n=top)
+
+    if output:
+        output.write_text(content, encoding="utf-8")
+        console.print(f"[bold green]Sweep written:[/bold green] {output}")
+    else:
+        console.print(content)
 
 
 @cli.command()

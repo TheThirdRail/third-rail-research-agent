@@ -339,6 +339,24 @@ class Settings(BaseSettings):
                     "SEMANTIC_FAIL_OPEN=true."
                 )
 
+        # Screenshot capture requires Playwright
+        if self.screenshot_capture_enabled:
+            try:
+                import playwright  # noqa: F401
+            except ImportError:
+                warnings.append(
+                    "SCREENSHOT_CAPTURE_ENABLED=true but the 'playwright' package "
+                    "is not installed; screenshot capture will fail. Install "
+                    "playwright and run `playwright install chromium`."
+                )
+
+        # OCR enabled without screenshot capture is a no-op
+        if self.screenshot_ocr_enabled and not self.screenshot_capture_enabled:
+            warnings.append(
+                "SCREENSHOT_OCR_ENABLED=true but SCREENSHOT_CAPTURE_ENABLED=false; "
+                "OCR has no screenshots to process."
+            )
+
         if self.screenshot_ocr_enabled:
             if self.screenshot_ocr_engine != "pytesseract":
                 warnings.append(
@@ -353,6 +371,18 @@ class Settings(BaseSettings):
                         "SCREENSHOT_OCR_ENABLED=true but the 'pytesseract' package "
                         "is not installed; screenshot OCR will be skipped."
                     )
+
+        # LanceDB vector store with semantic features disabled
+        if (
+            self.semantic_vector_store == "lancedb"
+            and not self.semantic_memory_enabled
+            and not self.semantic_candidate_scoring_enabled
+        ):
+            warnings.append(
+                "SEMANTIC_VECTOR_STORE=lancedb but both SEMANTIC_MEMORY_ENABLED "
+                "and SEMANTIC_CANDIDATE_SCORING_ENABLED are false; the vector "
+                "store will not be used."
+            )
 
         # Strict bucket enforcement with too few sources
         if self.strict_bucket_enforcement and self.retained_source_max < 2:

@@ -388,25 +388,25 @@ Output: Full analysis report (Markdown + JSON) + video outline
 
 ---
 
-## 12. Acceptance Criteria
+## 12. Acceptance Criteria & Status
 
-### Phase 1: CLI MVP
+### Phase 1: CLI MVP (Complete)
+- [x] Story discovery from RSS + web search
+- [x] 9-point political bias classification
+- [x] Markdown + JSON reports
+- [x] SQLite database storage
 
-- [ ] Can discover 10 stories from RSS + web search
-- [ ] Can analyze a story given URL or description
-- [ ] Sources classified on 9-point scale
-- [ ] Facts separated from opinions
-- [ ] Generates Markdown + JSON reports
-- [ ] Data stored in SQLite
+### Phase 2: Hardening & Observability (Complete - Hardened P2)
+- [x] LanceDB integration for semantic memory
+- [x] CLI `diagnostics` and `handoff` commands
+- [x] Scenario-based benchmark harness
+- [x] Balanced source planner and bucket policy
 
-### Phase 2: Web UI
+### Phase 3: Web UI (In Progress)
+- [x] FastAPI backend stable
+- [ ] Next.js frontend (UI in development)
+- [ ] Visual bias distribution charts
 
-- [ ] Web interface running on localhost
-- [ ] Can browse past analyses
-- [ ] Visual bias distribution chart
-- [ ] Can input YouTube performance stats
-
-### Phase 3: Learning System
-
+### Phase 4: Learning System (Planned)
 - [ ] Performance data influences story recommendations
 - [ ] System improves over time with more data

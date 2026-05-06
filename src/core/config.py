@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -74,6 +74,25 @@ class Settings(BaseSettings):
     codex_allow_public_api: bool = False
     codex_max_prompt_chars: int = 30000
     codex_timeout_seconds: int = 300
+
+    # Local token usage telemetry
+    token_usage_log_enabled: bool | None = Field(
+        default=None,
+        description=(
+            "Append local OAuth bridge token usage logs. Defaults on outside "
+            "production and off in production."
+        ),
+    )
+    token_usage_log_dir: str = "token-usage"
+    token_usage_log_file: str = "token-usage.jsonl"
+    token_usage_timezone: str = "America/New_York"
+    token_usage_include_query_text: bool = True
+
+    @model_validator(mode="after")
+    def _default_token_usage_log_enabled(self) -> "Settings":
+        if self.token_usage_log_enabled is None:
+            self.token_usage_log_enabled = self.app_env != "production"
+        return self
 
     # LM Studio (local OpenAI-compatible)
     lmstudio_api_key: str = Field(

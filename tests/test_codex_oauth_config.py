@@ -12,6 +12,7 @@ def test_codex_oauth_testing_disabled_by_default(monkeypatch):
         "CODEX_OAUTH_TESTING_ENABLED",
         "CODEX_OAUTH_MODE",
         "CODEX_CLI_COMMAND",
+        "TOKEN_USAGE_LOG_ENABLED",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -24,6 +25,23 @@ def test_codex_oauth_testing_disabled_by_default(monkeypatch):
     assert settings.codex_allow_public_api is False
     assert settings.codex_max_prompt_chars == 30000
     assert settings.codex_timeout_seconds == 300
+    assert settings.token_usage_log_enabled is True
+
+
+def test_token_usage_logging_defaults_off_in_production(monkeypatch):
+    monkeypatch.delenv("TOKEN_USAGE_LOG_ENABLED", raising=False)
+
+    settings = Settings(_env_file=None, app_env="production")
+
+    assert settings.token_usage_log_enabled is False
+
+
+def test_token_usage_logging_env_override(monkeypatch):
+    monkeypatch.setenv("TOKEN_USAGE_LOG_ENABLED", "false")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.token_usage_log_enabled is False
 
 
 def test_existing_provider_config_still_loads():

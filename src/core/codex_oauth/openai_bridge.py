@@ -13,6 +13,16 @@ from pydantic import BaseModel, Field
 from src.core.codex_oauth import cli_adapter
 from src.core.codex_oauth.safety import CodexOAuthConfigError, redact_secrets
 from src.core.config import Settings
+from src.core.token_usage_tracker import (
+    TokenUsageTracker,
+    extract_links,
+    extract_user_query_from_chat_messages,
+    extract_user_query_from_responses_input,
+    missing_usage,
+    new_run_id,
+    normalize_sites_from_urls,
+    timestamp_parts,
+)
 
 
 class ChatMessage(BaseModel):
@@ -219,9 +229,110 @@ def _responses_payload(
     }
 
 
+def _request_extra(request: BaseModel) -> dict[str, Any]:
+    extra: dict[str, Any] = {}
+    model_extra = getattr(request, "model_extra", None)
+    if isinstance(model_extra, dict):
+        extra.update(model_extra)
+    explicit_extra = getattr(request, "extra", None)
+    if isinstance(explicit_extra, dict):
+        extra.update(explicit_extra)
+    metadata = extra.get("metadata")
+    if isinstance(metadata, dict):
+        extra.update(metadata)
+    return extra
+
+
+def _string_values(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else []
+    if isinstance(value, dict):
+        values: list[str] = []
+        for key in ("url", "href", "link", "domain", "site", "source"):
+            values.extend(_string_values(value.get(key)))
+        return values
+    if isinstance(value, list | tuple | set):
+        values = []
+        for item in value:
+            values.extend(_string_values(item))
+        return values
+    return []
+
+
+def _metadata_query_text(extra: dict[str, Any]) -> str | None:
+    for key in ("query_text", "user_query", "original_query", "query", "description"):
+        value = extra.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _metadata_urls(extra: dict[str, Any]) -> list[str]:
+    values: list[str] = []
+    for key in (
+        "links_provided",
+        "sites_scanned_or_analyzed",
+        "scanned_sites",
+        "analyzed_sites",
+        "visited_urls",
+        "visitedUrls",
+        "urls",
+        "sources",
+        "citations",
+    ):
+        values.extend(_string_values(extra.get(key)))
+    return values
+
+
 def create_app(settings: Settings) -> FastAPI:
     """Create the local bridge app."""
     app = FastAPI(title="Research Agent Codex OAuth Bridge")
+    tracker = TokenUsageTracker(
+        log_dir=settings.project_root / settings.token_usage_log_dir,
+        log_file=settings.token_usage_log_file,
+        timezone=settings.token_usage_timezone,
+    )
+
+    def record_usage(
+        *,
+        endpoint: str,
+        model: str,
+        status: str,
+        started_at: float,
+        started_timestamp: dict[str, str],
+        query_text: str | None,
+        metadata_urls: list[str],
+        request_id: str | None = None,
+    ) -> None:
+        if not settings.token_usage_log_enabled:
+            return
+
+        if not settings.token_usage_include_query_text:
+            query_text = None
+
+        links_provided = extract_links(query_text)
+        sites = normalize_sites_from_urls([*metadata_urls, *links_provided])
+        usage = missing_usage()
+        tracker.record(
+            {
+                "event": "llm_token_usage",
+                "run_id": new_run_id(),
+                "request_id": request_id,
+                **started_timestamp,
+                "provider": "openai-oauth-bridge",
+                "endpoint": endpoint,
+                "model": model,
+                "status": status,  # type: ignore[typeddict-item]
+                "query_text": query_text,
+                "links_provided": links_provided,
+                "sites_scanned_or_analyzed": sites,
+                **usage,
+                "duration_ms": int((time.time() - started_at) * 1000),
+            }
+        )
 
     @app.get("/health")
     def health() -> dict[str, Any]:
@@ -253,8 +364,15 @@ def create_app(settings: Settings) -> FastAPI:
                 detail="Streaming chat completions are not supported by this bridge.",
             )
 
+        started_at = time.time()
+        started_timestamp = timestamp_parts(settings.token_usage_timezone)
+        extra = _request_extra(request)
         prompt = _messages_to_prompt(request.messages)
         model = _normalize_model_id(request.model)
+        query_text = _metadata_query_text(extra) or extract_user_query_from_chat_messages(
+            request.messages
+        )
+        metadata_urls = _metadata_urls(extra)
         try:
             content = cli_adapter.run_prompt_with_model(
                 prompt,
@@ -263,10 +381,20 @@ def create_app(settings: Settings) -> FastAPI:
                 reasoning_effort=request.reasoning_effort,
             )
         except CodexOAuthConfigError as exc:
+            record_usage(
+                endpoint="/v1/chat/completions",
+                model=model,
+                status="error",
+                started_at=started_at,
+                started_timestamp=started_timestamp,
+                query_text=query_text,
+                metadata_urls=metadata_urls,
+            )
             raise HTTPException(status_code=503, detail=redact_secrets(exc)) from exc
 
-        return {
-            "id": f"chatcmpl-codex-{uuid4().hex}",
+        response_id = f"chatcmpl-codex-{uuid4().hex}"
+        response_body = {
+            "id": response_id,
             "object": "chat.completion",
             "created": int(time.time()),
             "model": model,
@@ -283,6 +411,17 @@ def create_app(settings: Settings) -> FastAPI:
                 "total_tokens": 0,
             },
         }
+        record_usage(
+            endpoint="/v1/chat/completions",
+            model=model,
+            status="missing_usage",
+            started_at=started_at,
+            started_timestamp=started_timestamp,
+            query_text=query_text,
+            metadata_urls=metadata_urls,
+            request_id=response_id,
+        )
+        return response_body
 
     @app.post("/v1/responses")
     def responses(request: ResponsesRequest) -> dict[str, Any]:
@@ -292,8 +431,15 @@ def create_app(settings: Settings) -> FastAPI:
                 detail="Streaming responses are not supported by this bridge.",
             )
 
+        started_at = time.time()
+        started_timestamp = timestamp_parts(settings.token_usage_timezone)
+        extra = _request_extra(request)
         prompt = _responses_input_to_prompt(request.input, request.instructions)
         model = _normalize_model_id(request.model)
+        query_text = _metadata_query_text(extra) or extract_user_query_from_responses_input(
+            request.input
+        )
+        metadata_urls = _metadata_urls(extra)
         reasoning_effort = (
             request.reasoning.get("effort")
             if isinstance(request.reasoning, dict)
@@ -307,8 +453,28 @@ def create_app(settings: Settings) -> FastAPI:
                 reasoning_effort=reasoning_effort,
             )
         except CodexOAuthConfigError as exc:
+            record_usage(
+                endpoint="/v1/responses",
+                model=model,
+                status="error",
+                started_at=started_at,
+                started_timestamp=started_timestamp,
+                query_text=query_text,
+                metadata_urls=metadata_urls,
+            )
             raise HTTPException(status_code=503, detail=redact_secrets(exc)) from exc
 
-        return _responses_payload(content=content, model=model, request=request)
+        response_body = _responses_payload(content=content, model=model, request=request)
+        record_usage(
+            endpoint="/v1/responses",
+            model=model,
+            status="missing_usage",
+            started_at=started_at,
+            started_timestamp=started_timestamp,
+            query_text=query_text,
+            metadata_urls=metadata_urls,
+            request_id=response_body.get("id"),
+        )
+        return response_body
 
     return app

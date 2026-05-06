@@ -47,6 +47,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Local token usage logs
+/token-usage/
+
 # OS
 .DS_Store
 Thumbs.db

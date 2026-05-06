@@ -34,7 +34,9 @@ def test_prefetch_discovery_enrichment_when_rss_sparse(monkeypatch):
             )
         ],
     )
-    monkeypatch.setattr("src.services.discovery_service._get_searcher", lambda: DummySearcher())
+    monkeypatch.setattr(
+        "src.services.discovery_service._get_searcher", lambda: DummySearcher()
+    )
 
     def fake_extract(self, url: str):
         from src.tools.article_extractor import ExtractedArticle
@@ -52,7 +54,9 @@ def test_prefetch_discovery_enrichment_when_rss_sparse(monkeypatch):
             extractor_method="playwright_async",
         )
 
-    monkeypatch.setattr("src.services.discovery_service.ArticleExtractor.extract", fake_extract)
+    monkeypatch.setattr(
+        "src.services.discovery_service.ArticleExtractor.extract", fake_extract
+    )
 
     context = service._prefetch_discovery_context(["politics", "taiwan"], count=5)
 
@@ -64,8 +68,12 @@ def test_prefetch_discovery_enrichment_when_rss_sparse(monkeypatch):
 def test_discover_passes_prefetched_context_to_crew(monkeypatch):
     service = DiscoveryService()
 
-    monkeypatch.setattr("src.services.discovery_service.settings.discovery_enrichment_enabled", True)
-    monkeypatch.setattr(service, "_prefetch_discovery_context", lambda topics, count: "PREFETCH")
+    monkeypatch.setattr(
+        "src.services.discovery_service.settings.discovery_enrichment_enabled", True
+    )
+    monkeypatch.setattr(
+        service, "_prefetch_discovery_context", lambda topics, count: "PREFETCH"
+    )
 
     captured = {}
 
@@ -73,7 +81,9 @@ def test_discover_passes_prefetched_context_to_crew(monkeypatch):
         captured["prefetched_context"] = prefetched_context
         return {"raw_output": "ok", "topics_searched": channel_topics}
 
-    monkeypatch.setattr("src.services.discovery_service.run_discovery", fake_run_discovery)
+    monkeypatch.setattr(
+        "src.services.discovery_service.run_discovery", fake_run_discovery
+    )
 
     result = service.discover(["news"], count=4)
 

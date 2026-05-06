@@ -7,7 +7,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from src.agents import profile_reader
-from src.agents import config as agents_config
 from src.core.config import settings
 from src.database import session as db_session
 from src.services.agent_config_service import AgentConfigService

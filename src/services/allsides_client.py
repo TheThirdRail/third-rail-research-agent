@@ -12,6 +12,7 @@ from src.tools.bias_classifier import BIAS_LABELS, BiasResult
 
 logger = logging.getLogger(__name__)
 
+
 class AllSidesClient:
     """Best-effort AllSides lookup by domain."""
 

@@ -187,9 +187,7 @@ class ReportRenderer:
             lines.append(f"- {limitation}")
         return "\n".join(lines)
 
-    def repair_source_findings(
-        self, sources: list[SourceRecord]
-    ) -> list[SourceRecord]:
+    def repair_source_findings(self, sources: list[SourceRecord]) -> list[SourceRecord]:
         """Generate deterministic fallback key-framing for sources missing it.
 
         Uses the source title as a truncated framing summary when

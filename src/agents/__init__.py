@@ -8,12 +8,12 @@ from src.agents.config import (
     get_llm_config,
 )
 from src.agents.fact_extractor import create_fact_extractor_agent
+from src.agents.narrative_analyzer import create_narrative_analyzer_agent
 from src.agents.news_aggregator import create_news_aggregator_agent
 from src.agents.profile_reader import create_profile_reader_agent, get_channel_context
 from src.agents.relevance_scorer import create_relevance_scorer_agent
 from src.agents.report_writer import create_report_writer_agent
 from src.agents.rhetorical_analyst import create_rhetorical_analyst_agent
-from src.agents.narrative_analyzer import create_narrative_analyzer_agent
 from src.agents.source_aggregator import create_source_aggregator_agent
 
 __all__ = [

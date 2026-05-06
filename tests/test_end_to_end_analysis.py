@@ -261,7 +261,9 @@ def test_end_to_end_seed_url_produces_deterministic_report(monkeypatch, tmp_path
         "required_bucket_groups"
     ] == ["left_side", "right_side"]
     assert diagnostics["report_validation_warnings"] == result["warnings"]
-    assert diagnostics["analysis_run"]["report_validation_warnings"] == result["warnings"]
+    assert (
+        diagnostics["analysis_run"]["report_validation_warnings"] == result["warnings"]
+    )
     post_retrieval = AnalysisService().get_handoff(
         result["story_id"],
         "post_retrieval",
@@ -446,7 +448,9 @@ def test_analysis_options_disable_semantic_memory_per_run(monkeypatch, tmp_path:
     class DummySearcher:
         def news_search(self, query: str, max_results: int = 10, time_range: str = "w"):
             return [
-                SearchResult("CNN covers Biden order", "https://cnn.com/story", "", "cnn"),
+                SearchResult(
+                    "CNN covers Biden order", "https://cnn.com/story", "", "cnn"
+                ),
                 SearchResult(
                     "Fox covers Biden order", "https://foxnews.com/story", "", "fox"
                 ),

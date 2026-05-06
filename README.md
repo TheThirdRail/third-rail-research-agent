@@ -59,6 +59,20 @@ uvicorn src.api.main:app --reload
 
 > **For more detailed setup instructions**, please see the [Step-by-Step Guide](step-by-step.md).
 
+### Windows PowerShell Note
+
+If CLI output fails with Unicode or encoding errors, set:
+
+```powershell
+$env:PYTHONIOENCODING="utf-8"
+```
+
+To persist for the project, add to your local `.env`:
+
+```ini
+PYTHONIOENCODING=utf-8
+```
+
 ## Usage
 
 ### CLI Commands

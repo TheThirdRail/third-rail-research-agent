@@ -56,7 +56,10 @@ def test_complete_recovers_once_after_openrouter_not_found(monkeypatch):
 
     assert output == "ok"
     assert attempts["count"] == 2
-    assert attempts["models"][0] == "openrouter/meta-llama/llama-3.2-11b-vision-instruct:free"
+    assert (
+        attempts["models"][0]
+        == "openrouter/meta-llama/llama-3.2-11b-vision-instruct:free"
+    )
     assert attempts["models"][1] == "openrouter/free"
 
 

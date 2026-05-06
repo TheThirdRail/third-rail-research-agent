@@ -8,11 +8,39 @@ from src.core import analysis_events
 from src.schemas.retrieval_diagnostics import CandidateDecision
 
 
+class _RecordCollector(logging.Handler):
+    """Minimal handler that collects formatted log output."""
+
+    def __init__(self) -> None:
+        super().__init__(logging.DEBUG)
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.messages.append(self.format(record))
+
+    @property
+    def text(self) -> str:
+        return "\n".join(self.messages)
+
+
 @pytest.fixture()
-def captured_events(caplog: pytest.LogCaptureFixture):
-    """Yield a helper that returns log records from the analysis.events logger."""
-    with caplog.at_level(logging.INFO, logger="analysis.events"):
-        yield caplog
+def captured_events():
+    """Yield a collector attached to the analysis.events logger.
+
+    This avoids relying on ``caplog`` / root logger level which can be
+    polluted by earlier test modules (alembic, sqlalchemy, etc.).
+    """
+    evt_logger = logging.getLogger("analysis.events")
+    collector = _RecordCollector()
+    evt_logger.addHandler(collector)
+    old_level = evt_logger.level
+    old_disabled = evt_logger.disabled
+    evt_logger.disabled = False
+    evt_logger.setLevel(logging.DEBUG)
+    yield collector
+    evt_logger.removeHandler(collector)
+    evt_logger.setLevel(old_level)
+    evt_logger.disabled = old_disabled
 
 
 class TestRunEvents:

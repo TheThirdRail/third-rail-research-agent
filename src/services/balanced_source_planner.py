@@ -342,7 +342,9 @@ class BalancedSourcePlanner:
     ) -> list[tuple[int | None, list[str]]]:
         """Return domain targets split by exact-bias preference lanes."""
         if not bucket.exact_bias_order:
-            targets = [domain for domain in bucket.domain_targets if domain != seed_domain]
+            targets = [
+                domain for domain in bucket.domain_targets if domain != seed_domain
+            ]
             return [(None, targets)] if targets else []
 
         lanes: list[tuple[int | None, list[str]]] = []

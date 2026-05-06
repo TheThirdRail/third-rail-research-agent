@@ -14,7 +14,7 @@ def sample_article_text() -> str:
     """
 
 
-@pytest.fixture  
+@pytest.fixture
 def sample_source_domains() -> list[str]:
     """Sample news source domains for testing."""
     return [

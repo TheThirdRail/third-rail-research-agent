@@ -241,7 +241,11 @@ class LLMRouter:
         message = str(exc).lower()
         if "resource_exhausted" in message:
             return True
-        if "rate_limited" in message or "rate limit" in message or "rate_limit" in message:
+        if (
+            "rate_limited" in message
+            or "rate limit" in message
+            or "rate_limit" in message
+        ):
             return True
         if "over capacity" in message or "service unavailable" in message:
             return True
@@ -368,9 +372,7 @@ class LLMRouter:
         def _worker() -> None:
             try:
                 models_box.append(
-                    asyncio.run(
-                        registry.list_models("openrouter", force_refresh=True)
-                    )
+                    asyncio.run(registry.list_models("openrouter", force_refresh=True))
                 )
             except Exception as worker_exc:
                 errors.append(worker_exc)
@@ -524,7 +526,8 @@ class LLMRouter:
                 "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
             ),
             LLMProvider.OLLAMA: os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-            LLMProvider.OPENAI: os.getenv("OPENAI_BASE_URL") or settings.openai_base_url,
+            LLMProvider.OPENAI: os.getenv("OPENAI_BASE_URL")
+            or settings.openai_base_url,
             LLMProvider.LMSTUDIO: normalize_lmstudio_base_url(
                 os.getenv("LM_STUDIO_API_BASE")
                 or os.getenv("LM_STUDIO_BASE_URL")

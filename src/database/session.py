@@ -88,6 +88,7 @@ def init_db() -> None:
     ensure_agent_config_schema(engine)
     ensure_agent_config_rows(engine)
     backfill_agent_config_models(engine)
+    backfill_known_bad_agent_models(engine)
 
 
 def run_alembic_upgrade(database_url: str | None = None) -> tuple[bool, str]:
@@ -284,6 +285,19 @@ def ensure_hardening_schema(target_engine) -> None:
         logger.warning("Failed to sync hardening database schema", exc_info=True)
 
 
+KNOWN_BAD_AGENT_MODELS: dict[str, str] = {
+    "google/gemma-3n-e4b-it:free": "Rejects developer/system instructions through OpenRouter.",
+    "meta-llama/llama-4-maverick:free": "Stale or unavailable OpenRouter free model.",
+}
+
+
+def _safe_model_for_provider(provider: str) -> str:
+    """Get a known-safe fallback model for the given provider."""
+    default = _default_fallback_model(provider)
+    normalized = normalize_model_for_provider(provider, default)
+    return normalized or default
+
+
 def backfill_agent_config_models(target_engine) -> None:
     """Normalize provider/model identifiers in agent_configurations.
 
@@ -316,6 +330,42 @@ def backfill_agent_config_models(target_engine) -> None:
             session.rollback()
     except Exception:
         session.rollback()
+    finally:
+        session.close()
+
+
+def backfill_known_bad_agent_models(target_engine) -> None:
+    """Replace known-bad agent model IDs with safe fallbacks.
+
+    Idempotent. Safe to run at startup.
+    """
+    session = Session(bind=target_engine)
+    try:
+        configs = session.query(AgentConfiguration).all()
+        changed = 0
+        for config in configs:
+            model_key = (config.model or "").strip().lower()
+            if model_key in KNOWN_BAD_AGENT_MODELS:
+                old_model = config.model
+                config.provider = (
+                    normalize_provider_name(config.provider) or config.provider
+                )
+                config.model = _safe_model_for_provider(config.provider)
+                logger.warning(
+                    "Replaced known-bad agent model for %s: %s -> %s (%s)",
+                    config.agent_name,
+                    old_model,
+                    config.model,
+                    KNOWN_BAD_AGENT_MODELS[model_key],
+                )
+                changed += 1
+        if changed:
+            session.commit()
+        else:
+            session.rollback()
+    except Exception:
+        session.rollback()
+        logger.warning("Failed to backfill known-bad agent models", exc_info=True)
     finally:
         session.close()
 

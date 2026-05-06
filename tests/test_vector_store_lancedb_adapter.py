@@ -119,9 +119,6 @@ def test_lancedb_vector_store_deletes_one_story_without_touching_others(tmp_path
 
     store.delete_story("story-1")
 
-    assert (
-        store.search([1.0, 0.0, 0.0], story_id="story-1", top_k=5)
-        == []
-    )
+    assert store.search([1.0, 0.0, 0.0], story_id="story-1", top_k=5) == []
     remaining = store.search([1.0, 0.0, 0.0], story_id="story-2", top_k=5)
     assert [result.id for result in remaining] == ["chunk-2"]

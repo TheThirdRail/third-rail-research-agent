@@ -7,6 +7,7 @@ from uuid import uuid4
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
+from src.core.time_utils import utc_now_naive
 from src.database.models import (
     AgentFinding,
     AgentHandoff,
@@ -278,7 +279,7 @@ class AnalysisRunCRUD:
         if report_validation_warnings is not None:
             run.report_validation_warnings_json = json.dumps(report_validation_warnings)
         run.error = error
-        run.completed_at = datetime.utcnow()
+        run.completed_at = utc_now_naive()
         self.db.commit()
         self.db.refresh(run)
         return run

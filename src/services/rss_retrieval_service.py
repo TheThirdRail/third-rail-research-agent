@@ -193,11 +193,7 @@ class RssRetrievalService:
 
     @classmethod
     def _marker_overlap(cls, text: str, packet: StoryPacket) -> float:
-        markers = (
-            packet.quote_markers
-            + packet.number_markers
-            + packet.platform_markers
-        )
+        markers = packet.quote_markers + packet.number_markers + packet.platform_markers
         for term in packet.distinctive_terms + packet.visual_descriptors:
             if re.search(r"\d|['\"@#]", term) or term.lower() in {
                 "x",

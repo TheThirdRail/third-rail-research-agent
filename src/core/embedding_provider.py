@@ -96,7 +96,9 @@ class LMStudioEmbeddingProvider:
 
         vectors: list[list[float]] = []
         for item in data:
-            if not isinstance(item, dict) or not isinstance(item.get("embedding"), list):
+            if not isinstance(item, dict) or not isinstance(
+                item.get("embedding"), list
+            ):
                 raise ValueError("LM Studio embeddings response has invalid item")
             vector = [float(value) for value in item["embedding"]]
             vectors.append(vector)

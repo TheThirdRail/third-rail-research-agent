@@ -140,9 +140,7 @@ def test_hardening_migration_syncs_diagnostic_tables_and_snapshots(tmp_path):
         "coverage_snapshot_json",
         "candidate_census_json",
         "report_validation_warnings_json",
-    } <= (
-        analysis_run_columns
-    )
+    } <= (analysis_run_columns)
     assert {
         "analysis_run_id",
         "stage",

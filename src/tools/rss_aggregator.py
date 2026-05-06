@@ -12,6 +12,7 @@ import yaml
 from crewai.tools.base_tool import BaseTool
 
 from src.core.config import settings
+from src.core.time_utils import utc_now_naive
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +157,7 @@ class RSSAggregator:
     ) -> list[FeedItem]:
         """Fetch items from all configured feeds."""
         all_items = []
-        cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
+        cutoff = utc_now_naive() - timedelta(hours=max_age_hours)
 
         for feed in self.feeds:
             if categories and feed.get("category") not in categories:

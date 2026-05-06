@@ -4,8 +4,6 @@ Covers all known validation paths including semantic, embedding, vector store,
 screenshot capture, OCR, and bucket enforcement configurations.
 """
 
-import pytest
-
 from src.core.config import Settings
 
 
@@ -40,10 +38,11 @@ def _make_settings(**overrides) -> Settings:
 
 
 class TestSemanticScoringValidation:
-
     def test_no_warning_when_scoring_disabled(self):
         s = _make_settings(semantic_candidate_scoring_enabled=False)
-        assert not any("SEMANTIC_CANDIDATE_SCORING" in w for w in s.validate_feature_dependencies())
+        assert not any(
+            "SEMANTIC_CANDIDATE_SCORING" in w for w in s.validate_feature_dependencies()
+        )
 
     def test_warning_when_scoring_enabled_with_fake_embeddings(self):
         s = _make_settings(
@@ -63,7 +62,10 @@ class TestSemanticScoringValidation:
             embedding_model="some-model",
         )
         warnings = s.validate_feature_dependencies()
-        assert not any("SEMANTIC_CANDIDATE_SCORING_ENABLED=true" in w and "fake" in w for w in warnings)
+        assert not any(
+            "SEMANTIC_CANDIDATE_SCORING_ENABLED=true" in w and "fake" in w
+            for w in warnings
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -72,10 +74,11 @@ class TestSemanticScoringValidation:
 
 
 class TestSemanticMemoryValidation:
-
     def test_no_warning_when_memory_disabled(self):
         s = _make_settings(semantic_memory_enabled=False)
-        assert not any("SEMANTIC_MEMORY_ENABLED" in w for w in s.validate_feature_dependencies())
+        assert not any(
+            "SEMANTIC_MEMORY_ENABLED" in w for w in s.validate_feature_dependencies()
+        )
 
     def test_warning_when_memory_enabled_with_fake_embeddings(self):
         s = _make_settings(
@@ -84,8 +87,7 @@ class TestSemanticMemoryValidation:
         )
         warnings = s.validate_feature_dependencies()
         assert any(
-            "SEMANTIC_MEMORY_ENABLED=true" in w and "fake" in w
-            for w in warnings
+            "SEMANTIC_MEMORY_ENABLED=true" in w and "fake" in w for w in warnings
         )
 
 
@@ -95,7 +97,6 @@ class TestSemanticMemoryValidation:
 
 
 class TestSemanticQueryExpansionValidation:
-
     def test_warning_when_expansion_enabled_without_llm(self):
         s = _make_settings(
             semantic_query_expansion_enabled=True,
@@ -119,7 +120,6 @@ class TestSemanticQueryExpansionValidation:
 
 
 class TestEmbeddingModelValidation:
-
     def test_warning_when_real_provider_with_fake_model(self):
         s = _make_settings(
             embedding_provider="lmstudio",
@@ -134,7 +134,9 @@ class TestEmbeddingModelValidation:
             embedding_model="fake-hash-v1",
         )
         warnings = s.validate_feature_dependencies()
-        assert not any("fake-hash-v1" in w and "EMBEDDING_PROVIDER" in w for w in warnings)
+        assert not any(
+            "fake-hash-v1" in w and "EMBEDDING_PROVIDER" in w for w in warnings
+        )
 
     def test_no_warning_when_real_provider_with_real_model(self):
         s = _make_settings(
@@ -151,7 +153,6 @@ class TestEmbeddingModelValidation:
 
 
 class TestVectorStoreValidation:
-
     def test_no_warning_when_vector_store_none(self):
         s = _make_settings(semantic_vector_store="none")
         warnings = s.validate_feature_dependencies()
@@ -160,6 +161,7 @@ class TestVectorStoreValidation:
     def test_warning_when_lancedb_selected_but_package_missing(self, monkeypatch):
         """Simulate lancedb import failure."""
         import builtins
+
         real_import = builtins.__import__
 
         def fake_import(name, *args, **kwargs):
@@ -171,7 +173,10 @@ class TestVectorStoreValidation:
 
         s = _make_settings(semantic_vector_store="lancedb")
         warnings = s.validate_feature_dependencies()
-        assert any("SEMANTIC_VECTOR_STORE=lancedb" in w and "not installed" in w for w in warnings)
+        assert any(
+            "SEMANTIC_VECTOR_STORE=lancedb" in w and "not installed" in w
+            for w in warnings
+        )
 
     def test_warning_when_lancedb_set_but_semantic_features_disabled(self):
         s = _make_settings(
@@ -199,7 +204,6 @@ class TestVectorStoreValidation:
 
 
 class TestScreenshotCaptureValidation:
-
     def test_no_warning_when_screenshot_disabled(self):
         s = _make_settings(screenshot_capture_enabled=False)
         warnings = s.validate_feature_dependencies()
@@ -207,6 +211,7 @@ class TestScreenshotCaptureValidation:
 
     def test_warning_when_screenshot_enabled_but_playwright_missing(self, monkeypatch):
         import builtins
+
         real_import = builtins.__import__
 
         def fake_import(name, *args, **kwargs):
@@ -230,7 +235,6 @@ class TestScreenshotCaptureValidation:
 
 
 class TestOCRValidation:
-
     def test_no_warning_when_ocr_disabled(self):
         s = _make_settings(screenshot_ocr_enabled=False)
         warnings = s.validate_feature_dependencies()
@@ -243,7 +247,8 @@ class TestOCRValidation:
         )
         warnings = s.validate_feature_dependencies()
         assert any(
-            "SCREENSHOT_OCR_ENABLED=true" in w and "SCREENSHOT_CAPTURE_ENABLED=false" in w
+            "SCREENSHOT_OCR_ENABLED=true" in w
+            and "SCREENSHOT_CAPTURE_ENABLED=false" in w
             for w in warnings
         )
 
@@ -258,6 +263,7 @@ class TestOCRValidation:
 
     def test_warning_when_pytesseract_package_missing(self, monkeypatch):
         import builtins
+
         real_import = builtins.__import__
 
         def fake_import(name, *args, **kwargs):
@@ -282,7 +288,6 @@ class TestOCRValidation:
 
 
 class TestBucketEnforcementValidation:
-
     def test_warning_when_strict_with_too_few_sources(self):
         s = _make_settings(
             strict_bucket_enforcement=True,
@@ -314,7 +319,6 @@ class TestBucketEnforcementValidation:
 
 
 class TestCompoundValidation:
-
     def test_clean_config_produces_no_warnings(self):
         """A fully default config should produce no warnings."""
         s = _make_settings()

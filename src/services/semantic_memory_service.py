@@ -380,12 +380,17 @@ class SemanticMemoryService:
                 f"similarity={result.similarity:.3f}"
                 "]"
             )
-            lines.append(self._compact_text(result.chunk_text, AGENT_CONTEXT_EXCERPT_CHARS))
+            lines.append(
+                self._compact_text(result.chunk_text, AGENT_CONTEXT_EXCERPT_CHARS)
+            )
 
         context = "\n".join(lines)
         if len(context) <= AGENT_CONTEXT_MAX_CHARS:
             return context
-        return context[:AGENT_CONTEXT_MAX_CHARS].rstrip() + "\n[Semantic context truncated]"
+        return (
+            context[:AGENT_CONTEXT_MAX_CHARS].rstrip()
+            + "\n[Semantic context truncated]"
+        )
 
     def delete_story_index(self, story_id: str) -> int:
         """Delete semantic documents/chunks for a story and return document count."""
@@ -485,14 +490,11 @@ class SemanticMemoryService:
         if source_ids:
             query = query.filter(SemanticChunk.source_id.in_(source_ids))
 
-        chunks = (
-            query.order_by(
-                SemanticDocument.document_type,
-                SemanticChunk.source_id,
-                SemanticChunk.chunk_index,
-            )
-            .all()
-        )
+        chunks = query.order_by(
+            SemanticDocument.document_type,
+            SemanticChunk.source_id,
+            SemanticChunk.chunk_index,
+        ).all()
         return [chunk for chunk in chunks if self._metadata_matches(chunk, filters)]
 
     def _rank_chunks(
@@ -583,7 +585,9 @@ class SemanticMemoryService:
         batch_size = max(1, int(getattr(settings, "embedding_batch_size", 32)))
         vectors: list[list[float]] = []
         for start in range(0, len(texts), batch_size):
-            vectors.extend(self._embedding_provider.embed_texts(texts[start : start + batch_size]))
+            vectors.extend(
+                self._embedding_provider.embed_texts(texts[start : start + batch_size])
+            )
         return vectors
 
     def _retrieval_result(
@@ -947,7 +951,9 @@ class SemanticMemoryService:
 
     @staticmethod
     def _visual_evidence_text(record: VisualEvidenceRecord) -> str:
-        visible_symbols = ", ".join(record.visible_symbols_or_numbers) or "none observed"
+        visible_symbols = (
+            ", ".join(record.visible_symbols_or_numbers) or "none observed"
+        )
         observable_objects = ", ".join(record.observable_objects) or "none observed"
         parts = [
             "Observable content:",

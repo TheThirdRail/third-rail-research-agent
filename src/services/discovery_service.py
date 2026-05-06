@@ -120,7 +120,9 @@ class DiscoveryService:
                 if len(records) >= target:
                     break
                 try:
-                    results = searcher.news_search(query, max_results=10, time_range="w")
+                    results = searcher.news_search(
+                        query, max_results=10, time_range="w"
+                    )
                 except Exception as exc:
                     logger.warning("Discovery search failed for '%s': %s", query, exc)
                     continue

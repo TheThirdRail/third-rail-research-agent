@@ -48,7 +48,9 @@ def summarize_diagnostics(diagnostics: dict[str, Any]) -> dict[str, Any]:
         for candidate in candidates
         if _has_semantic_diagnostics(candidate.get("relevance_diagnostics", {}))
     ]
-    visual_fallback_count = sum(1 for record in records if record.get("fallback_reason"))
+    visual_fallback_count = sum(
+        1 for record in records if record.get("fallback_reason")
+    )
     warning_count = len(report_warnings) or len(limitations) + len(missing_buckets)
     runtime_seconds = _runtime_seconds(run.get("started_at"), run.get("completed_at"))
 
@@ -61,7 +63,9 @@ def summarize_diagnostics(diagnostics: dict[str, Any]) -> dict[str, Any]:
         "retained_count": _count_state(candidates, "retained"),
         "rss_candidate_count": len(rss_candidates),
         "rss_retained_count": _count_state(rss_candidates, "retained"),
-        "rss_accept_rate": _ratio(_count_state(rss_candidates, "retained"), len(rss_candidates)),
+        "rss_accept_rate": _ratio(
+            _count_state(rss_candidates, "retained"), len(rss_candidates)
+        ),
         "semantic_scored_count": len(semantic_scored),
         "visual_record_count": len(records),
         "visual_fallback_count": visual_fallback_count,
@@ -92,7 +96,9 @@ def aggregate_summaries(stories: list[dict[str, Any]]) -> dict[str, Any]:
         "rss_candidate_count": rss_candidate_count,
         "rss_retained_count": rss_retained_count,
         "rss_accept_rate": _ratio(rss_retained_count, rss_candidate_count),
-        "semantic_scored_count": sum(story["semantic_scored_count"] for story in stories),
+        "semantic_scored_count": sum(
+            story["semantic_scored_count"] for story in stories
+        ),
         "visual_record_count": visual_record_count,
         "visual_fallback_count": visual_fallback_count,
         "visual_fallback_rate": _ratio(visual_fallback_count, visual_record_count),

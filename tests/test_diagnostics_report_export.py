@@ -100,5 +100,8 @@ def test_diagnostics_report_markdown_and_json_are_stable():
     encoded = json.dumps(report)
 
     assert "# Diagnostics Benchmark Report" in markdown
-    assert "| story-12 | failed | 2.000s | 4 | 1/2 | 1 | 1/2 | 1 | right_side |" in markdown
+    assert (
+        "| story-12 | failed | 2.000s | 4 | 1/2 | 1 | 1/2 | 1 | right_side |"
+        in markdown
+    )
     assert '"rss_accept_rate": 0.5' in encoded

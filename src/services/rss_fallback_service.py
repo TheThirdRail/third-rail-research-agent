@@ -65,7 +65,9 @@ class RssFallbackService:
             if token not in {"the", "and", "for", "with", "from", "that", "this"}
         }
 
-    def _iter_feed_items(self, feeds: list[dict], max_items: int = 80) -> list[FeedItem]:
+    def _iter_feed_items(
+        self, feeds: list[dict], max_items: int = 80
+    ) -> list[FeedItem]:
         items: list[FeedItem] = []
         for feed in feeds:
             items.extend(
@@ -167,6 +169,8 @@ class RssFallbackService:
                 best_item = item
 
         if best_item and best_score >= 0.45:
-            return self._to_result(best_item, confidence=best_score, match_type="slug_title")
+            return self._to_result(
+                best_item, confidence=best_score, match_type="slug_title"
+            )
 
         return None

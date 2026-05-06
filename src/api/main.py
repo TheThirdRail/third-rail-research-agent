@@ -1,13 +1,13 @@
 """FastAPI main application for Research Agent."""
 
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
 import logging
 import os
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import httpx
 
 from src.api.routes.agents import router as agents_router
 from src.api.routes.analyze import router as analyze_router
@@ -17,7 +17,10 @@ from src.api.routes.discover import router as discover_router
 from src.api.routes.models import router as models_router
 from src.api.routes.reports import router as reports_router
 from src.core.config import settings
-from src.core.lmstudio_utils import normalize_lmstudio_base_url, resolve_lmstudio_api_key
+from src.core.lmstudio_utils import (
+    normalize_lmstudio_base_url,
+    resolve_lmstudio_api_key,
+)
 from src.core.task_timing import register_task_timing
 from src.database import init_db
 
@@ -27,7 +30,9 @@ logger = logging.getLogger(__name__)
 async def _check_lmstudio_connectivity() -> None:
     """Log LM Studio connectivity state for primary/fallback runtime."""
     provider = settings.llm_provider.strip().lower()
-    should_check = provider in {"lmstudio", "lm_studio"} or settings.lmstudio_fallback_enabled
+    should_check = (
+        provider in {"lmstudio", "lm_studio"} or settings.lmstudio_fallback_enabled
+    )
     if not should_check:
         return
 

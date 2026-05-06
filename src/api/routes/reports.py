@@ -3,7 +3,6 @@
 from fastapi import APIRouter, HTTPException, Response
 from markdown import markdown as markdown_to_html
 from pydantic import BaseModel, Field
-from playwright.async_api import async_playwright
 
 router = APIRouter()
 
@@ -72,6 +71,7 @@ NEON_STYLES = """
 </style>
 """
 
+
 def build_report_html(markdown: str) -> str:
     """Convert markdown report content into styled HTML."""
     body = markdown_to_html(
@@ -95,6 +95,8 @@ def build_report_html(markdown: str) -> str:
 
 async def render_report_pdf(markdown: str) -> bytes:
     """Render markdown into a PDF using Playwright."""
+    from playwright.async_api import async_playwright
+
     html = build_report_html(markdown)
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(args=["--no-sandbox"])

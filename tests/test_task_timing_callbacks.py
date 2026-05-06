@@ -13,4 +13,3 @@ def test_extract_event_from_kwargs():
     event = SimpleNamespace(task="task")
     extracted = _extract_event((), {"event": event})
     assert extracted is event
-

@@ -295,7 +295,9 @@ def create_app(settings: Settings) -> FastAPI:
         prompt = _responses_input_to_prompt(request.input, request.instructions)
         model = _normalize_model_id(request.model)
         reasoning_effort = (
-            request.reasoning.get("effort") if isinstance(request.reasoning, dict) else None
+            request.reasoning.get("effort")
+            if isinstance(request.reasoning, dict)
+            else None
         )
         try:
             content = cli_adapter.run_prompt_with_model(

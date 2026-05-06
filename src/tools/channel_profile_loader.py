@@ -66,7 +66,9 @@ class ChannelProfileLoader:
 
         ext = path.suffix.lower()
         if ext not in self.SUPPORTED_EXTENSIONS:
-            raise ValueError(f"Unsupported format: {ext}. Supported: {self.SUPPORTED_EXTENSIONS}")
+            raise ValueError(
+                f"Unsupported format: {ext}. Supported: {self.SUPPORTED_EXTENSIONS}"
+            )
 
         content = path.read_text(encoding="utf-8")
 
@@ -110,7 +112,9 @@ class ChannelProfileLoader:
             return "json"
 
         # YAML has key: value patterns
-        if ":" in content_stripped.split("\n")[0] and not content_stripped.startswith("#"):
+        if ":" in content_stripped.split("\n")[0] and not content_stripped.startswith(
+            "#"
+        ):
             return "yaml"
 
         # Markdown has # headers
@@ -133,7 +137,9 @@ class ChannelProfileLoader:
         # Flatten topics
         all_topics = []
         if isinstance(topics_data, dict):
-            all_topics = topics_data.get("primary", []) + topics_data.get("secondary", [])
+            all_topics = topics_data.get("primary", []) + topics_data.get(
+                "secondary", []
+            )
         elif isinstance(topics_data, list):
             all_topics = topics_data
 
@@ -216,7 +222,9 @@ class ChannelProfileLoader:
 
         return scope
 
-    def _save_md_section(self, scope: ChannelScope, section: str, content: list[str]) -> None:
+    def _save_md_section(
+        self, scope: ChannelScope, section: str, content: list[str]
+    ) -> None:
         """Save parsed markdown section to scope."""
         text = "\n".join(content)
 
@@ -226,7 +234,13 @@ class ChannelProfileLoader:
             scope.worldview_description = text
             # Try to extract single-word worldview
             words = text.lower().split()
-            for term in ["libertarian", "conservative", "liberal", "progressive", "centrist"]:
+            for term in [
+                "libertarian",
+                "conservative",
+                "liberal",
+                "progressive",
+                "centrist",
+            ]:
                 if term in words:
                     scope.worldview = term
                     break

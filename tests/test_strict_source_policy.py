@@ -5,6 +5,7 @@ import pytest
 from src.core.exceptions import SourceExtractionError
 from src.services.balanced_source_planner import BalancedSourcePlanner
 from src.services.source_aggregator_service import (
+    QueryAttempt,
     SourceAggregatorService,
     SourceCandidate,
 )
@@ -127,7 +128,7 @@ def test_rss_retrieval_runs_before_site_search():
     service._searcher = FakeSearcher()
     plan = BalancedSourcePlanner().plan(seed_bias=0)
 
-    service._search_queries(["test story"], plan)
+    service._search_queries([QueryAttempt(query="test story", family="lexical")], plan)
 
     assert calls[0] == "rss"
     assert "site" in calls
@@ -160,7 +161,9 @@ def test_rss_retrieval_can_be_disabled_for_analysis_runtime():
         mock_settings.candidate_probe_limit = 15
         mock_settings.search_time_window_days = 7
 
-        service._search_queries(["test story"], plan)
+        service._search_queries(
+            [QueryAttempt(query="test story", family="lexical")], plan
+        )
 
     assert "rss" not in calls
     assert "site" in calls

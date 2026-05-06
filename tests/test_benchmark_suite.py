@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from scripts.run_retrieval_benchmark import (
-    BenchmarkResult,
     DEFAULT_FIXTURE_DIR,
     evaluate_fixture,
     format_markdown,
@@ -15,7 +12,6 @@ from scripts.run_retrieval_benchmark import (
     run_benchmarks,
 )
 from scripts.sweep_relevance_weights import PROFILES, run_sweep
-
 
 FIXTURE_DIR = DEFAULT_FIXTURE_DIR
 
@@ -36,7 +32,10 @@ class TestBenchmarkFixtureLoading:
     def test_fixtures_with_expected_state_have_text_excerpts(self):
         for fixture in load_fixtures(FIXTURE_DIR):
             for candidate in fixture.get("simulated_candidates", []):
-                if candidate.get("expected_state") in {"retained", "relevance_rejected"}:
+                if candidate.get("expected_state") in {
+                    "retained",
+                    "relevance_rejected",
+                }:
                     assert candidate.get("text_excerpt"), (
                         f"Fixture '{fixture['name']}' candidate '{candidate.get('title', '')}' "
                         f"has expected_state but no text_excerpt"
@@ -108,7 +107,9 @@ class TestBenchmarkSpecificFixtures:
     def test_same_person_wrong_event_rejects_old_articles(self, fixtures):
         fixture = self._find_fixture(fixtures, "same_person_wrong_event")
         result = evaluate_fixture(fixture)
-        assert result.true_negative >= 2, "Should reject at least 2 wrong-event articles"
+        assert result.true_negative >= 2, (
+            "Should reject at least 2 wrong-event articles"
+        )
         assert result.true_positive >= 2, "Should retain at least 2 correct articles"
 
     def test_temporal_proximity_uses_must_not_have(self, fixtures):

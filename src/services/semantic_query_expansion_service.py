@@ -53,8 +53,10 @@ class SemanticQueryExpansionService:
 
     def _semantic_paraphrases(self, packet: StoryPacket) -> list[str]:
         queries: list[str] = []
-        actor = packet.aliases[0] if packet.aliases else (
-            packet.actors[0] if packet.actors else ""
+        actor = (
+            packet.aliases[0]
+            if packet.aliases
+            else (packet.actors[0] if packet.actors else "")
         )
         primary_actor = packet.actors[0] if packet.actors else actor
         markers = " ".join(packet.distinctive_terms[:2])
@@ -63,7 +65,9 @@ class SemanticQueryExpansionService:
         if actor and packet.action_verbs:
             queries.append(f"{actor} {packet.action_verbs[0]} latest")
         if primary_actor and packet.action_verbs and packet.location:
-            queries.append(f"{primary_actor} {packet.action_verbs[0]} {packet.location}")
+            queries.append(
+                f"{primary_actor} {packet.action_verbs[0]} {packet.location}"
+            )
         if primary_actor and packet.action_verbs and packet.quote_markers:
             queries.append(
                 f"{primary_actor} {packet.action_verbs[0]} {packet.quote_markers[0]}"
@@ -81,8 +85,7 @@ class SemanticQueryExpansionService:
     def _opposing_frame_queries(self, packet: StoryPacket) -> list[str]:
         queries: list[str] = []
         combined_terms = " ".join(
-            (packet.actors[:1] or packet.aliases[:1])
-            + packet.distinctive_terms[:2]
+            (packet.actors[:1] or packet.aliases[:1]) + packet.distinctive_terms[:2]
         ).strip()
         if not combined_terms:
             return []

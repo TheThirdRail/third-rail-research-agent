@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from src.core.time_utils import utc_now_naive
+
 CandidateStage = Literal["primary", "rss", "site_search", "open_web", "unknown"]
 CandidateState = Literal[
     "discovered",
@@ -39,7 +41,7 @@ class CandidateDecision(BaseModel):
     relevance_diagnostics: dict[str, Any] = Field(default_factory=dict)
     source_score: float | None = None
     media_diagnostics: dict[str, Any] = Field(default_factory=dict)
-    discovered_at: datetime = Field(default_factory=datetime.utcnow)
+    discovered_at: datetime = Field(default_factory=utc_now_naive)
 
 
 class RelevanceDiagnostics(BaseModel):
@@ -77,6 +79,7 @@ class BucketLaneAttempt(BaseModel):
     bucket_label: str
     stage: CandidateStage
     query: str = ""
+    query_family: str | None = None
     exact_bias: int | None = None
     domains: list[str] = Field(default_factory=list)
     result_count: int = 0

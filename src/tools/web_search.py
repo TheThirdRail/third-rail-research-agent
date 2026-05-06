@@ -305,10 +305,12 @@ def _docker_safe_searxng_base_url(base_url: str) -> str:
     """Map host-loopback SearxNG URLs to the Docker host from inside containers."""
     try:
         parsed = urlparse(base_url)
-        if (
-            os.path.exists("/.dockerenv")
-            and parsed.hostname in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
-        ):
+        if os.path.exists("/.dockerenv") and parsed.hostname in {
+            "localhost",
+            "127.0.0.1",
+            "0.0.0.0",
+            "::1",
+        }:
             netloc = "host.docker.internal"
             if parsed.port:
                 netloc = f"{netloc}:{parsed.port}"

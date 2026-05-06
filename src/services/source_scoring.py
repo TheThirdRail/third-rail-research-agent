@@ -11,6 +11,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from src.core.time_utils import utc_now_naive
 from src.services.source_registry import get_source_registry
 
 logger = logging.getLogger(__name__)
@@ -144,7 +145,7 @@ def _compute_freshness(
     if not published_date:
         return 0.5  # Unknown date gets neutral score
 
-    ref = reference_date or datetime.utcnow()
+    ref = reference_date or utc_now_naive()
     age = abs((ref - published_date).total_seconds())
     max_age = timedelta(days=30).total_seconds()
 

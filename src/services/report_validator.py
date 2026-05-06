@@ -236,16 +236,12 @@ def validate_source_findings(
     found_set = set(found_ids)
     missing = expected_ids - found_set
     if missing:
-        warnings.append(
-            f"Missing source findings for: {', '.join(sorted(missing))}"
-        )
+        warnings.append(f"Missing source findings for: {', '.join(sorted(missing))}")
 
     # Check for invalid source IDs
     invalid = found_set - expected_ids
     if invalid:
-        warnings.append(
-            f"Invalid source IDs in findings: {', '.join(sorted(invalid))}"
-        )
+        warnings.append(f"Invalid source IDs in findings: {', '.join(sorted(invalid))}")
 
     # Check for duplicate source IDs
     seen: set[str] = set()
@@ -255,9 +251,7 @@ def validate_source_findings(
             duplicates.append(sid)
         seen.add(sid)
     if duplicates:
-        warnings.append(
-            f"Duplicate source findings: {', '.join(duplicates)}"
-        )
+        warnings.append(f"Duplicate source findings: {', '.join(duplicates)}")
 
     # Check for empty key framing
     _GENERIC_FILLER = {"n/a", "none", "no framing", "see report", "tbd", ""}

@@ -4,7 +4,9 @@ from src.tools.article_extractor import ArticleExtractor, ExtractedArticle
 def test_selenium_fallback_retries_with_next_user_agent(monkeypatch):
     extractor = ArticleExtractor()
 
-    monkeypatch.setattr("src.tools.article_extractor.settings.enable_selenium_fallback", True)
+    monkeypatch.setattr(
+        "src.tools.article_extractor.settings.enable_selenium_fallback", True
+    )
     monkeypatch.setattr("src.tools.article_extractor.settings.max_selenium_attempts", 2)
     monkeypatch.setattr(
         "src.tools.article_extractor.settings.selenium_user_agents",
@@ -51,7 +53,9 @@ def test_selenium_fallback_retries_with_next_user_agent(monkeypatch):
 
 def test_selenium_fallback_disabled(monkeypatch):
     extractor = ArticleExtractor()
-    monkeypatch.setattr("src.tools.article_extractor.settings.enable_selenium_fallback", False)
+    monkeypatch.setattr(
+        "src.tools.article_extractor.settings.enable_selenium_fallback", False
+    )
 
     result = extractor.extract_selenium("https://example.com/story")
 

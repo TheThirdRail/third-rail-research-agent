@@ -8,7 +8,9 @@ from pydantic import BaseModel, Field
 class OpinionCluster(BaseModel):
     """A cluster of opinions from a specific ideological group."""
 
-    bias_group: str = Field(description="Ideological group (e.g., 'left', 'right', 'center')")
+    bias_group: str = Field(
+        description="Ideological group (e.g., 'left', 'right', 'center')"
+    )
     key_opinions: list[str] = Field(
         default_factory=list,
         description="Main opinion positions from this group",

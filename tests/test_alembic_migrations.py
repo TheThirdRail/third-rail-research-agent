@@ -61,9 +61,7 @@ def test_alembic_upgrade_syncs_legacy_sqlite_schema(tmp_path):
         )
         conn.execute(
             text(
-                "CREATE TABLE agent_configurations ("
-                "agent_name VARCHAR(50) PRIMARY KEY"
-                ")"
+                "CREATE TABLE agent_configurations (agent_name VARCHAR(50) PRIMARY KEY)"
             )
         )
 

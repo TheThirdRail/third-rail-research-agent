@@ -7,16 +7,14 @@ that CLI flags build AnalysisOptions correctly.
 
 import json
 from pathlib import Path
-from unittest.mock import patch
 from urllib.parse import urlparse
 
-import pytest
 from click.testing import CliRunner
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from src.core import config as core_config
-from src.database.models import AnalysisRun, Base, Source
+from src.database.models import AnalysisRun, Base
 from src.schemas.analysis_options import AnalysisOptions
 from src.services.analysis_service import AnalysisService
 from src.services.source_aggregator_service import (
@@ -25,7 +23,6 @@ from src.services.source_aggregator_service import (
 )
 from src.tools.bias_classifier import BiasResult
 from src.tools.web_search import SearchResult
-
 
 # ---------------------------------------------------------------------------
 # AnalysisOptions schema tests
@@ -90,8 +87,12 @@ class TestOptionsSnapshotResolution:
     def test_no_options_uses_settings_defaults(self, monkeypatch):
         monkeypatch.setattr(core_config.settings, "strict_bucket_enforcement", True)
         monkeypatch.setattr(core_config.settings, "semantic_memory_enabled", False)
-        monkeypatch.setattr(core_config.settings, "semantic_candidate_scoring_enabled", False)
-        monkeypatch.setattr(core_config.settings, "semantic_query_expansion_enabled", False)
+        monkeypatch.setattr(
+            core_config.settings, "semantic_candidate_scoring_enabled", False
+        )
+        monkeypatch.setattr(
+            core_config.settings, "semantic_query_expansion_enabled", False
+        )
         monkeypatch.setattr(core_config.settings, "screenshot_capture_enabled", False)
         monkeypatch.setattr(core_config.settings, "embedding_provider", "fake")
         monkeypatch.setattr(core_config.settings, "embedding_model", "fake-hash-v1")
@@ -114,8 +115,12 @@ class TestOptionsSnapshotResolution:
         monkeypatch.setattr(core_config.settings, "embedding_model", "fake-hash-v1")
         monkeypatch.setattr(core_config.settings, "semantic_vector_store", "none")
         monkeypatch.setattr(core_config.settings, "screenshot_capture_enabled", False)
-        monkeypatch.setattr(core_config.settings, "semantic_candidate_scoring_enabled", False)
-        monkeypatch.setattr(core_config.settings, "semantic_query_expansion_enabled", False)
+        monkeypatch.setattr(
+            core_config.settings, "semantic_candidate_scoring_enabled", False
+        )
+        monkeypatch.setattr(
+            core_config.settings, "semantic_query_expansion_enabled", False
+        )
 
         opts = AnalysisOptions(
             strict_bucket_enforcement=False,
@@ -139,8 +144,12 @@ class TestOptionsSnapshotResolution:
         monkeypatch.setattr(core_config.settings, "embedding_model", "some-model")
         monkeypatch.setattr(core_config.settings, "semantic_vector_store", "lancedb")
         monkeypatch.setattr(core_config.settings, "screenshot_capture_enabled", False)
-        monkeypatch.setattr(core_config.settings, "semantic_candidate_scoring_enabled", False)
-        monkeypatch.setattr(core_config.settings, "semantic_query_expansion_enabled", False)
+        monkeypatch.setattr(
+            core_config.settings, "semantic_candidate_scoring_enabled", False
+        )
+        monkeypatch.setattr(
+            core_config.settings, "semantic_query_expansion_enabled", False
+        )
 
         # Only override strict; rest should come from settings
         opts = AnalysisOptions(strict_bucket_enforcement=False)
@@ -153,12 +162,18 @@ class TestOptionsSnapshotResolution:
         assert snapshot["vector_store"] == "lancedb"
 
     def test_required_bucket_groups_from_csv_setting(self, monkeypatch):
-        monkeypatch.setattr(core_config.settings, "required_bucket_groups", "left_side,right_side")
+        monkeypatch.setattr(
+            core_config.settings, "required_bucket_groups", "left_side,right_side"
+        )
         monkeypatch.setattr(core_config.settings, "exact_center_preferred", True)
         monkeypatch.setattr(core_config.settings, "strict_bucket_enforcement", True)
         monkeypatch.setattr(core_config.settings, "semantic_memory_enabled", False)
-        monkeypatch.setattr(core_config.settings, "semantic_candidate_scoring_enabled", False)
-        monkeypatch.setattr(core_config.settings, "semantic_query_expansion_enabled", False)
+        monkeypatch.setattr(
+            core_config.settings, "semantic_candidate_scoring_enabled", False
+        )
+        monkeypatch.setattr(
+            core_config.settings, "semantic_query_expansion_enabled", False
+        )
         monkeypatch.setattr(core_config.settings, "screenshot_capture_enabled", False)
         monkeypatch.setattr(core_config.settings, "embedding_provider", "fake")
         monkeypatch.setattr(core_config.settings, "embedding_model", "fake-hash-v1")
@@ -170,12 +185,18 @@ class TestOptionsSnapshotResolution:
         assert snapshot["preferred_bucket_groups"] == ["center"]
 
     def test_required_bucket_groups_override(self, monkeypatch):
-        monkeypatch.setattr(core_config.settings, "required_bucket_groups", "left_side,right_side")
+        monkeypatch.setattr(
+            core_config.settings, "required_bucket_groups", "left_side,right_side"
+        )
         monkeypatch.setattr(core_config.settings, "exact_center_preferred", True)
         monkeypatch.setattr(core_config.settings, "strict_bucket_enforcement", True)
         monkeypatch.setattr(core_config.settings, "semantic_memory_enabled", False)
-        monkeypatch.setattr(core_config.settings, "semantic_candidate_scoring_enabled", False)
-        monkeypatch.setattr(core_config.settings, "semantic_query_expansion_enabled", False)
+        monkeypatch.setattr(
+            core_config.settings, "semantic_candidate_scoring_enabled", False
+        )
+        monkeypatch.setattr(
+            core_config.settings, "semantic_query_expansion_enabled", False
+        )
         monkeypatch.setattr(core_config.settings, "screenshot_capture_enabled", False)
         monkeypatch.setattr(core_config.settings, "embedding_provider", "fake")
         monkeypatch.setattr(core_config.settings, "embedding_model", "fake-hash-v1")
@@ -209,9 +230,18 @@ def _make_test_db(tmp_path: Path):
 class DummySearcher:
     def news_search(self, query, max_results=10, time_range="w"):
         return [
-            SearchResult("CNN covers the event", "https://cnn.com/story", "left coverage", "cnn"),
-            SearchResult("Fox covers the event", "https://foxnews.com/story", "right coverage", "fox"),
-            SearchResult("Unrelated item", "https://sports.example.com/game", "sports", "sports"),
+            SearchResult(
+                "CNN covers the event", "https://cnn.com/story", "left coverage", "cnn"
+            ),
+            SearchResult(
+                "Fox covers the event",
+                "https://foxnews.com/story",
+                "right coverage",
+                "fox",
+            ),
+            SearchResult(
+                "Unrelated item", "https://sports.example.com/game", "sports", "sports"
+            ),
         ]
 
     def web_search(self, query, max_results=10):
@@ -294,7 +324,10 @@ def _apply_common_monkeypatches(monkeypatch, session_factory):
     )
     monkeypatch.setattr(
         "src.services.analysis_service.run_analysis",
-        lambda description, url=None, prefetched_sources=None, visual_evidence_context=None: {
+        lambda description,
+        url=None,
+        prefetched_sources=None,
+        visual_evidence_context=None: {
             "sections": {
                 "executive_summary": "Summary.",
                 "what_happened": "Event occurred.",
@@ -327,7 +360,9 @@ def test_options_persisted_to_analysis_run(monkeypatch, tmp_path):
         embedding_provider="lmstudio",
     )
     service = AnalysisService()
-    result = service.analyze("Test story about politics", "https://reuters.com/seed", options=opts)
+    result = service.analyze(
+        "Test story about politics", "https://reuters.com/seed", options=opts
+    )
 
     with session_factory() as session:
         run = (
@@ -441,11 +476,14 @@ class TestCLIOptionFlags:
             cli_main.cli,
             [
                 "analyze",
-                "--describe", "Test story",
+                "--describe",
+                "Test story",
                 "--no-strict",
                 "--semantic-memory",
-                "--embedding-provider", "lmstudio",
-                "--vector-store", "lancedb",
+                "--embedding-provider",
+                "lmstudio",
+                "--vector-store",
+                "lancedb",
             ],
         )
 

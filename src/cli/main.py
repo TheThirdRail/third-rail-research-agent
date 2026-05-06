@@ -293,10 +293,14 @@ def _health_rows() -> list[tuple[str, str, str, str]]:
         )
 
     if settings.embedding_provider == "fake":
-        status = "warn" if (
-            settings.semantic_memory_enabled
-            or settings.semantic_candidate_scoring_enabled
-        ) else "ok"
+        status = (
+            "warn"
+            if (
+                settings.semantic_memory_enabled
+                or settings.semantic_candidate_scoring_enabled
+            )
+            else "ok"
+        )
         rows.append(
             (
                 "Embeddings",
@@ -514,14 +518,38 @@ def discover(count: int, topics: tuple[str, ...]) -> None:
 @click.option("--url", "-u", default=None, help="URL of story to analyze")
 @click.option("--describe", "-d", default=None, help="Description of story to research")
 @click.option("--output", "-o", default=None, help="Output file for report (markdown)")
-@click.option("--strict/--no-strict", default=None, help="Override strict bucket enforcement.")
-@click.option("--semantic-memory/--no-semantic-memory", default=None, help="Enable/disable semantic memory.")
-@click.option("--semantic-scoring/--no-semantic-scoring", default=None, help="Enable/disable semantic candidate scoring.")
-@click.option("--visual-evidence/--no-visual-evidence", default=None, help="Enable/disable visual evidence resolution.")
-@click.option("--screenshot/--no-screenshot", default=None, help="Enable/disable screenshot capture.")
-@click.option("--embedding-provider", default=None, help="Embedding provider (e.g., lmstudio, fake).")
+@click.option(
+    "--strict/--no-strict", default=None, help="Override strict bucket enforcement."
+)
+@click.option(
+    "--semantic-memory/--no-semantic-memory",
+    default=None,
+    help="Enable/disable semantic memory.",
+)
+@click.option(
+    "--semantic-scoring/--no-semantic-scoring",
+    default=None,
+    help="Enable/disable semantic candidate scoring.",
+)
+@click.option(
+    "--visual-evidence/--no-visual-evidence",
+    default=None,
+    help="Enable/disable visual evidence resolution.",
+)
+@click.option(
+    "--screenshot/--no-screenshot",
+    default=None,
+    help="Enable/disable screenshot capture.",
+)
+@click.option(
+    "--embedding-provider",
+    default=None,
+    help="Embedding provider (e.g., lmstudio, fake).",
+)
 @click.option("--embedding-model", default=None, help="Embedding model name.")
-@click.option("--vector-store", default=None, help="Vector store backend (e.g., lancedb, none).")
+@click.option(
+    "--vector-store", default=None, help="Vector store backend (e.g., lancedb, none)."
+)
 def analyze(
     url: str | None,
     describe: str | None,
@@ -571,7 +599,9 @@ def analyze(
 
     console.print(Panel(f"[bold]Analyzing story:[/bold]\n{story_desc[:200]}"))
     if options:
-        console.print(f"[dim]Per-run options: {options.model_dump(exclude_none=True)}[/dim]")
+        console.print(
+            f"[dim]Per-run options: {options.model_dump(exclude_none=True)}[/dim]"
+        )
 
     with console.status("[bold green]Running multi-source analysis..."):
         try:
@@ -820,7 +850,9 @@ def codex_oauth_diagnose() -> None:
             if status.message:
                 warnings.append(status.message)
     else:
-        errors.append("CODEX_OAUTH_MODE must be disabled, openai_compatible_bridge, or codex_cli.")
+        errors.append(
+            "CODEX_OAUTH_MODE must be disabled, openai_compatible_bridge, or codex_cli."
+        )
 
     if errors:
         console.print("[bold red]Codex OAuth diagnostics failed:[/bold red]")
@@ -894,7 +926,6 @@ def codex_oauth_bridge(host: str, port: int) -> None:
     uvicorn.run(create_app(settings), host=host, port=port)
 
 
-
 @cli.command()
 @click.argument("story_id")
 def diagnostics(story_id: str) -> None:
@@ -910,7 +941,9 @@ def diagnostics(story_id: str) -> None:
     service = AnalysisService()
     result = service.get_diagnostics(story_id)
     if not result:
-        console.print(f"[bold red]Error:[/bold red] No diagnostics found for {story_id}")
+        console.print(
+            f"[bold red]Error:[/bold red] No diagnostics found for {story_id}"
+        )
         raise click.Abort()
 
     console.print(Panel(f"[bold]Diagnostics for story:[/bold] {story_id[:8]}"))
@@ -923,7 +956,9 @@ def diagnostics(story_id: str) -> None:
         cov_table.add_column("Value", style="white")
         cov_table.add_row("Retained", str(coverage.get("retained_count", 0)))
         cov_table.add_row("Probed", str(coverage.get("probed_count", 0)))
-        cov_table.add_row("Coverage Satisfied", str(coverage.get("coverage_satisfied", False)))
+        cov_table.add_row(
+            "Coverage Satisfied", str(coverage.get("coverage_satisfied", False))
+        )
         cov_table.add_row("Left Count", str(coverage.get("left_count", 0)))
         cov_table.add_row("Center Count", str(coverage.get("center_count", 0)))
         cov_table.add_row("Right Count", str(coverage.get("right_count", 0)))
@@ -1034,7 +1069,9 @@ def health(strict: bool) -> None:
     errors = [row for row in rows if row[1] == "error"]
     warnings = [row for row in rows if row[1] == "warn"]
     if errors:
-        console.print(f"[bold red]Health check failed:[/bold red] {len(errors)} error(s)")
+        console.print(
+            f"[bold red]Health check failed:[/bold red] {len(errors)} error(s)"
+        )
         raise click.Abort() from None
     if strict and warnings:
         console.print(
@@ -1051,7 +1088,12 @@ def health(strict: bool) -> None:
     default=DEFAULT_OCR_FIXTURE_DIR,
     help="Directory containing OCR fixture images and expectations.json.",
 )
-@click.option("--format", "output_format", type=click.Choice(["markdown", "json"]), default="markdown")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["markdown", "json"]),
+    default="markdown",
+)
 @click.option(
     "--force",
     is_flag=True,
@@ -1083,13 +1125,20 @@ def validate_ocr(fixtures: Path, output_format: str, force: bool) -> None:
     help="Benchmark fixture directory.",
 )
 @click.option("--live", is_flag=True, help="Run fixture seeds through AnalysisService.")
-@click.option("--live-limit", type=int, default=None, help="Limit live fixture attempts.")
+@click.option(
+    "--live-limit", type=int, default=None, help="Limit live fixture attempts."
+)
 @click.option(
     "--diagnostics-story-id",
     multiple=True,
     help="Include persisted diagnostics for a story ID. May be repeated.",
 )
-@click.option("--format", "output_format", type=click.Choice(["markdown", "json", "html"]), default="markdown")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["markdown", "json", "html"]),
+    default="markdown",
+)
 @click.option("--output", type=click.Path(path_type=Path), default=None)
 @click.option("--baseline", type=click.Path(path_type=Path), default=None)
 @click.option(
@@ -1165,7 +1214,12 @@ def benchmark(
     default=Path("tests/fixtures/benchmarks"),
     help="Benchmark fixture directory.",
 )
-@click.option("--format", "output_format", type=click.Choice(["markdown", "json"]), default="markdown")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["markdown", "json"]),
+    default="markdown",
+)
 @click.option("--output", type=click.Path(path_type=Path), default=None)
 @click.option("--top", type=int, default=15, help="Number of top results to display.")
 def sweep(
@@ -1236,6 +1290,7 @@ def handoff(story_id: str, stage: str) -> None:
     if payload:
         console.print("\n[bold]Payload:[/bold]")
         console.print(json.dumps(payload, indent=2, default=str)[:3000])
+
 
 @cli.command(name="test-llm")
 @click.option(

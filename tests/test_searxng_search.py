@@ -12,7 +12,9 @@ import src.tools.web_search as web_search
 
 
 def test_searxng_used_for_web_search(monkeypatch):
-    monkeypatch.setattr(settings, "searxng_base_url", "http://searxng.test", raising=False)
+    monkeypatch.setattr(
+        settings, "searxng_base_url", "http://searxng.test", raising=False
+    )
     monkeypatch.setattr(settings, "searxng_api_key", "", raising=False)
     called = {"searx": 0, "ddg": 0}
 
@@ -43,7 +45,9 @@ def test_searxng_used_for_web_search(monkeypatch):
 
 
 def test_searxng_localhost_maps_to_docker_host_inside_container(monkeypatch):
-    monkeypatch.setattr(web_search.os.path, "exists", lambda path: path == "/.dockerenv")
+    monkeypatch.setattr(
+        web_search.os.path, "exists", lambda path: path == "/.dockerenv"
+    )
 
     searcher = web_search.SearxngSearch("http://127.0.0.1:8080")
 

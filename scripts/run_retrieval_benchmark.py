@@ -71,7 +71,9 @@ class BenchmarkResult:
 
     @property
     def passed(self) -> bool:
-        return not self.warnings and self.false_positive == 0 and self.false_negative == 0
+        return (
+            not self.warnings and self.false_positive == 0 and self.false_negative == 0
+        )
 
 
 @dataclass(frozen=True)
@@ -146,7 +148,9 @@ def apply_baseline(report: dict[str, Any], baseline: dict[str, Any]) -> dict[str
     return report
 
 
-def evaluate_baseline(report: dict[str, Any], baseline: dict[str, Any]) -> list[dict[str, Any]]:
+def evaluate_baseline(
+    report: dict[str, Any], baseline: dict[str, Any]
+) -> list[dict[str, Any]]:
     """Compare report metrics against baseline thresholds."""
     thresholds = baseline.get("thresholds", baseline)
     failures: list[dict[str, Any]] = []
@@ -194,7 +198,9 @@ def run_live_benchmark(
     results: list[LiveBenchmarkResult] = []
     for fixture in fixtures:
         seed = fixture.get("seed", {})
-        description = seed.get("description") or fixture.get("description") or fixture["name"]
+        description = (
+            seed.get("description") or fixture.get("description") or fixture["name"]
+        )
         url = seed.get("url")
         try:
             analysis_result = service.analyze(description=description, url=url)
@@ -204,7 +210,9 @@ def run_live_benchmark(
                     name=str(fixture.get("name", "unknown")),
                     story_id=str(story_id) if story_id else None,
                     status="completed" if story_id else "missing_story_id",
-                    error=None if story_id else "Analysis completed without a story_id.",
+                    error=None
+                    if story_id
+                    else "Analysis completed without a story_id.",
                 )
             )
         except Exception as exc:
@@ -304,7 +312,9 @@ def evaluate_fixture(fixture: dict[str, Any]) -> BenchmarkResult:
 
     precision = _ratio(true_positive, true_positive + false_positive)
     recall = _ratio(true_positive, true_positive + false_negative)
-    accuracy = _ratio(true_positive + true_negative, expected_retained + expected_rejected)
+    accuracy = _ratio(
+        true_positive + true_negative, expected_retained + expected_rejected
+    )
     coverage_type_accuracy = (
         _ratio(coverage_type_correct, coverage_type_total)
         if coverage_type_total > 0
@@ -394,52 +404,60 @@ def format_markdown(report: dict[str, Any]) -> str:
     # Rejection reason breakdown
     rejection_reasons = aggregate.get("rejection_reasons", {})
     if rejection_reasons:
-        lines.extend([
-            "",
-            "## Rejection Reason Breakdown",
-            "",
-            "| Reason | Count |",
-            "|---|---:|",
-        ])
+        lines.extend(
+            [
+                "",
+                "## Rejection Reason Breakdown",
+                "",
+                "| Reason | Count |",
+                "|---|---:|",
+            ]
+        )
         for reason, count in sorted(rejection_reasons.items(), key=lambda x: -x[1]):
             lines.append(f"| {reason} | {count} |")
 
     # Coverage type distribution
     coverage_types = aggregate.get("coverage_type_breakdown", {})
     if coverage_types:
-        lines.extend([
-            "",
-            "## Coverage Type Distribution",
-            "",
-            "| Type | Count |",
-            "|---|---:|",
-        ])
+        lines.extend(
+            [
+                "",
+                "## Coverage Type Distribution",
+                "",
+                "| Type | Count |",
+                "|---|---:|",
+            ]
+        )
         for ctype, count in sorted(coverage_types.items(), key=lambda x: -x[1]):
             lines.append(f"| {ctype} | {count} |")
 
     # Query family counts
     query_families = aggregate.get("query_family_counts", {})
     if query_families:
-        lines.extend([
-            "",
-            "## Query Family Generation",
-            "",
-            "| Family | Total Queries |",
-            "|---|---:|",
-        ])
+        lines.extend(
+            [
+                "",
+                "## Query Family Generation",
+                "",
+                "| Family | Total Queries |",
+                "|---|---:|",
+            ]
+        )
         for family, count in sorted(query_families.items()):
             lines.append(f"| {family} | {count} |")
 
     # Visual evidence summary
     visual_count = aggregate.get("visual_fixtures_count", 0)
     if visual_count:
-        lines.extend([
-            "",
-            "## Visual Evidence",
-            "",
-            f"| Visual Fixtures | {visual_count} |",
-            f"| Expected Records | {aggregate.get('visual_evidence_expected_total', 0)} |",
-        ])
+        lines.extend(
+            [
+                "",
+                "## Visual Evidence",
+                "",
+                f"| Visual Fixtures | {visual_count} |",
+                f"| Expected Records | {aggregate.get('visual_evidence_expected_total', 0)} |",
+            ]
+        )
 
     if report.get("regressions"):
         lines.extend(["", format_regression_markdown(report["regressions"]).rstrip()])
@@ -474,9 +492,7 @@ def format_regression_markdown(report: dict[str, Any]) -> str:
         "|---|---|---:|---:|",
     ]
     for failure in report["failures"]:
-        lines.append(
-            "| {metric} | {rule} | {expected} | {actual} |".format(**failure)
-        )
+        lines.append("| {metric} | {rule} | {expected} | {actual} |".format(**failure))
     return "\n".join(lines) + "\n"
 
 
@@ -705,7 +721,9 @@ def _html_row(values: list[object]) -> str:
 
 
 def _looks_numeric(value: object) -> bool:
-    return isinstance(value, int | float) or "/" in str(value) or str(value).endswith("s")
+    return (
+        isinstance(value, int | float) or "/" in str(value) or str(value).endswith("s")
+    )
 
 
 def _format_runtime(value: float | None) -> str:
@@ -725,7 +743,9 @@ def _metric_path(report: dict[str, Any], path: str) -> object | None:
 def _story_packet(fixture: dict[str, Any]) -> StoryPacket:
     overrides = fixture.get("story_packet_overrides", {})
     seed = fixture.get("seed", {})
-    description = seed.get("description") or fixture.get("description") or fixture["name"]
+    description = (
+        seed.get("description") or fixture.get("description") or fixture["name"]
+    )
     return StoryPacket(
         canonical_headline=str(description),
         actors=overrides.get("actors", []),
@@ -761,7 +781,9 @@ def _fixture_warnings(fixture: dict[str, Any]) -> list[str]:
         if missing:
             warnings.append(f"missing candidate buckets: {', '.join(missing)}")
 
-    if "visual_evidence_records_min" in expectations and not fixture.get("media_pointers"):
+    if "visual_evidence_records_min" in expectations and not fixture.get(
+        "media_pointers"
+    ):
         warnings.append("visual evidence fixture has no media pointers")
 
     return warnings
@@ -850,7 +872,9 @@ def _ratio(numerator: int, denominator: int) -> float:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixtures", type=Path, default=DEFAULT_FIXTURE_DIR)
-    parser.add_argument("--format", choices=["json", "markdown", "html"], default="markdown")
+    parser.add_argument(
+        "--format", choices=["json", "markdown", "html"], default="markdown"
+    )
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument(
         "--diagnostics-story-id",

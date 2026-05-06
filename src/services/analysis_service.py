@@ -1134,7 +1134,9 @@ class AnalysisService:
             required = AnalysisService._split_csv_setting(required)
         preferred = option_values.get("preferred_bucket_groups")
         if preferred is None:
-            preferred = ["center"] if getattr(settings, "exact_center_preferred", True) else []
+            preferred = (
+                ["center"] if getattr(settings, "exact_center_preferred", True) else []
+            )
         else:
             preferred = AnalysisService._split_csv_setting(preferred)
 
@@ -1172,7 +1174,9 @@ class AnalysisService:
                 )
             ),
             "embedding_provider": str(option_or_setting("embedding_provider", "fake")),
-            "embedding_model": str(option_or_setting("embedding_model", "fake-hash-v1")),
+            "embedding_model": str(
+                option_or_setting("embedding_model", "fake-hash-v1")
+            ),
             "vector_store": str(
                 option_values.get(
                     "vector_store",
@@ -1186,9 +1190,7 @@ class AnalysisService:
         options_snapshot: dict[str, Any],
     ) -> dict[str, object]:
         return {
-            "strict_bucket_enforcement": options_snapshot[
-                "strict_bucket_enforcement"
-            ],
+            "strict_bucket_enforcement": options_snapshot["strict_bucket_enforcement"],
             "required_bucket_groups": ",".join(
                 options_snapshot["required_bucket_groups"]
             ),

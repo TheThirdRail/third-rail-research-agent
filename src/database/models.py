@@ -14,6 +14,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from src.core.time_utils import utc_now_naive
+
 
 class Base(DeclarativeBase):
     """Base class for all models."""
@@ -32,7 +34,7 @@ class Story(Base):
     title: Mapped[str] = mapped_column(String(500))
     description: Mapped[str] = mapped_column(Text, default="")
     keywords: Mapped[str] = mapped_column(Text, default="")  # JSON array as string
-    discovered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    discovered_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
     relevance_score: Mapped[float] = mapped_column(Float, default=0.0)
     performance_prediction: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(
@@ -111,7 +113,7 @@ class Source(Base):
     relevance_diagnostics_json: Mapped[str] = mapped_column(Text, default="{}")
     media_diagnostics_json: Mapped[str] = mapped_column(Text, default="{}")
     key_framing: Mapped[str] = mapped_column(Text, default="")
-    extracted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    extracted_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
     # Relationships
     story: Mapped["Story"] = relationship(back_populates="sources")
@@ -175,7 +177,7 @@ class Analysis(Base):
     report_validation_warnings_json: Mapped[str] = mapped_column(Text, default="[]")
     agent_handoff_snapshot_json: Mapped[str] = mapped_column(Text, default="{}")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
     # Relationships
     story: Mapped["Story"] = relationship(back_populates="analysis")
@@ -214,7 +216,7 @@ class AnalysisRun(Base):
     candidate_census_json: Mapped[str] = mapped_column(Text, default="{}")
     report_validation_warnings_json: Mapped[str] = mapped_column(Text, default="[]")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     story: Mapped["Story"] = relationship(back_populates="analysis_runs")
@@ -254,8 +256,8 @@ class RetrievalCandidate(Base):
     relevance_diagnostics_json: Mapped[str] = mapped_column(Text, default="{}")
     source_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     media_diagnostics_json: Mapped[str] = mapped_column(Text, default="{}")
-    discovered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    discovered_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
     analysis_run: Mapped["AnalysisRun"] = relationship(
         back_populates="retrieval_candidates"
@@ -284,7 +286,7 @@ class SourceFindingRecord(Base):
     evidence_snippet: Mapped[str] = mapped_column(Text, default="")
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
     metadata_json: Mapped[str] = mapped_column(Text, default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
     analysis: Mapped["Analysis"] = relationship(back_populates="source_findings")
     source: Mapped["Source | None"] = relationship(back_populates="source_findings")
@@ -318,7 +320,7 @@ class VisualEvidenceRecordModel(Base):
     legal_characterization: Mapped[str] = mapped_column(Text, default="")
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
     metadata_json: Mapped[str] = mapped_column(Text, default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
     analysis: Mapped["Analysis"] = relationship(
         back_populates="visual_evidence_records"
@@ -346,7 +348,7 @@ class AgentFinding(Base):
     finding_text: Mapped[str] = mapped_column(Text, default="")
     source_refs_json: Mapped[str] = mapped_column(Text, default="[]")
     metadata_json: Mapped[str] = mapped_column(Text, default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
     story: Mapped["Story"] = relationship(back_populates="agent_findings")
     analysis: Mapped["Analysis"] = relationship(back_populates="agent_findings")
@@ -372,7 +374,7 @@ class AgentHandoff(Base):
     to_agent: Mapped[str] = mapped_column(String(50), default="")
     summary: Mapped[str] = mapped_column(Text, default="")
     payload_json: Mapped[str] = mapped_column(Text, default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
     story: Mapped["Story"] = relationship(back_populates="agent_handoffs")
     analysis: Mapped["Analysis | None"] = relationship(back_populates="agent_handoffs")
@@ -403,9 +405,9 @@ class VideoPerformance(Base):
     retention_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
     ctr_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive
     )
 
     # Relationships
@@ -433,9 +435,9 @@ class ChannelProfile(Base):
     format: Mapped[str] = mapped_column(String(20), default="yaml")
     parsed_json: Mapped[str] = mapped_column(Text, default="{}")
     version: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive
     )
 
     def __repr__(self) -> str:
@@ -448,7 +450,7 @@ class DailySpend(Base):
     __tablename__ = "daily_spend"
 
     date: Mapped[datetime] = mapped_column(
-        DateTime, primary_key=True, default=datetime.utcnow
+        DateTime, primary_key=True, default=utc_now_naive
     )
     amount: Mapped[float] = mapped_column(Float, default=0.0)
     budget_limit: Mapped[float] = mapped_column(Float, default=0.0)  # 0.0 = free only
@@ -470,9 +472,9 @@ class AgentConfiguration(Base):
     free_tier: Mapped[bool] = mapped_column(Boolean, default=False)
     reasoning_effort: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive
     )
 
     def __repr__(self) -> str:
@@ -499,9 +501,9 @@ class SemanticDocument(Base):
     title: Mapped[str] = mapped_column(String(500), default="")
     canonical_text: Mapped[str] = mapped_column(Text, default="")
     metadata_json: Mapped[str] = mapped_column(Text, default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive
     )
 
     story: Mapped["Story"] = relationship(back_populates="semantic_documents")
@@ -541,7 +543,7 @@ class SemanticChunk(Base):
     embedding_model: Mapped[str] = mapped_column(String(100), default="fake-hash-v1")
     embedding_dimensions: Mapped[int] = mapped_column(Integer, default=0)
     metadata_json: Mapped[str] = mapped_column(Text, default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
     document: Mapped["SemanticDocument"] = relationship(back_populates="chunks")
 

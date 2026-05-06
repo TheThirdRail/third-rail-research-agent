@@ -31,9 +31,7 @@ class Claim(BaseModel):
     """A single structured claim extracted from source material."""
 
     claim_id: str = Field(description="Unique identifier for this claim")
-    normalized_claim: str = Field(
-        description="Canonicalized claim statement"
-    )
+    normalized_claim: str = Field(description="Canonicalized claim statement")
     claim_type: ClaimType = Field(description="Type of claim")
     entities: list[str] = Field(
         default_factory=list,

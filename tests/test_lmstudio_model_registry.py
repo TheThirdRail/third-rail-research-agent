@@ -86,7 +86,9 @@ async def test_fetch_lmstudio_models_handles_base_url_with_v1(monkeypatch):
         return _Client()
 
     monkeypatch.setattr(registry, "_get_client", fake_get_client)
-    monkeypatch.setattr(registry, "_lmstudio_base_url", lambda: "http://lmstudio.test/v1")
+    monkeypatch.setattr(
+        registry, "_lmstudio_base_url", lambda: "http://lmstudio.test/v1"
+    )
 
     models = await registry._fetch_lmstudio_models()
 

@@ -134,10 +134,13 @@ def test_candidate_semantic_scorer_indexes_seed_and_scores_candidate():
     )
 
     assert scorer.seed.run_id
-    assert scorer.score_candidate(
-        "GOP senators keep Cuba embargo",
-        "GOP senators voted to maintain Cuba sanctions.",
-    ) == 1.0
+    assert (
+        scorer.score_candidate(
+            "GOP senators keep Cuba embargo",
+            "GOP senators voted to maintain Cuba sanctions.",
+        )
+        == 1.0
+    )
     scores = scorer.score_candidate_diagnostics(
         "GOP senators keep Cuba embargo",
         "GOP senators voted to maintain Cuba sanctions.",
@@ -145,10 +148,13 @@ def test_candidate_semantic_scorer_indexes_seed_and_scores_candidate():
     assert scores.aggregate_similarity == 1.0
     assert scores.title_similarity == 1.0
     assert scores.lede_similarity == 1.0
-    assert scorer.score_candidate(
-        "Sports roundup",
-        "Sports playoffs dominated the evening schedule.",
-    ) == 0.0
+    assert (
+        scorer.score_candidate(
+            "Sports roundup",
+            "Sports playoffs dominated the evening schedule.",
+        )
+        == 0.0
+    )
 
 
 def test_semantic_memory_indexes_seed_story_and_chunks(tmp_path):
@@ -593,8 +599,7 @@ def test_semantic_memory_falls_back_to_sql_when_vector_search_fails(
 
         def embed_texts(self, texts: list[str]) -> list[list[float]]:
             return [
-                [1.0, 0.0, 0.0] if "AI" in text else [0.0, 1.0, 0.0]
-                for text in texts
+                [1.0, 0.0, 0.0] if "AI" in text else [0.0, 1.0, 0.0] for text in texts
             ]
 
     class FailingVectorStore:
@@ -940,9 +945,10 @@ def test_semantic_memory_retrieves_typed_agent_findings_by_task(tmp_path):
 
         assert fact_results[0].metadata["document_type"] == "fact_claims"
         assert rhetoric_results[0].metadata["document_type"] == "rhetoric_findings"
-        assert {
-            result.metadata["document_type"] for result in narrative_results
-        } >= {"narrative_findings", "coverage_asymmetry"}
+        assert {result.metadata["document_type"] for result in narrative_results} >= {
+            "narrative_findings",
+            "coverage_asymmetry",
+        }
 
 
 def test_semantic_memory_delete_and_rebuild_story_index(tmp_path):

@@ -76,9 +76,11 @@ class ModelService:
             if input_cost == 0.0 and output_cost == 0.0:
                 label = f"{display_name} — Free"
             else:
+
                 def _fmt(cost: float) -> str:
                     formatted = f"{cost:.4f}".rstrip("0").rstrip(".")
                     return formatted or "0"
+
                 label = (
                     f"{display_name} — ${_fmt(input_cost)}/${_fmt(output_cost)} "
                     "per 1M (prompt/completion)"
@@ -89,7 +91,11 @@ class ModelService:
             id=model.id,
             name=model.name,
             provider=model.provider,
-            input_cost_per_m=model.input_cost_per_m if model.provider == "openrouter" else 0.0,
-            output_cost_per_m=model.output_cost_per_m if model.provider == "openrouter" else 0.0,
+            input_cost_per_m=model.input_cost_per_m
+            if model.provider == "openrouter"
+            else 0.0,
+            output_cost_per_m=model.output_cost_per_m
+            if model.provider == "openrouter"
+            else 0.0,
             label=label,
         )

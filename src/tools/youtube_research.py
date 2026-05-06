@@ -61,7 +61,9 @@ class YouTubeExtractInput(BaseModel):
     """Input for YouTube video extraction."""
 
     url: str = Field(description="YouTube video URL")
-    include_transcript: bool = Field(default=True, description="Whether to extract transcript")
+    include_transcript: bool = Field(
+        default=True, description="Whether to extract transcript"
+    )
 
 
 class YouTubeResearchTool(BaseTool):
@@ -127,13 +129,18 @@ class YouTubeResearchTool(BaseTool):
             videos = []
             for entry in result["entries"]:
                 if entry:
-                    videos.append({
-                        "video_id": entry.get("id", ""),
-                        "title": entry.get("title", ""),
-                        "channel": entry.get("channel", entry.get("uploader", "")),
-                        "url": entry.get("url", f"https://youtube.com/watch?v={entry.get('id', '')}"),
-                        "duration": entry.get("duration", 0),
-                    })
+                    videos.append(
+                        {
+                            "video_id": entry.get("id", ""),
+                            "title": entry.get("title", ""),
+                            "channel": entry.get("channel", entry.get("uploader", "")),
+                            "url": entry.get(
+                                "url",
+                                f"https://youtube.com/watch?v={entry.get('id', '')}",
+                            ),
+                            "duration": entry.get("duration", 0),
+                        }
+                    )
 
             import json
 

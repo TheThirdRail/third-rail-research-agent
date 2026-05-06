@@ -8,7 +8,7 @@ Verifies the RSS scoring system correctly:
 - Rejects via must-not-have terms
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 
 from src.schemas.story_packet import StoryPacket
 from src.services.rss_retrieval_service import RssRetrievalService
@@ -24,8 +24,8 @@ def _make_packet(**overrides: object) -> StoryPacket:
         "distinctive_terms": ["education funding bill", "HR-4521"],
         "number_markers": ["HR-4521"],
         "must_not_have_terms": ["healthcare", "immigration"],
-        "time_window_start": datetime(2026, 4, 15, tzinfo=timezone.utc),
-        "time_window_end": datetime(2026, 4, 20, tzinfo=timezone.utc),
+        "time_window_start": datetime(2026, 4, 15, tzinfo=UTC),
+        "time_window_end": datetime(2026, 4, 20, tzinfo=UTC),
     }
     defaults.update(overrides)
     return StoryPacket(**defaults)  # type: ignore[arg-type]
@@ -41,7 +41,7 @@ def _make_item(
         title=title,
         url="https://example.com/article",
         domain="example.com",
-        published=published or datetime(2026, 4, 17, tzinfo=timezone.utc),
+        published=published or datetime(2026, 4, 17, tzinfo=UTC),
         summary=summary,
         bias=0,
         source_name="Example News",
@@ -108,7 +108,7 @@ class TestSameTopicWrongDate:
     def test_old_article_about_same_topic(self):
         """Article from months ago on same topic gets lower date overlap."""
         packet = _make_packet()
-        old_date = datetime(2025, 1, 15, tzinfo=timezone.utc)
+        old_date = datetime(2025, 1, 15, tzinfo=UTC)
         item = _make_item(
             title="Senator Smith vetoes education funding bill",
             summary="The bill HR-4521 was vetoed.",
@@ -116,7 +116,7 @@ class TestSameTopicWrongDate:
         )
         score_old = _score(item, packet)
 
-        recent_date = datetime(2026, 4, 17, tzinfo=timezone.utc)
+        recent_date = datetime(2026, 4, 17, tzinfo=UTC)
         item_recent = _make_item(
             title="Senator Smith vetoes education funding bill",
             summary="The bill HR-4521 was vetoed.",

@@ -45,7 +45,10 @@ def test_retrieval_benchmark_runner_formats_markdown_summary():
     markdown = format_markdown(report)
 
     assert "# Retrieval Benchmark Report" in markdown
-    assert "| Fixture | Precision | Recall | Accuracy | FP | FN | Warnings |" in markdown
+    assert (
+        "| Fixture | Precision | Recall | Accuracy | FP | FN | Cov.Type Acc. |"
+        in markdown
+    )
     assert "recurring_event_recurring_actors" in markdown
 
 
@@ -171,7 +174,10 @@ def test_live_benchmark_runs_fixture_seeds_and_exports_diagnostics(monkeypatch):
     assert live_report["attempted_count"] == 2
     assert live_report["completed_count"] == 2
     assert live_report["failed_count"] == 0
-    assert analyzed[0][0] == "Federal judge blocks executive order on immigration enforcement"
+    assert (
+        analyzed[0][0]
+        == "Magnitude 6.2 earthquake strikes central Italy near Perugia, multiple buildings collapsed"
+    )
     assert combined["diagnostics"]["story_count"] == 2
     assert "# Live Pipeline Benchmark" in markdown
     assert "Live Pipeline" in dashboard

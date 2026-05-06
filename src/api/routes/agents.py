@@ -96,8 +96,7 @@ async def _validate_model(provider: str, model: str) -> str:
         )
 
     allowed_ids = {
-        normalize_model_for_provider(provider, model_info.id)
-        for model_info in models
+        normalize_model_for_provider(provider, model_info.id) for model_info in models
     }
     if normalized_model not in allowed_ids:
         raise HTTPException(

@@ -115,7 +115,8 @@ class ModelRegistry:
         providers = self._get_configured_providers()
 
         tasks = [
-            self._fetch_provider_models(p, force_refresh=force_refresh) for p in providers
+            self._fetch_provider_models(p, force_refresh=force_refresh)
+            for p in providers
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 

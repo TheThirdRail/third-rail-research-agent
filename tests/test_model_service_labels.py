@@ -6,7 +6,9 @@ os.environ["DEBUG"] = "true"
 
 from src.core.model_registry import ModelInfo as RegistryModelInfo
 
-_MODULE_PATH = Path(__file__).resolve().parents[1] / "src" / "services" / "model_service.py"
+_MODULE_PATH = (
+    Path(__file__).resolve().parents[1] / "src" / "services" / "model_service.py"
+)
 _SPEC = importlib.util.spec_from_file_location("model_service_direct", _MODULE_PATH)
 _MODULE = importlib.util.module_from_spec(_SPEC) if _SPEC else None
 if _SPEC and _SPEC.loader and _MODULE:

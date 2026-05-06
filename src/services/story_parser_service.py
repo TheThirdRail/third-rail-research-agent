@@ -195,7 +195,9 @@ class StoryParserService:
                 llm_rejected_count=rejected_count,
             )
         except Exception as exc:
-            logger.warning("Semantic query expansion failed; using deterministic queries: %s", exc)
+            logger.warning(
+                "Semantic query expansion failed; using deterministic queries: %s", exc
+            )
             packet.query_expansion_diagnostics = self._query_expansion_diagnostics(
                 packet,
                 deterministic_used=True,
@@ -234,7 +236,10 @@ class StoryParserService:
                 'Example output: {"queries":["Senate Republicans Cuba embargo vote"],"aliases":["Cuba embargo"]}',
             ]
         )
-        return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        return [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
 
     @staticmethod
     def _parse_llm_json(raw: str) -> dict[str, Any]:

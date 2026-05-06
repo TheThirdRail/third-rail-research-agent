@@ -5,6 +5,7 @@ from src.schemas.retrieval_diagnostics import CandidateDecision
 from src.schemas.story_packet import StoryPacket
 from src.services.balanced_source_planner import BucketSpec, SourcePlan
 from src.services.source_aggregator_service import (
+    QueryAttempt,
     SourceAggregatorService,
     SourceCandidate,
 )
@@ -244,7 +245,9 @@ def test_search_queries_round_robins_bucket_steps(monkeypatch):
         seed_domain=None,
     )
 
-    results = service._search_queries(["story"], plan)
+    results = service._search_queries(
+        [QueryAttempt(query="story", family="lexical", source="input")], plan
+    )
 
     assert [result.source for result in results] == [
         "right.example.com",
@@ -252,7 +255,7 @@ def test_search_queries_round_robins_bucket_steps(monkeypatch):
     ]
 
 
-def test_build_queries_prefers_story_packet_query_families():
+def test_build_query_attempts_prefers_story_packet_query_families():
     service = SourceAggregatorService()
     packet = StoryPacket(
         canonical_headline="James Comey indicted over X post",
@@ -265,19 +268,80 @@ def test_build_queries_prefers_story_packet_query_families():
         },
     )
 
-    queries = service._build_queries(
+    attempts = service._build_query_attempts(
         "fallback description",
         None,
         [],
         story_packet=packet,
     )
 
-    assert queries[:4] == [
+    # Query families should appear first, preserving family order
+    query_strings = [a.query for a in attempts]
+    assert query_strings[:4] == [
         "lexical query",
         "semantic query",
         "opposing query",
         "visual query",
     ]
+    # Each attempt should carry its family tag
+    assert attempts[0].family == "lexical"
+    assert attempts[1].family == "semantic_paraphrase"
+    assert attempts[2].family == "opposing_frame"
+    assert attempts[3].family == "visual_social"
+
+
+def test_build_query_attempts_preserves_more_than_four_queries_across_families():
+    service = SourceAggregatorService()
+    packet = StoryPacket(
+        canonical_headline="High profile court ruling",
+        query_pack=[],
+        query_families={
+            "lexical": [
+                "lexical 1",
+                "lexical 2",
+                "lexical 3",
+                "lexical 4",
+                "lexical 5",
+            ],
+            "semantic_paraphrase": ["semantic 1", "semantic 2"],
+            "opposing_frame": ["opposing 1"],
+            "visual_social": ["visual 1"],
+        },
+    )
+
+    attempts = service._build_query_attempts("", None, [], story_packet=packet)
+    query_strings = [attempt.query for attempt in attempts]
+
+    assert len(query_strings) > 4
+    assert "lexical 5" not in query_strings
+    assert {"semantic 1", "semantic 2", "opposing 1", "visual 1"}.issubset(
+        set(query_strings)
+    )
+
+
+def test_build_query_attempts_dedupes_query_text_without_losing_later_families():
+    service = SourceAggregatorService()
+    packet = StoryPacket(
+        canonical_headline="High profile court ruling",
+        query_pack=[],
+        query_families={
+            "lexical": ["shared story query"],
+            "semantic_paraphrase": ["shared story query", "unique semantic query"],
+        },
+    )
+
+    attempts = service._build_query_attempts("", None, [], story_packet=packet)
+    shared_attempts = [
+        attempt for attempt in attempts if attempt.query == "shared story query"
+    ]
+
+    assert len(shared_attempts) == 1
+    assert shared_attempts[0].family == "lexical"
+    assert any(
+        attempt.query == "unique semantic query"
+        and attempt.family == "semantic_paraphrase"
+        for attempt in attempts
+    )
 
 
 def test_search_queries_preserves_exact_bias_lane_order_inside_bucket(monkeypatch):
@@ -339,7 +403,9 @@ def test_search_queries_preserves_exact_bias_lane_order_inside_bucket(monkeypatc
         seed_domain=None,
     )
 
-    results = service._search_queries(["story"], plan)
+    results = service._search_queries(
+        [QueryAttempt(query="story", family="lexical", source="input")], plan
+    )
 
     assert [result.source for result in results] == [
         "lean-right.example.com",
@@ -418,7 +484,9 @@ def test_candidate_census_persists_bucket_lane_attempts(monkeypatch):
         seed_domain=None,
     )
 
-    results = service._search_queries(["story"], plan)
+    results = service._search_queries(
+        [QueryAttempt(query="story", family="lexical", source="input")], plan
+    )
     attempts = service.candidate_census().bucket_lane_attempts
 
     assert [result.source for result in results] == ["left.example.com"]
@@ -427,8 +495,10 @@ def test_candidate_census_persists_bucket_lane_attempts(monkeypatch):
     assert attempts[0].exact_bias == 2
     assert attempts[0].result_count == 0
     assert attempts[0].exhausted_reason == "no_results"
+    assert attempts[0].query_family == "lexical"
     assert attempts[1].bucket_label == "left_side"
     assert attempts[1].new_result_count == 1
+    assert attempts[1].query_family == "lexical"
 
 
 def test_retained_selection_respects_bucket_result_quota():

@@ -52,10 +52,10 @@ class VectorStore(Protocol):
 def get_vector_store(backend_name: str | None = None) -> VectorStore | None:
     """Return the configured vector store, or ``None`` for SQL-only retrieval."""
     backend = (
-        backend_name
-        or getattr(settings, "semantic_vector_store", "none")
-        or "none"
-    ).strip().lower()
+        (backend_name or getattr(settings, "semantic_vector_store", "none") or "none")
+        .strip()
+        .lower()
+    )
     if backend in {"", "none", "disabled", "sql"}:
         return None
     if backend == "lancedb":

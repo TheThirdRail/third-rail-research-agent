@@ -9,9 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass
-from itertools import product
 from pathlib import Path
-from typing import Any
 
 from scripts.run_retrieval_benchmark import (
     DEFAULT_FIXTURE_DIR,
@@ -265,19 +263,21 @@ def format_sweep_json(results: list[SweepResult]) -> str:
     """Format sweep results as JSON."""
     serialized = []
     for result in results:
-        serialized.append({
-            "profile_name": result.profile_name,
-            "passing_score": result.passing_score,
-            "rejection_threshold": result.rejection_threshold,
-            "precision": result.precision,
-            "recall": result.recall,
-            "accuracy": result.accuracy,
-            "f1": result.f1,
-            "true_positive": result.true_positive,
-            "true_negative": result.true_negative,
-            "false_positive": result.false_positive,
-            "false_negative": result.false_negative,
-        })
+        serialized.append(
+            {
+                "profile_name": result.profile_name,
+                "passing_score": result.passing_score,
+                "rejection_threshold": result.rejection_threshold,
+                "precision": result.precision,
+                "recall": result.recall,
+                "accuracy": result.accuracy,
+                "f1": result.f1,
+                "true_positive": result.true_positive,
+                "true_negative": result.true_negative,
+                "false_positive": result.false_positive,
+                "false_negative": result.false_negative,
+            }
+        )
     return json.dumps({"sweep_results": serialized}, indent=2, sort_keys=True)
 
 
@@ -290,9 +290,7 @@ def _ratio(numerator: int, denominator: int) -> float:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixtures", type=Path, default=DEFAULT_FIXTURE_DIR)
-    parser.add_argument(
-        "--format", choices=["json", "markdown"], default="markdown"
-    )
+    parser.add_argument("--format", choices=["json", "markdown"], default="markdown")
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument(
         "--top", type=int, default=15, help="Number of top results to display"

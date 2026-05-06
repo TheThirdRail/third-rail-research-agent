@@ -1,6 +1,5 @@
-import sys
 import os
-import shutil
+import sys
 from unittest.mock import MagicMock
 
 # Add src to path
@@ -75,9 +74,9 @@ if os.path.exists("test_agent_verify.db"):
     os.remove("test_agent_verify.db")
 
 try:
-    from src.database.session import init_db, get_session
-    from src.services.agent_config_service import AgentConfigService
     from src.agents.profile_reader import create_profile_reader_agent
+    from src.database.session import get_session, init_db
+    from src.services.agent_config_service import AgentConfigService
 except ImportError as e:
     print(f"ImportError during setup: {e}")
     import traceback

@@ -6,10 +6,7 @@ Verifies that:
 - Screenshot capture failures degrade to structured fallbacks, not fatal errors.
 """
 
-import sys
-from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 import pytest
 from sqlalchemy import create_engine
@@ -17,7 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from src.core import config as core_config
 from src.core.embedding_provider import EmbeddingProvider, FakeEmbeddingProvider
-from src.database.models import Base, SemanticChunk, SemanticDocument, Story
+from src.database.models import Base, Story
 from src.schemas.visual_evidence import ScreenshotArtifact
 from src.services.screenshot_capture_service import ScreenshotCaptureService
 from src.services.semantic_memory_service import SemanticMemoryService
@@ -25,9 +22,8 @@ from src.services.source_aggregator_service import (
     SourceAggregatorService,
     SourceCandidate,
 )
-from src.services.vector_store_service import VectorRecord, VectorSearchResult, VectorStore
+from src.services.vector_store_service import VectorRecord, VectorSearchResult
 from src.tools.bias_classifier import BiasResult
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -240,9 +236,7 @@ class TestSemanticMemoryRetrievalFailOpen:
 class TestSemanticMemoryVectorStoreFailClosed:
     """When semantic_fail_open=False, errors propagate."""
 
-    def test_vector_store_upsert_failure_raises_fail_closed(
-        self, session, monkeypatch
-    ):
+    def test_vector_store_upsert_failure_raises_fail_closed(self, session, monkeypatch):
         monkeypatch.setattr(core_config.settings, "semantic_fail_open", False)
         story = _seed_story(session)
 
@@ -268,9 +262,7 @@ class TestSemanticMemoryVectorStoreFailClosed:
         with pytest.raises(RuntimeError, match="Vector store delete failed"):
             svc.delete_story_index(story.id)
 
-    def test_vector_store_search_failure_raises_fail_closed(
-        self, session, monkeypatch
-    ):
+    def test_vector_store_search_failure_raises_fail_closed(self, session, monkeypatch):
         monkeypatch.setattr(core_config.settings, "semantic_fail_open", False)
         story = _seed_story(session)
 
@@ -332,7 +324,9 @@ class TestSourceAggregatorSemanticFailOpen:
 
     def test_build_semantic_scorer_swallows_error_fail_open(self, monkeypatch):
         monkeypatch.setattr(core_config.settings, "semantic_fail_open", True)
-        monkeypatch.setattr(core_config.settings, "semantic_candidate_scoring_enabled", True)
+        monkeypatch.setattr(
+            core_config.settings, "semantic_candidate_scoring_enabled", True
+        )
 
         svc = SourceAggregatorService(
             embedding_provider=ExplodingEmbeddingProvider(),
@@ -345,7 +339,9 @@ class TestSourceAggregatorSemanticFailOpen:
 
     def test_build_semantic_scorer_raises_fail_closed(self, monkeypatch):
         monkeypatch.setattr(core_config.settings, "semantic_fail_open", False)
-        monkeypatch.setattr(core_config.settings, "semantic_candidate_scoring_enabled", True)
+        monkeypatch.setattr(
+            core_config.settings, "semantic_candidate_scoring_enabled", True
+        )
 
         svc = SourceAggregatorService(
             embedding_provider=ExplodingEmbeddingProvider(),
@@ -464,9 +460,12 @@ class TestScreenshotCaptureFailOpen:
 
         # Make the inline `from playwright.sync_api import ...` fail
         # by temporarily removing playwright from sys.modules
-        import importlib
 
-        original_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
+        original_import = (
+            __builtins__["__import__"]
+            if isinstance(__builtins__, dict)
+            else __builtins__.__import__
+        )
 
         def import_blocker(name, *args, **kwargs):
             if "playwright" in name:

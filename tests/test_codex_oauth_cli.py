@@ -81,7 +81,7 @@ def test_cli_prompt_passes_model_and_reasoning(monkeypatch):
     args, kwargs = calls[0]
     assert "--model" in args
     assert args[args.index("--model") + 1] == "gpt-5.3-codex"
-    assert '-c' in args
+    assert "-c" in args
     assert 'model_reasoning_effort="high"' in args
     assert kwargs["shell"] is False
 
@@ -95,11 +95,7 @@ def test_cli_model_discovery_uses_debug_models(monkeypatch):
         return SimpleNamespace(
             returncode=0,
             stdout=json.dumps(
-                {
-                    "models": [
-                        {"slug": "gpt-5.3-codex", "display_name": "GPT-5.3 Codex"}
-                    ]
-                }
+                {"models": [{"slug": "gpt-5.3-codex", "display_name": "GPT-5.3 Codex"}]}
             ),
             stderr="",
         )

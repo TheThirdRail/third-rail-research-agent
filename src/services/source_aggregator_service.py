@@ -34,9 +34,6 @@ from src.services.duplicate_detector import check_duplicate
 from src.services.relevance_scorer_service import RelevanceScorerService
 from src.services.rss_fallback_service import RssFallbackResult, RssFallbackService
 from src.services.rss_retrieval_service import RssRetrievalService
-from src.services.semantic_query_expansion_service import (
-    SemanticQueryExpansionService,
-)
 from src.services.source_scoring import ScoredCandidate, score_candidate
 from src.tools.article_extractor import ArticleExtractor
 from src.tools.bias_classifier import BiasResult
@@ -46,6 +43,29 @@ logger = logging.getLogger(__name__)
 
 SOURCE_CONTEXT_EXCERPT_CHARS = 900
 SOURCE_CONTEXT_MAX_CHARS = 7000
+
+MAX_QUERIES_PER_FAMILY: dict[str, int] = {
+    "canonical_headline": 2,
+    "lexical": 4,
+    "semantic_paraphrase": 4,
+    "opposing_frame": 4,
+    "visual_social": 4,
+    "description": 1,
+    "seed_title": 2,
+    "rss_title": 2,
+    "rss_summary": 2,
+    "url_slug": 2,
+}
+
+
+@dataclass(frozen=True)
+class QueryAttempt:
+    """A single query tagged with its family for scheduling."""
+
+    query: str
+    family: str
+    priority: int = 0
+    source: str = "story_packet"
 
 
 @dataclass
@@ -98,7 +118,9 @@ class SourceAggregatorService:
         self._embedding_provider = embedding_provider
         self._extractor = ArticleExtractor()
         self._bias_resolver = BiasResolutionService()
-        self._planner = BalancedSourcePlanner(settings_overrides=self._settings_overrides)
+        self._planner = BalancedSourcePlanner(
+            settings_overrides=self._settings_overrides
+        )
         self._relevance_scorer = RelevanceScorerService()
         self._searcher = self._init_searcher()
         self._rss_retriever = RssRetrievalService()
@@ -197,7 +219,7 @@ class SourceAggregatorService:
         plan = self._planner.plan(seed_bias=seed_bias, seed_domain=seed_domain)
         self._last_plan = plan
 
-        queries = self._build_queries(
+        query_attempts = self._build_query_attempts(
             description,
             url,
             sources,
@@ -205,7 +227,7 @@ class SourceAggregatorService:
             rss_summary=rss_hint.summary if rss_hint else None,
             story_packet=story_packet,
         )
-        results = self._search_queries(queries, plan, story_packet)
+        results = self._search_queries(query_attempts, plan, story_packet)
         scored_candidates = self._preflight_search_results(
             results=results,
             description=description,
@@ -458,7 +480,7 @@ class SourceAggregatorService:
         """Return list of required but unfilled bias buckets."""
         return self._missing_buckets
 
-    def _build_queries(
+    def _build_query_attempts(
         self,
         description: str,
         url: str | None,
@@ -466,55 +488,160 @@ class SourceAggregatorService:
         rss_title: str | None = None,
         rss_summary: str | None = None,
         story_packet: StoryPacket | None = None,
-    ) -> list[str]:
-        queries = []
-        if story_packet:
-            if story_packet.query_families:
-                queries.extend(
-                    SemanticQueryExpansionService().flatten(story_packet.query_families)
-                )
-            queries.extend(story_packet.query_pack)
+    ) -> list[QueryAttempt]:
+        attempts: list[QueryAttempt] = []
+
+        if story_packet and story_packet.query_families:
+            for family, family_queries in story_packet.query_families.items():
+                cap = MAX_QUERIES_PER_FAMILY.get(family, 4)
+                for q in family_queries[:cap]:
+                    attempts.append(
+                        QueryAttempt(query=q, family=family, source="story_packet")
+                    )
+            # Add canonical_headline as its own family entry
             if story_packet.canonical_headline:
-                queries.append(f'"{story_packet.canonical_headline}"')
+                attempts.append(
+                    QueryAttempt(
+                        query=f'"{story_packet.canonical_headline}"',
+                        family="canonical_headline",
+                        source="story_packet",
+                    )
+                )
+        elif story_packet:
+            # Fallback: no query_families, use query_pack as lexical
+            for q in story_packet.query_pack:
+                attempts.append(
+                    QueryAttempt(query=q, family="lexical", source="query_pack")
+                )
+            if story_packet.canonical_headline:
+                attempts.append(
+                    QueryAttempt(
+                        query=f'"{story_packet.canonical_headline}"',
+                        family="canonical_headline",
+                        source="story_packet",
+                    )
+                )
 
         description = description.strip()
         if description:
-            queries.append(description)
+            attempts.append(
+                QueryAttempt(query=description, family="description", source="input")
+            )
 
         if sources:
             title = sources[0].title.strip()
             if title:
-                queries.append(f'"{title}"')
+                attempts.append(
+                    QueryAttempt(
+                        query=f'"{title}"',
+                        family="seed_title",
+                        source="input",
+                    )
+                )
                 if description:
-                    queries.append(f"{title} {description}")
+                    attempts.append(
+                        QueryAttempt(
+                            query=f"{title} {description}",
+                            family="seed_title",
+                            source="input",
+                        )
+                    )
 
         if rss_title:
-            queries.append(f'"{rss_title}"')
+            attempts.append(
+                QueryAttempt(
+                    query=f'"{rss_title}"',
+                    family="rss_title",
+                    source="rss_hint",
+                )
+            )
             if description:
-                queries.append(f"{rss_title} {description}")
+                attempts.append(
+                    QueryAttempt(
+                        query=f"{rss_title} {description}",
+                        family="rss_title",
+                        source="rss_hint",
+                    )
+                )
         if rss_summary:
             summary_terms = " ".join(self._extract_keywords(rss_summary)[:4])
             if summary_terms:
-                queries.append(summary_terms)
+                attempts.append(
+                    QueryAttempt(
+                        query=summary_terms,
+                        family="rss_summary",
+                        source="rss_hint",
+                    )
+                )
 
         if url:
             slug_terms = self._slug_keywords(url)
             if slug_terms:
-                queries.append(" ".join(slug_terms))
+                attempts.append(
+                    QueryAttempt(
+                        query=" ".join(slug_terms),
+                        family="url_slug",
+                        source="input",
+                    )
+                )
 
-        # Deduplicate while preserving order
-        seen = set()
-        ordered = []
-        for q in queries:
-            key = q.lower()
-            if key not in seen:
-                seen.add(key)
-                ordered.append(q)
-        return ordered[:4]
+        # Deduplicate per family while preserving order
+        seen: set[str] = set()
+        family_counts: dict[str, int] = {}
+        deduped: list[QueryAttempt] = []
+        for attempt in attempts:
+            key = attempt.query.lower()
+            if key in seen:
+                continue
+            cap = MAX_QUERIES_PER_FAMILY.get(attempt.family, 4)
+            if family_counts.get(attempt.family, 0) >= cap:
+                continue
+            seen.add(key)
+            family_counts[attempt.family] = family_counts.get(attempt.family, 0) + 1
+            deduped.append(attempt)
+        return deduped
+
+    def _query_attempts_for_phase(
+        self, attempts: list[QueryAttempt], phase: str
+    ) -> list[QueryAttempt]:
+        """Filter query attempts to families allowed in a given phase.
+
+        Non-story_packet sources (rss_hint, input, query_pack) bypass
+        phase filtering for backward compatibility when query_families
+        were not available.
+        """
+        allowed: dict[str, set[str]] = {
+            "rss": {
+                "canonical_headline",
+                "lexical",
+                "rss_title",
+                "seed_title",
+            },
+            "site_search": {
+                "canonical_headline",
+                "lexical",
+                "opposing_frame",
+                "url_slug",
+            },
+            "open_web": {
+                "canonical_headline",
+                "lexical",
+                "semantic_paraphrase",
+                "opposing_frame",
+                "description",
+            },
+            "visual_social": {"visual_social", "canonical_headline"},
+        }
+        families = allowed.get(phase)
+        if families is None:
+            return attempts
+        return [
+            a for a in attempts if a.source != "story_packet" or a.family in families
+        ]
 
     def _search_queries(
         self,
-        queries: list[str],
+        query_attempts: list[QueryAttempt],
         plan: SourcePlan | None = None,
         story_packet: StoryPacket | None = None,
     ) -> list[SearchResult]:
@@ -538,31 +665,31 @@ class SourceAggregatorService:
 
         if plan:
             return self._search_queries_by_bucket_round_robin(
-                queries,
+                query_attempts,
                 plan,
                 story_packet,
                 add_results,
                 results,
             )
 
-        for query in queries:
+        for attempt in query_attempts:
             try:
                 found = self._searcher.news_search(
-                    query,
+                    attempt.query,
                     max_results=12,
                     time_range=self._search_time_range(),
                 )
                 add_results(found, "open_web")
                 if len(found) < 4:
-                    fallback = self._searcher.web_search(query, max_results=8)
+                    fallback = self._searcher.web_search(attempt.query, max_results=8)
                     add_results(fallback, "open_web")
             except Exception as exc:
-                logger.warning("Search failed for '%s': %s", query, exc)
+                logger.warning("Search failed for '%s': %s", attempt.query, exc)
         return results
 
     def _search_queries_by_bucket_round_robin(
         self,
-        queries: list[str],
+        query_attempts: list[QueryAttempt],
         plan: SourcePlan,
         story_packet: StoryPacket | None,
         add_results,
@@ -579,13 +706,14 @@ class SourceAggregatorService:
         max_results_total = settings.candidate_probe_limit * 3
         bucket_specs = {bucket.label: bucket for bucket in plan.all_buckets}
 
-        for query in queries:
+        for attempt in query_attempts:
             for bucket_label in plan.bucket_probe_sequence:
                 if len(results) >= max_results_total:
                     self._record_unattempted_bucket_lanes(
-                        query,
+                        attempt.query,
                         steps_by_bucket.get(bucket_label, []),
                         "global_result_limit_reached",
+                        query_family=attempt.family,
                     )
                     return results
                 quota = bucket_specs.get(bucket_label)
@@ -594,29 +722,36 @@ class SourceAggregatorService:
                     and bucket_result_counts.get(bucket_label, 0) >= quota.probe_quota
                 ):
                     self._record_unattempted_bucket_lanes(
-                        query,
+                        attempt.query,
                         steps_by_bucket.get(bucket_label, []),
                         "bucket_probe_quota_reached",
+                        query_family=attempt.family,
                     )
                     continue
-                for step in steps_by_bucket.get(bucket_label, []):
+                # Filter steps by phase compatibility with query family
+                phase_steps = steps_by_bucket.get(bucket_label, [])
+                for step in phase_steps:
+                    phase = str(step.get("phase") or "")
+                    phase_attempts = self._query_attempts_for_phase([attempt], phase)
+                    if not phase_attempts:
+                        continue
                     before = len(results)
                     new_count = self._search_plan_step(
-                        query,
+                        attempt.query,
                         step,
                         story_packet,
                         plan,
                         add_results,
                     )
                     bucket_result_counts[bucket_label] = bucket_result_counts.get(
-                        bucket_label,
-                        0,
+                        bucket_label, 0
                     ) + max(0, len(results) - before)
                     self._record_bucket_lane_attempt(
-                        query=query,
+                        query=attempt.query,
                         step=step,
                         result_count=new_count,
                         new_result_count=max(0, len(results) - before),
+                        query_family=attempt.family,
                     )
                     if len(results) >= max_results_total:
                         return results
@@ -696,6 +831,7 @@ class SourceAggregatorService:
         query: str,
         steps: list[dict[str, object]],
         reason: str,
+        query_family: str | None = None,
     ) -> None:
         for step in steps:
             self._record_bucket_lane_attempt(
@@ -704,6 +840,7 @@ class SourceAggregatorService:
                 result_count=0,
                 new_result_count=0,
                 exhausted_reason=reason,
+                query_family=query_family,
             )
 
     def _record_bucket_lane_attempt(
@@ -714,6 +851,7 @@ class SourceAggregatorService:
         result_count: int,
         new_result_count: int,
         exhausted_reason: str | None = None,
+        query_family: str | None = None,
     ) -> None:
         phase = str(step.get("phase") or "unknown")
         if phase not in {"rss", "site_search", "open_web"}:
@@ -724,6 +862,7 @@ class SourceAggregatorService:
                 bucket_label=str(step.get("bucket") or ""),
                 stage=phase,
                 query=query,
+                query_family=query_family,
                 exact_bias=step.get("exact_bias")
                 if isinstance(step.get("exact_bias"), int)
                 else None,

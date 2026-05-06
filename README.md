@@ -1,132 +1,241 @@
 # Research Agent
 
-AI-powered news research and political bias analysis for YouTube creators. 
-Built to provide multi-source aggregation, a 9-point bias classification, semantic query expansion, and clear separation of facts, visual evidence, and editorial content.
+An AI-powered system for automating news research, multi-source bias analysis, and content preparation. Built for independent content creators who need structured, fact-based research with clear perspective labeling across the political spectrum.
 
 ## Features
 
-- **Multi-Source Aggregation**: Pulls and extracts coverage across the political spectrum using curated RSS feeds and DuckDuckGo search.
-- **Hardened Semantic Memory**: Uses **LanceDB** as a high-performance vector store for indexing source-grounded chunks, enabling agents to retrieve original facts and evidence.
-- **9-Point Bias Classification**: Rates sources from Far Left (-4) to Far Right (+4) using local datasets and LLM fallback, enforcing ideological balance in research.
-- **Fact vs. Opinion & Visual Evidence**: Distinguishes verifiable facts and directly observable visual evidence from editorial interpretation.
-- **Structured Observability**: Built-in **Diagnostics** and **Handoff** tracking for auditing agent reasoning and retrieval precision.
-- **Benchmark Harness**: Automated scenario-based testing (e.g., ideological coverage, actor overlap) to ensure pipeline stability.
-- **Multi-LLM Support**: Supports OpenRouter, Gemini, Anthropic, Groq, Mistral, Cerebras, SambaNova, OpenAI, and local Ollama.
-- **Docker & Local Deployment**: One-command deployment with Docker Compose.
+- **Multi-Source Aggregation** — Pulls coverage across the political spectrum using RSS feeds and DuckDuckGo search
+- **9-Point Political Bias Classification** — Rates sources from Far Left (-4) to Far Right (+4) using dataset-driven classification and LLM validation
+- **Semantic Memory & Retrieval** — LanceDB vector store for high-performance fact indexing and source-grounded evidence retrieval
+- **Fact vs. Opinion Separation** — Clearly distinguishes verifiable facts and visual evidence from editorial interpretation
+- **Balanced Source Planning** — Enforces ideological distribution across story coverage (left-side, center, right-side)
+- **Observability & Diagnostics** — Built-in handoff tracking and diagnostic commands for auditing agent reasoning and retrieval
+- **Benchmark Harness** — Automated scenario testing to validate pipeline stability across edge cases
+- **Multi-LLM Support** — Compatible with OpenRouter, Anthropic Claude, Google Gemini, Groq, Cerebras, SambaNova, Mistral, xAI, local Ollama, and LM Studio
+- **CLI + Web UI** — Terminal interface for power users; Next.js web interface for visual workflow
 
 ## Quick Start
 
-### 1. Clone & Setup
+### Prerequisites
+
+- Python 3.11+ (3.12 tested)
+- Docker and Docker Compose (optional, for containerized deployment)
+- At least one configured LLM provider API key (see [Deployment Guide](deployment-guide.md))
+
+### Local Development (5 minutes)
+
 ```bash
+# Clone and enter project
 git clone https://github.com/TheThirdRail/third-rail-research-agent.git
 cd third-rail-research-agent
 
-# Create virtual environment
+# Create and activate virtual environment
 python -m venv .venv
 .venv\Scripts\activate  # Windows
-# source .venv/bin/activate  # Mac/Linux
+# source .venv/bin/activate  # macOS/Linux
 
 # Install dependencies
 pip install -e ".[dev]"
-```
 
-### 2. Configure Environment
-```bash
+# Configure environment
 cp .env.example .env
-```
-Edit `.env` and configure at least one LLM provider. **OpenRouter** is recommended.
-```ini
-LLM_PROVIDER=openrouter
-OPENROUTER_API_KEY=your_key_here
+# Edit .env and add at least one LLM provider API key (OpenRouter recommended)
 
-# Semantic features (Hardened P2 Configuration)
-SEMANTIC_MEMORY_ENABLED=true
-SEMANTIC_QUERY_EXPANSION_ENABLED=true
-SEMANTIC_VECTOR_STORE=lancedb
-```
-
-### 3. Initialize & Run
-```bash
-# Initialize SQLite database, LanceDB, and run Alembic migrations
+# Initialize database and verify system
 research-agent init
-
-# Verify system readiness (API, migrations, OCR, Vector Store)
 research-agent health --strict
 
-# Start FastAPI server
+# Start FastAPI backend (separate terminal)
 uvicorn src.api.main:app --reload
+
+# Start Next.js frontend (separate terminal, in ./web)
+npm run dev
 ```
 
-> **For more detailed setup instructions**, please see the [Step-by-Step Guide](step-by-step.md).
+### Docker Deployment (3 commands)
 
-### Windows PowerShell Note
+```bash
+# Copy and configure environment
+cp .env.example .env
+# Edit .env with your LLM provider keys
 
-If CLI output fails with Unicode or encoding errors, set:
+# Build and start services
+docker compose up --build
 
-```powershell
-$env:PYTHONIOENCODING="utf-8"
+# Services available at:
+# - Backend: http://localhost:8000
+# - Frontend: http://localhost:3000
+# - API docs: http://localhost:8000/docs
 ```
 
-To persist for the project, add to your local `.env`:
-
-```ini
-PYTHONIOENCODING=utf-8
-```
+See [Deployment Guide](deployment-guide.md) for detailed setup and [Troubleshooting Guide](troubleshooting-guide.md) for common issues.
 
 ## Usage
 
-### CLI Commands
+### Discovery Mode — Find Stories
 
-**Discovery & Analysis**
 ```bash
+# Discover 10 stories across your channel topics
 research-agent discover --topics "geopolitics, economy"
-research-agent analyze --describe "New tax bill passed"
+
+# Get detailed diagnostics for why stories were selected
+research-agent diagnostics <story_id>
 ```
 
-**Observability & Debugging**
-```bash
-# Show detailed diagnostics for an analysis run
-research-agent diagnostics <story_id>
+### Analysis Mode — Research a Story
 
-# Inspect agent handoffs at specific stages
+```bash
+# Analyze a specific story by URL or description
+research-agent analyze --url "https://example.com/story"
+research-agent analyze --describe "New tax bill passed by Congress"
+
+# Output: JSON report + Markdown outline for video content
+```
+
+### Quality Control
+
+```bash
+# Run scenario-based benchmarks (tests edge cases and bias balance)
+research-agent benchmark --live --live-limit 1
+
+# Validate OCR pipeline for visual evidence extraction
+research-agent validate-ocr --force
+
+# Inspect agent handoffs at specific analysis stages
 research-agent handoff <story_id> --stage post-retrieval
 ```
 
-**Quality Control**
-```bash
-# Run scenario benchmarks
-research-agent benchmark --live --live-limit 1
+### Web Interface
 
-# Validate OCR pipeline
-research-agent validate-ocr --force
-```
+1. Navigate to **http://localhost:3000** (or your configured frontend URL)
+2. Input a story URL or description
+3. View sources, bias ratings, fact matrix, and generated outline
+4. Download report as Markdown or JSON
 
-## Architecture & Project Structure
+## Architecture
 
-Research Agent uses **CrewAI** for orchestration, **FastAPI** for the backend, and **LanceDB** for semantic memory.
+Research Agent uses **CrewAI** for agent orchestration, **FastAPI** for the backend, **Next.js** for the frontend, and **LanceDB** for semantic memory.
+
+### Core Workflows
+
+**Discovery Crew** — Finds relevant stories:
+- Profile Reader Agent (extracts channel topics)
+- News Aggregator Agent (RSS + DuckDuckGo search)
+- Relevance Scorer Agent (ranks by topic match and trending signals)
+- Performance Predictor Agent (boosts stories with strong historical audience response)
+
+**Analysis Crew** — Researches a specific story:
+- Story Parser Agent (extracts story details from URL/description)
+- Source Aggregator Agent (finds all sources covering the story)
+- Bias Classifier Agent (rates each source on 9-point scale)
+- Fact Extractor Agent (separates facts from opinions)
+- Narrative Analyzer Agent (identifies mainstream vs. alternative narratives)
+- Report Writer Agent (generates comprehensive report + video outline)
+
+### Project Structure
 
 ```
 research-agent/
 ├── src/
-│   ├── agents/        # CrewAI agents
-│   ├── crews/         # Agent orchestrations
-│   ├── tools/         # RSS, Search, Bias, Extractor
-│   ├── database/      # SQLAlchemy models & migrations
-│   ├── services/      # Analysis, SemanticMemory, VisualEvidence
-│   ├── core/          # Configuration & LLM Routing
-│   └── api/           # FastAPI backend
-├── benchmarks/        # Scenario-based test fixtures
-├── config/            # YAML configs (bias_sources, rss_feeds)
-├── docs/              # Technical documentation
-├── tests/             # Pytest suite
-└── web/               # Next.js frontend
+│   ├── agents/              # CrewAI agent definitions
+│   ├── crews/               # Agent orchestrations (Discovery, Analysis)
+│   ├── tools/               # RSS, search, bias classification, extraction
+│   ├── database/            # SQLAlchemy models and Alembic migrations
+│   ├── services/            # Analysis, semantic memory, visual evidence
+│   ├── core/                # Configuration, LLM routing, settings
+│   ├── api/                 # FastAPI backend endpoints
+│   └── cli/                 # Click CLI commands
+├── web/                     # Next.js frontend
+├── tests/                   # Pytest test suite
+├── config/                  # YAML: bias sources, RSS feeds, scenario fixtures
+├── benchmarks/              # Scenario-based test cases
+├── docs/                    # Technical documentation
+└── docker-compose.yml       # Three-service deployment (backend, frontend, ollama)
 ```
 
+## Configuration
+
+All configuration is environment-driven via `.env` file. Key settings:
+
+| Setting | Purpose | Example |
+|---------|---------|---------|
+| `LLM_PROVIDER` | Default LLM provider | `openrouter` |
+| `OPENROUTER_API_KEY` | OpenRouter API key (recommended) | Your key here |
+| `SEMANTIC_MEMORY_ENABLED` | Enable vector store (LanceDB) | `true` or `false` |
+| `SEMANTIC_QUERY_EXPANSION_ENABLED` | Expand queries with LLM | `true` or `false` |
+| `CANDIDATE_PROBE_LIMIT` | Max initial sources to probe | `15` |
+| `RETAINED_SOURCE_MIN/MAX` | Final source count range | `3` / `5` |
+| `STRICT_BUCKET_ENFORCEMENT` | Enforce left/center/right balance | `true` |
+
+See `.env.example` for all options and detailed explanations.
+
+## LLM Provider Setup
+
+### OpenRouter (Recommended)
+
+1. Create account at [openrouter.ai](https://openrouter.ai/keys)
+2. Generate API key
+3. Add to `.env`:
+   ```
+   LLM_PROVIDER=openrouter
+   OPENROUTER_API_KEY=your_key_here
+   ```
+4. Select model in UI or via `SELECTED_MODEL` env var
+
+### Local/Offline (Ollama)
+
+1. Install [Ollama](https://ollama.ai)
+2. Pull a model: `ollama pull llama2`
+3. Configure `.env`:
+   ```
+   LLM_PROVIDER=ollama
+   OLLAMA_BASE_URL=http://localhost:11434
+   ```
+
+### Other Providers
+
+Supports: OpenAI, Anthropic Claude, Google Gemini, Groq, Cerebras, SambaNova, Mistral, xAI (Grok), and LM Studio.
+
+See [Deployment Guide](deployment-guide.md) for complete provider configuration.
+
 ## Current Status
-- **Hardening P2**: Mostly implemented on `dev`; remaining work is focused on retrieval-family wiring, test-suite verification, migration policy, and diagnostic polish.
-- **Backend API**: Functional, with continued hardening.
-- **Web Interface**: In progress.
-- **Production readiness**: Not final yet. Run the pytest suite and benchmark harness before production use.
+
+- **Phase 2 Complete** — Hardening & observability (LanceDB, diagnostics, benchmarks, balanced source planning)
+- **Phase 3 In Progress** — Web UI (FastAPI backend stable; Next.js frontend under development)
+- **Phase 4 Planned** — Learning system (story recommendations weighted by audience performance)
+
+**Production Readiness:** Not final. Run the full pytest suite and benchmark harness before production use. See [Troubleshooting Guide](troubleshooting-guide.md) for health checks.
+
+## Commands Reference
+
+### CLI Entry Point
+```bash
+research-agent --help              # Full command list
+research-agent discover            # Story discovery
+research-agent analyze             # Analyze a story
+research-agent diagnostics <id>    # Debug analysis run
+research-agent handoff <id>        # View agent handoffs
+research-agent benchmark           # Run scenario tests
+research-agent validate-ocr        # Test visual evidence pipeline
+research-agent init                # Initialize database
+research-agent health --strict     # System readiness check
+```
+
+### Docker Commands
+```bash
+docker compose up --build          # Start all services
+docker compose down                # Stop services
+docker compose logs -f backend     # Stream backend logs
+docker compose --profile local-llm up  # Include Ollama service
+```
+
+## Support & Debugging
+
+- **Setup Issues** → [Troubleshooting Guide](troubleshooting-guide.md)
+- **Deployment** → [Deployment Guide](deployment-guide.md)
+- **Technical Details** → [Product Requirements](prd.md)
+- **Repository** → [GitHub](https://github.com/TheThirdRail/third-rail-research-agent)
 
 ## License
-MIT License.
+
+MIT License. See LICENSE file for details.

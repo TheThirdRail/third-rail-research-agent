@@ -1,8 +1,11 @@
 import json
+import sys
 from pathlib import Path
 
 from src.core.token_usage_tracker import (
     TokenUsageTracker,
+    estimate_text_tokens,
+    estimate_usage_from_texts,
     extract_chat_completions_usage,
     extract_links,
     extract_responses_usage,
@@ -103,6 +106,48 @@ def test_missing_usage_has_null_totals_and_not_estimated():
     }
     assert extract_chat_completions_usage({})["usage_source"] == "missing"
     assert extract_responses_usage({})["is_estimate"] is False
+
+
+def test_provider_usage_requires_numeric_input_and_output_counts():
+    usage = extract_chat_completions_usage({"usage": {"total_tokens": 333}})
+
+    assert usage == missing_usage()
+
+
+def test_estimate_text_tokens_counts_normal_text():
+    count = estimate_text_tokens("Analyze this source for political framing.")
+
+    assert isinstance(count, int)
+    assert count > 0
+
+
+def test_estimate_text_tokens_returns_zero_for_empty_text():
+    assert estimate_text_tokens(None) == 0
+    assert estimate_text_tokens("") == 0
+
+
+def test_estimate_usage_from_texts_returns_local_estimate_shape():
+    usage = estimate_usage_from_texts(
+        input_text="Analyze https://example.com/article",
+        output_text="Brief answer.",
+        model="gpt-5.3-codex",
+    )
+
+    assert isinstance(usage["total_input_tokens"], int)
+    assert usage["total_input_tokens"] > 0
+    assert isinstance(usage["total_output_tokens"], int)
+    assert usage["total_output_tokens"] > 0
+    assert usage["total_tokens"] == (
+        usage["total_input_tokens"] + usage["total_output_tokens"]
+    )
+    assert usage["usage_source"] == "local_estimate"
+    assert usage["is_estimate"] is True
+
+
+def test_estimate_text_tokens_falls_back_to_character_estimate(monkeypatch):
+    monkeypatch.setitem(sys.modules, "tiktoken", None)
+
+    assert estimate_text_tokens("123456789") == 3
 
 
 def test_extract_links_from_query_text():

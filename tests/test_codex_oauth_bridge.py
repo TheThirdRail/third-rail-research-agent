@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 os.environ["DEBUG"] = "true"
 
 from src.core.codex_oauth import openai_bridge
+from src.core.codex_oauth.cli_adapter import CodexCliRunResult
 from src.core.config import Settings
 
 
@@ -69,11 +70,11 @@ def test_bridge_chat_completion_calls_codex_exec(monkeypatch):
                 "reasoning_effort": reasoning_effort,
             }
         )
-        return "bridge response"
+        return CodexCliRunResult(content="bridge response")
 
     monkeypatch.setattr(
         openai_bridge.cli_adapter,
-        "run_prompt_with_model",
+        "run_prompt_with_model_result",
         fake_run_prompt,
     )
 
@@ -113,11 +114,11 @@ def test_bridge_responses_endpoint_calls_codex_exec(monkeypatch):
                 "reasoning_effort": reasoning_effort,
             }
         )
-        return "responses bridge output"
+        return CodexCliRunResult(content="responses bridge output")
 
     monkeypatch.setattr(
         openai_bridge.cli_adapter,
-        "run_prompt_with_model",
+        "run_prompt_with_model_result",
         fake_run_prompt,
     )
 
@@ -174,7 +175,7 @@ def test_bridge_health_reports_codex_status(monkeypatch):
     assert response.json()["codex_login_ok"] is True
 
 
-def test_bridge_chat_completion_writes_missing_token_usage(monkeypatch, tmp_path):
+def test_bridge_chat_completion_writes_estimated_token_usage(monkeypatch, tmp_path):
     settings = Settings(
         _env_file=None,
         token_usage_log_enabled=True,
@@ -184,8 +185,8 @@ def test_bridge_chat_completion_writes_missing_token_usage(monkeypatch, tmp_path
 
     monkeypatch.setattr(
         openai_bridge.cli_adapter,
-        "run_prompt_with_model",
-        lambda *_args, **_kwargs: "bridge response",
+        "run_prompt_with_model_result",
+        lambda *_args, **_kwargs: CodexCliRunResult(content="bridge response"),
     )
 
     response = TestClient(app).post(
@@ -209,17 +210,28 @@ def test_bridge_chat_completion_writes_missing_token_usage(monkeypatch, tmp_path
     assert record["event"] == "llm_token_usage"
     assert record["endpoint"] == "/v1/chat/completions"
     assert record["model"] == "gpt-5.3-codex"
-    assert record["status"] == "missing_usage"
+    assert record["status"] == "success"
     assert record["query_text"] == "Analyze https://example.com/article"
     assert record["links_provided"] == ["https://example.com/article"]
     assert record["sites_scanned_or_analyzed"] == ["example.com"]
-    assert record["total_input_tokens"] is None
-    assert record["total_output_tokens"] is None
-    assert record["usage_source"] == "missing"
-    assert record["is_estimate"] is False
+    assert isinstance(record["total_input_tokens"], int)
+    assert record["total_input_tokens"] > 0
+    assert isinstance(record["total_output_tokens"], int)
+    assert record["total_output_tokens"] > 0
+    assert record["total_tokens"] == (
+        record["total_input_tokens"] + record["total_output_tokens"]
+    )
+    assert record["usage_source"] == "local_estimate"
+    assert record["is_estimate"] is True
+    body = response.json()
+    assert body["usage"]["prompt_tokens"] == record["total_input_tokens"]
+    assert body["usage"]["completion_tokens"] == record["total_output_tokens"]
+    assert body["usage"]["total_tokens"] == record["total_tokens"]
+    assert body["metadata"]["usage_source"] == "local_estimate"
+    assert body["metadata"]["usage_is_estimate"] is True
 
 
-def test_bridge_responses_writes_missing_token_usage(monkeypatch, tmp_path):
+def test_bridge_responses_writes_estimated_token_usage(monkeypatch, tmp_path):
     settings = Settings(
         _env_file=None,
         token_usage_log_enabled=True,
@@ -229,8 +241,10 @@ def test_bridge_responses_writes_missing_token_usage(monkeypatch, tmp_path):
 
     monkeypatch.setattr(
         openai_bridge.cli_adapter,
-        "run_prompt_with_model",
-        lambda *_args, **_kwargs: "responses bridge output",
+        "run_prompt_with_model_result",
+        lambda *_args, **_kwargs: CodexCliRunResult(
+            content="responses bridge output"
+        ),
     )
 
     response = TestClient(app).post(
@@ -266,6 +280,63 @@ def test_bridge_responses_writes_missing_token_usage(monkeypatch, tmp_path):
         "another-site.com",
         "example.com",
     ]
-    assert record["total_input_tokens"] is None
-    assert record["total_output_tokens"] is None
-    assert record["usage_source"] == "missing"
+    assert isinstance(record["total_input_tokens"], int)
+    assert record["total_input_tokens"] > 0
+    assert isinstance(record["total_output_tokens"], int)
+    assert record["total_output_tokens"] > 0
+    assert record["total_tokens"] == (
+        record["total_input_tokens"] + record["total_output_tokens"]
+    )
+    assert record["usage_source"] == "local_estimate"
+    assert record["is_estimate"] is True
+    assert record["status"] == "success"
+    body = response.json()
+    assert body["usage"]["input_tokens"] == record["total_input_tokens"]
+    assert body["usage"]["output_tokens"] == record["total_output_tokens"]
+    assert body["usage"]["total_tokens"] == record["total_tokens"]
+    assert body["metadata"]["usage_source"] == "local_estimate"
+    assert body["metadata"]["usage_is_estimate"] is True
+
+
+def test_bridge_chat_completion_uses_provider_usage_when_available(
+    monkeypatch, tmp_path
+):
+    settings = Settings(
+        _env_file=None,
+        token_usage_log_enabled=True,
+        token_usage_log_dir=str(tmp_path),
+    )
+    app = openai_bridge.create_app(settings)
+
+    monkeypatch.setattr(
+        openai_bridge.cli_adapter,
+        "run_prompt_with_model_result",
+        lambda *_args, **_kwargs: CodexCliRunResult(
+            content="bridge response",
+            usage={
+                "total_input_tokens": 11,
+                "total_output_tokens": 7,
+                "total_tokens": 18,
+                "cached_input_tokens": None,
+                "reasoning_tokens": None,
+                "usage_source": "provider_usage",
+                "is_estimate": False,
+            },
+        ),
+    )
+
+    response = TestClient(app).post(
+        "/v1/chat/completions",
+        json={
+            "model": "openai/gpt-5.3-codex",
+            "messages": [{"role": "user", "content": "Say hello."}],
+        },
+    )
+
+    assert response.status_code == 200
+    record = _read_jsonl(tmp_path / "token-usage.jsonl")[0]
+    assert record["total_input_tokens"] == 11
+    assert record["total_output_tokens"] == 7
+    assert record["total_tokens"] == 18
+    assert record["usage_source"] == "provider_usage"
+    assert record["is_estimate"] is False

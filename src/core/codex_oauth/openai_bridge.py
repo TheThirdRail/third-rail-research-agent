@@ -14,7 +14,9 @@ from src.core.codex_oauth import cli_adapter
 from src.core.codex_oauth.safety import CodexOAuthConfigError, redact_secrets
 from src.core.config import Settings
 from src.core.token_usage_tracker import (
+    NormalizedUsage,
     TokenUsageTracker,
+    estimate_usage_from_texts,
     extract_links,
     extract_user_query_from_chat_messages,
     extract_user_query_from_responses_input,
@@ -182,6 +184,7 @@ def _responses_payload(
     content: str,
     model: str,
     request: ResponsesRequest,
+    usage: NormalizedUsage,
 ) -> dict[str, Any]:
     created = int(time.time())
     response_id = f"resp_codex_{uuid4().hex}"
@@ -193,7 +196,10 @@ def _responses_payload(
         "error": None,
         "incomplete_details": None,
         "instructions": request.instructions,
-        "metadata": {},
+        "metadata": {
+            "usage_source": usage["usage_source"],
+            "usage_is_estimate": usage["is_estimate"],
+        },
         "model": model,
         "output": [
             {
@@ -221,9 +227,9 @@ def _responses_payload(
         "text": request.text or {"format": None},
         "truncation": request.truncation,
         "usage": {
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "total_tokens": 0,
+            "input_tokens": usage["total_input_tokens"],
+            "output_tokens": usage["total_output_tokens"],
+            "total_tokens": usage["total_tokens"],
         },
         "user": request.user,
     }
@@ -287,6 +293,22 @@ def _metadata_urls(extra: dict[str, Any]) -> list[str]:
     return values
 
 
+def _usage_for_success(
+    *,
+    provider_usage: NormalizedUsage | None,
+    prompt: str,
+    content: str,
+    model: str,
+) -> NormalizedUsage:
+    if provider_usage and provider_usage["usage_source"] != "missing":
+        return provider_usage
+    return estimate_usage_from_texts(
+        input_text=prompt,
+        output_text=content,
+        model=model,
+    )
+
+
 def create_app(settings: Settings) -> FastAPI:
     """Create the local bridge app."""
     app = FastAPI(title="Research Agent Codex OAuth Bridge")
@@ -305,6 +327,7 @@ def create_app(settings: Settings) -> FastAPI:
         started_timestamp: dict[str, str],
         query_text: str | None,
         metadata_urls: list[str],
+        usage: NormalizedUsage,
         request_id: str | None = None,
     ) -> None:
         if not settings.token_usage_log_enabled:
@@ -315,7 +338,6 @@ def create_app(settings: Settings) -> FastAPI:
 
         links_provided = extract_links(query_text)
         sites = normalize_sites_from_urls([*metadata_urls, *links_provided])
-        usage = missing_usage()
         tracker.record(
             {
                 "event": "llm_token_usage",
@@ -374,7 +396,7 @@ def create_app(settings: Settings) -> FastAPI:
         )
         metadata_urls = _metadata_urls(extra)
         try:
-            content = cli_adapter.run_prompt_with_model(
+            result = cli_adapter.run_prompt_with_model_result(
                 prompt,
                 settings,
                 model=model,
@@ -389,9 +411,17 @@ def create_app(settings: Settings) -> FastAPI:
                 started_timestamp=started_timestamp,
                 query_text=query_text,
                 metadata_urls=metadata_urls,
+                usage=missing_usage(),
             )
             raise HTTPException(status_code=503, detail=redact_secrets(exc)) from exc
 
+        content = result.content
+        usage = _usage_for_success(
+            provider_usage=result.usage,
+            prompt=prompt,
+            content=content,
+            model=model,
+        )
         response_id = f"chatcmpl-codex-{uuid4().hex}"
         response_body = {
             "id": response_id,
@@ -405,20 +435,25 @@ def create_app(settings: Settings) -> FastAPI:
                     "finish_reason": "stop",
                 }
             ],
+            "metadata": {
+                "usage_source": usage["usage_source"],
+                "usage_is_estimate": usage["is_estimate"],
+            },
             "usage": {
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0,
+                "prompt_tokens": usage["total_input_tokens"],
+                "completion_tokens": usage["total_output_tokens"],
+                "total_tokens": usage["total_tokens"],
             },
         }
         record_usage(
             endpoint="/v1/chat/completions",
             model=model,
-            status="missing_usage",
+            status="success",
             started_at=started_at,
             started_timestamp=started_timestamp,
             query_text=query_text,
             metadata_urls=metadata_urls,
+            usage=usage,
             request_id=response_id,
         )
         return response_body
@@ -446,7 +481,7 @@ def create_app(settings: Settings) -> FastAPI:
             else None
         )
         try:
-            content = cli_adapter.run_prompt_with_model(
+            result = cli_adapter.run_prompt_with_model_result(
                 prompt,
                 settings,
                 model=model,
@@ -461,18 +496,32 @@ def create_app(settings: Settings) -> FastAPI:
                 started_timestamp=started_timestamp,
                 query_text=query_text,
                 metadata_urls=metadata_urls,
+                usage=missing_usage(),
             )
             raise HTTPException(status_code=503, detail=redact_secrets(exc)) from exc
 
-        response_body = _responses_payload(content=content, model=model, request=request)
+        content = result.content
+        usage = _usage_for_success(
+            provider_usage=result.usage,
+            prompt=prompt,
+            content=content,
+            model=model,
+        )
+        response_body = _responses_payload(
+            content=content,
+            model=model,
+            request=request,
+            usage=usage,
+        )
         record_usage(
             endpoint="/v1/responses",
             model=model,
-            status="missing_usage",
+            status="success",
             started_at=started_at,
             started_timestamp=started_timestamp,
             query_text=query_text,
             metadata_urls=metadata_urls,
+            usage=usage,
             request_id=response_body.get("id"),
         )
         return response_body

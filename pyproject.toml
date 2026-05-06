@@ -28,6 +28,7 @@ dependencies = [
     "crewai-tools>=0.14.0",
     "litellm>=1.50.0",
     "openai>=1.0.0",  # For API compatibility with multiple providers
+    "tiktoken>=0.7.0",
     
     # News & Web
     "feedparser>=6.0.0",

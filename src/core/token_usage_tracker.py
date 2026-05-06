@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from datetime import datetime
+from math import ceil
 from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict
 from urllib.parse import urlparse
@@ -83,31 +84,134 @@ def missing_usage() -> NormalizedUsage:
     }
 
 
+def estimate_text_tokens(text: str | None, model: str | None = None) -> int:
+    """Estimate token count for text using the best available tokenizer."""
+    if not text:
+        return 0
+
+    try:
+        import tiktoken
+
+        if model:
+            try:
+                encoding = tiktoken.encoding_for_model(model)
+            except KeyError:
+                encoding = _fallback_encoding(tiktoken)
+        else:
+            encoding = _fallback_encoding(tiktoken)
+        return int(len(encoding.encode(text)))
+    except Exception:
+        return max(1, ceil(len(text) / 4))
+
+
+def _fallback_encoding(tiktoken_module: Any) -> Any:
+    try:
+        return tiktoken_module.get_encoding("o200k_base")
+    except Exception:
+        return tiktoken_module.get_encoding("cl100k_base")
+
+
+def estimate_usage_from_texts(
+    *,
+    input_text: str | None,
+    output_text: str | None,
+    model: str | None = None,
+) -> NormalizedUsage:
+    """Estimate normalized input/output token usage for local bridge runs."""
+    input_tokens = estimate_text_tokens(input_text, model=model)
+    output_tokens = estimate_text_tokens(output_text, model=model)
+    return {
+        "total_input_tokens": input_tokens,
+        "total_output_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
+        "cached_input_tokens": None,
+        "reasoning_tokens": None,
+        "usage_source": "local_estimate",
+        "is_estimate": True,
+    }
+
+
+def normalize_provider_usage(usage: Any) -> NormalizedUsage:
+    """Normalize provider or Codex JSONL usage, rejecting fake zero totals."""
+    if not isinstance(usage, dict):
+        return missing_usage()
+
+    if isinstance(usage.get("usage"), dict):
+        usage = usage["usage"]
+
+    input_tokens = _integer_or_none(
+        usage.get("prompt_tokens", usage.get("input_tokens"))
+    )
+    output_tokens = _integer_or_none(
+        usage.get("completion_tokens", usage.get("output_tokens"))
+    )
+    total_tokens = _integer_or_none(usage.get("total_tokens"))
+
+    prompt_details = usage.get("prompt_tokens_details")
+    input_details = usage.get("input_tokens_details")
+    completion_details = usage.get("completion_tokens_details")
+    output_details = usage.get("output_tokens_details")
+
+    cached_input_tokens = _integer_or_none(
+        usage.get(
+            "cached_input_tokens",
+            (
+                prompt_details.get("cached_tokens")
+                if isinstance(prompt_details, dict)
+                else None
+            )
+            or (
+                input_details.get("cached_tokens")
+                if isinstance(input_details, dict)
+                else None
+            ),
+        )
+    )
+    reasoning_tokens = _integer_or_none(
+        usage.get(
+            "reasoning_tokens",
+            usage.get(
+                "reasoning_output_tokens",
+                (
+                    completion_details.get("reasoning_tokens")
+                    if isinstance(completion_details, dict)
+                    else None
+                )
+                or (
+                    output_details.get("reasoning_tokens")
+                    if isinstance(output_details, dict)
+                    else None
+                ),
+            ),
+        )
+    )
+
+    if input_tokens is None or output_tokens is None:
+        return missing_usage()
+
+    if total_tokens is None:
+        total_tokens = input_tokens + output_tokens
+
+    if input_tokens == 0 and output_tokens == 0 and total_tokens == 0:
+        return missing_usage()
+
+    return {
+        "total_input_tokens": input_tokens,
+        "total_output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+        "cached_input_tokens": cached_input_tokens,
+        "reasoning_tokens": reasoning_tokens,
+        "usage_source": "provider_usage",
+        "is_estimate": False,
+    }
+
+
 def extract_chat_completions_usage(response_body: Any) -> NormalizedUsage:
     """Normalize OpenAI-compatible Chat Completions usage fields."""
     usage = response_body.get("usage") if isinstance(response_body, dict) else None
     if not isinstance(usage, dict):
         return missing_usage()
-
-    prompt_details = usage.get("prompt_tokens_details")
-    completion_details = usage.get("completion_tokens_details")
-    return {
-        "total_input_tokens": _integer_or_none(usage.get("prompt_tokens")),
-        "total_output_tokens": _integer_or_none(usage.get("completion_tokens")),
-        "total_tokens": _integer_or_none(usage.get("total_tokens")),
-        "cached_input_tokens": _integer_or_none(
-            prompt_details.get("cached_tokens")
-            if isinstance(prompt_details, dict)
-            else None
-        ),
-        "reasoning_tokens": _integer_or_none(
-            completion_details.get("reasoning_tokens")
-            if isinstance(completion_details, dict)
-            else None
-        ),
-        "usage_source": "provider_usage",
-        "is_estimate": False,
-    }
+    return normalize_provider_usage(usage)
 
 
 def extract_responses_usage(response_body: Any) -> NormalizedUsage:
@@ -115,24 +219,7 @@ def extract_responses_usage(response_body: Any) -> NormalizedUsage:
     usage = response_body.get("usage") if isinstance(response_body, dict) else None
     if not isinstance(usage, dict):
         return missing_usage()
-
-    input_details = usage.get("input_tokens_details")
-    output_details = usage.get("output_tokens_details")
-    return {
-        "total_input_tokens": _integer_or_none(usage.get("input_tokens")),
-        "total_output_tokens": _integer_or_none(usage.get("output_tokens")),
-        "total_tokens": _integer_or_none(usage.get("total_tokens")),
-        "cached_input_tokens": _integer_or_none(
-            input_details.get("cached_tokens") if isinstance(input_details, dict) else None
-        ),
-        "reasoning_tokens": _integer_or_none(
-            output_details.get("reasoning_tokens")
-            if isinstance(output_details, dict)
-            else None
-        ),
-        "usage_source": "provider_usage",
-        "is_estimate": False,
-    }
+    return normalize_provider_usage(usage)
 
 
 def timestamp_parts(timezone: str = "America/New_York") -> dict[str, str]:

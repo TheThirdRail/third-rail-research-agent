@@ -54,6 +54,7 @@ def test_cli_prompt_uses_stdin_and_shell_false(monkeypatch):
     args, kwargs = calls[0]
     assert args[:2] == ["codex", "exec"]
     assert args[-1] == "-"
+    assert "--json" in args
     assert kwargs["input"] == "Say hello"
     assert kwargs["shell"] is False
     assert kwargs["timeout"] == 12
@@ -84,6 +85,79 @@ def test_cli_prompt_passes_model_and_reasoning(monkeypatch):
     assert "-c" in args
     assert 'model_reasoning_effort="high"' in args
     assert kwargs["shell"] is False
+
+
+def test_cli_prompt_result_returns_content_and_provider_usage(monkeypatch):
+    settings = Settings(_env_file=None, codex_cli_command="codex")
+
+    def fake_run(args, **kwargs):
+        output_path = args[args.index("--output-last-message") + 1]
+        with open(output_path, "w", encoding="utf-8") as handle:
+            handle.write("hello from last message")
+        return SimpleNamespace(
+            returncode=0,
+            stdout="\n".join(
+                [
+                    json.dumps({"type": "thread_started"}),
+                    json.dumps(
+                        {
+                            "type": "turn_completed",
+                            "usage": {
+                                "input_tokens": 12,
+                                "cached_input_tokens": 3,
+                                "output_tokens": 5,
+                                "reasoning_output_tokens": 2,
+                            },
+                        }
+                    ),
+                ]
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(cli_adapter.shutil, "which", lambda _command: "codex")
+    monkeypatch.setattr(cli_adapter.subprocess, "run", fake_run)
+
+    result = cli_adapter.run_prompt_with_model_result("Say hello", settings)
+
+    assert result.content == "hello from last message"
+    assert result.usage == {
+        "total_input_tokens": 12,
+        "total_output_tokens": 5,
+        "total_tokens": 17,
+        "cached_input_tokens": 3,
+        "reasoning_tokens": 2,
+        "usage_source": "provider_usage",
+        "is_estimate": False,
+    }
+    assert result.raw_stderr == ""
+
+
+def test_cli_prompt_result_ignores_zero_json_usage(monkeypatch):
+    settings = Settings(_env_file=None, codex_cli_command="codex")
+
+    def fake_run(args, **kwargs):
+        output_path = args[args.index("--output-last-message") + 1]
+        with open(output_path, "w", encoding="utf-8") as handle:
+            handle.write("hello")
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "type": "turn_completed",
+                    "usage": {"input_tokens": 0, "output_tokens": 0},
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(cli_adapter.shutil, "which", lambda _command: "codex")
+    monkeypatch.setattr(cli_adapter.subprocess, "run", fake_run)
+
+    result = cli_adapter.run_prompt_with_model_result("Say hello", settings)
+
+    assert result.content == "hello"
+    assert result.usage is None
 
 
 def test_cli_model_discovery_uses_debug_models(monkeypatch):

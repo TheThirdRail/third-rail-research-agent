@@ -152,7 +152,7 @@ docker compose exec backend research-agent init
 docker compose exec backend research-agent health --strict
 ```
 
-The backend still keeps startup schema sync as a compatibility fallback, but deployment should treat `research-agent init` as the migration step before serving traffic.
+The current Alembic baseline bootstraps the existing schema. Future schema changes should be represented as explicit Alembic revisions using operations such as `op.create_table`, `op.add_column`, `op.create_index`, and `op.drop_column` where appropriate. The backend still keeps startup schema sync as a compatibility fallback for older local SQLite files, but deployment should treat `research-agent init` as the migration step before serving traffic.
 
 ### Frontend shows "Cannot connect to API"
 

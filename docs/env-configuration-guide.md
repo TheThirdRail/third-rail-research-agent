@@ -73,6 +73,8 @@ DATABASE_URL=sqlite:///data/research_agent.db
 
 Run `research-agent init` after installing or deploying a new version. That command runs Alembic migrations to the latest revision, then applies the compatibility schema sync/backfill. Use `research-agent health --strict` afterward to confirm the database is at the current Alembic head.
 
+The current Alembic baseline bootstraps the existing schema. Future schema changes should be represented as explicit Alembic revisions using operations such as `op.create_table`, `op.add_column`, `op.create_index`, and `op.drop_column` where appropriate. Startup schema patching should remain a compatibility safety net for older local SQLite files, not the primary long-term migration strategy.
+
 ---
 
 ## Section 5: LLM Provider Selection

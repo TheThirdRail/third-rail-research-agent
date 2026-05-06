@@ -236,6 +236,23 @@ def _provider_key_configured(provider: str) -> bool:
     return bool(key_check.get(provider.strip().lower(), False))
 
 
+def _known_bad_agent_model_rows() -> list[str]:
+    """Return persisted agent model rows that still use denylisted models."""
+    from sqlalchemy.orm import Session
+
+    from src.database import session as db_session
+    from src.database.models import AgentConfiguration
+    from src.database.session import KNOWN_BAD_AGENT_MODELS
+
+    bad_rows: list[str] = []
+    with Session(db_session.engine) as session:
+        for row in session.query(AgentConfiguration).all():
+            model_key = (row.model or "").strip().lower()
+            if model_key in KNOWN_BAD_AGENT_MODELS:
+                bad_rows.append(f"{row.agent_name} uses known-bad model {row.model}")
+    return bad_rows
+
+
 def _health_rows() -> list[tuple[str, str, str, str]]:
     """Build readiness rows as (component, status, detail, action)."""
     from sqlalchemy import inspect
@@ -289,6 +306,36 @@ def _health_rows() -> list[tuple[str, str, str, str]]:
                 "warn",
                 f"{provider} is selected but its API key is not configured.",
                 "Set the provider API key or choose a local provider.",
+            )
+        )
+
+    try:
+        bad_agent_models = _known_bad_agent_model_rows()
+        if bad_agent_models:
+            rows.append(
+                (
+                    "Agent models",
+                    "warn",
+                    "; ".join(bad_agent_models[:3]),
+                    "Run `research-agent init`.",
+                )
+            )
+        else:
+            rows.append(
+                (
+                    "Agent models",
+                    "ok",
+                    "No known-bad persisted agent models found.",
+                    "",
+                )
+            )
+    except Exception as exc:
+        rows.append(
+            (
+                "Agent models",
+                "warn",
+                f"Could not inspect persisted agent models: {exc}",
+                "Check DATABASE_URL and run `research-agent init`.",
             )
         )
 

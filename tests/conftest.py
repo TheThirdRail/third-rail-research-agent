@@ -1,6 +1,9 @@
 """Pytest configuration and fixtures."""
 
 import pytest
+from sqlalchemy import create_engine
+
+from src.database.models import Base
 
 
 @pytest.fixture
@@ -24,3 +27,23 @@ def sample_source_domains() -> list[str]:
         "reason.com",
         "msnbc.com",
     ]
+
+
+@pytest.fixture
+def temp_database_url(tmp_path, monkeypatch) -> str:
+    """Use an isolated SQLite database for tests that read DATABASE_URL."""
+    db_path = tmp_path / "test_research_agent.db"
+    database_url = f"sqlite:///{db_path}"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    return database_url
+
+
+@pytest.fixture
+def temp_database_engine(temp_database_url):
+    """Create an isolated SQLAlchemy engine with the current metadata."""
+    engine = create_engine(temp_database_url)
+    Base.metadata.create_all(bind=engine)
+    try:
+        yield engine
+    finally:
+        engine.dispose()

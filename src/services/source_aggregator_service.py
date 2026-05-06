@@ -628,6 +628,7 @@ class SourceAggregatorService:
                 "lexical",
                 "semantic_paraphrase",
                 "opposing_frame",
+                "visual_social",
                 "description",
             },
             "visual_social": {"visual_social", "canonical_headline"},

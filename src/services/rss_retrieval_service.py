@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 from urllib.parse import urlparse
 
 from src.core.config import settings
@@ -19,6 +20,10 @@ class RssRetrievalService:
     """Search curated RSS feeds before site or open-web search."""
 
     aggregator: RSSAggregator | None = None
+    last_story_diagnostics: list[dict[str, Any]] = field(
+        default_factory=list,
+        init=False,
+    )
 
     def __post_init__(self) -> None:
         if self.aggregator is None:
@@ -111,6 +116,7 @@ class RssRetrievalService:
         target_domains = {
             self._normalize_domain(domain) for domain in bucket_spec.domain_targets
         }
+        self.last_story_diagnostics = []
 
         for feed in self.aggregator.feeds:
             if len(results) >= max_results or feed_attempts >= max_feed_attempts:
@@ -137,8 +143,13 @@ class RssRetrievalService:
                 item_domain = self._normalize_domain(item.domain)
                 if target_domains and item_domain and item_domain not in target_domains:
                     continue
-                score = self._score_story_item(item, packet)
-                if score < min_score:
+                diagnostics = self.score_story_item_diagnostics(
+                    item,
+                    packet,
+                    min_score=min_score,
+                )
+                self.last_story_diagnostics.append(diagnostics)
+                if not diagnostics["accepted"]:
                     continue
                 results.append(
                     SearchResult(
@@ -152,13 +163,27 @@ class RssRetrievalService:
         return results
 
     def _score_story_item(self, item: FeedItem, packet: StoryPacket) -> float:
+        return float(self.score_story_item_diagnostics(item, packet)["total_score"])
+
+    def score_story_item_diagnostics(
+        self,
+        item: FeedItem,
+        packet: StoryPacket,
+        *,
+        min_score: float | None = None,
+    ) -> dict[str, Any]:
+        """Return RSS story-match scoring diagnostics for one feed item."""
         title = item.title or ""
         summary = item.summary or ""
         title_text = title.lower()
         full_text = f"{title} {summary}".lower()
+        threshold = (
+            self._setting_float("rss_candidate_min_story_score", 0.45)
+            if min_score is None
+            else min_score
+        )
 
-        if self._contains_any(full_text, packet.must_not_have_terms):
-            return 0.0
+        matched_must_not = self._matched_term(full_text, packet.must_not_have_terms)
 
         title_overlap = self._term_overlap(
             title_text, self._query_terms(packet.canonical_headline)
@@ -179,17 +204,49 @@ class RssRetrievalService:
         if title_overlap == 0 and headline_overlap > 0:
             summary_only_penalty = 0.18
 
-        score = (
-            title_overlap * 0.24
-            + headline_overlap * 0.18
-            + actor_overlap * 0.18
-            + verb_overlap * 0.12
-            + distinctive_overlap * 0.16
-            + date_overlap * 0.07
-            + marker_overlap * 0.05
-            - summary_only_penalty
-        )
-        return max(0.0, min(1.0, score))
+        if matched_must_not:
+            score = 0.0
+        else:
+            raw_score = (
+                title_overlap * 0.24
+                + headline_overlap * 0.18
+                + actor_overlap * 0.18
+                + verb_overlap * 0.12
+                + distinctive_overlap * 0.16
+                + date_overlap * 0.07
+                + marker_overlap * 0.05
+                - summary_only_penalty
+            )
+            score = max(0.0, min(1.0, raw_score))
+
+        rejection_reason = None
+        if matched_must_not:
+            rejection_reason = f"must_not_have_matched:{matched_must_not}"
+        elif score < threshold:
+            if actor_overlap > 0 and verb_overlap == 0:
+                rejection_reason = "low_event_action_overlap"
+            elif summary_only_penalty > 0:
+                rejection_reason = "summary_only_below_threshold"
+            else:
+                rejection_reason = "below_min_story_score"
+
+        return {
+            "candidate_title": title,
+            "candidate_url": item.url,
+            "rss_source": item.source_name,
+            "candidate_domain": item.domain,
+            "total_score": score,
+            "accepted": rejection_reason is None,
+            "actor_overlap": actor_overlap,
+            "event_action_overlap": verb_overlap,
+            "date_window_overlap": date_overlap,
+            "distinctive_marker_overlap": max(distinctive_overlap, marker_overlap),
+            "distinctive_term_overlap": distinctive_overlap,
+            "marker_overlap": marker_overlap,
+            "must_not_have_matched_term": matched_must_not,
+            "summary_only_penalty": summary_only_penalty,
+            "rejection_reason": rejection_reason,
+        }
 
     @classmethod
     def _marker_overlap(cls, text: str, packet: StoryPacket) -> float:
@@ -226,9 +283,15 @@ class RssRetrievalService:
 
     @staticmethod
     def _contains_any(text: str, terms: list[str]) -> bool:
-        return any(
-            term.lower().strip() and term.lower().strip() in text for term in terms
-        )
+        return RssRetrievalService._matched_term(text, terms) is not None
+
+    @staticmethod
+    def _matched_term(text: str, terms: list[str]) -> str | None:
+        for term in terms:
+            normalized = term.lower().strip()
+            if normalized and normalized in text:
+                return term
+        return None
 
     @staticmethod
     def _term_in_text(term: str, text: str) -> bool:

@@ -143,6 +143,9 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-v --tb=short"
+markers = [
+    "integration: tests that require external services, browsers, live providers, OCR binaries, Docker, or network access",
+]
 filterwarnings = [
     "ignore:Support for class-based `config` is deprecated, use ConfigDict instead.*:pydantic.warnings.PydanticDeprecatedSince20",
 ]

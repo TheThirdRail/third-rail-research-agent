@@ -1,3 +1,5 @@
+"""Agent configuration row creation and known-bad model backfill coverage."""
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 

@@ -123,9 +123,10 @@ research-agent/
 ```
 
 ## Current Status
-- **Hardening P2**: **Complete**. System is production-ready with structured diagnostics and LanceDB integration.
-- **Backend API**: **Complete**.
-- **Web Interface**: **In Progress**. (Next.js frontend in development).
+- **Hardening P2**: Mostly implemented on `dev`; remaining work is focused on retrieval-family wiring, test-suite verification, migration policy, and diagnostic polish.
+- **Backend API**: Functional, with continued hardening.
+- **Web Interface**: In progress.
+- **Production readiness**: Not final yet. Run the pytest suite and benchmark harness before production use.
 
 ## License
 MIT License.

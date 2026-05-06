@@ -54,6 +54,12 @@ def _score(item: FeedItem, packet: StoryPacket) -> float:
     return service._score_story_item(item, packet)
 
 
+def _diagnostics(item: FeedItem, packet: StoryPacket) -> dict[str, object]:
+    """Return score diagnostics for a single feed item."""
+    service = RssRetrievalService.__new__(RssRetrievalService)
+    return service.score_story_item_diagnostics(item, packet)
+
+
 class TestHighConfidenceAcceptance:
     """Items clearly about the same story should score highly."""
 
@@ -66,6 +72,26 @@ class TestHighConfidenceAcceptance:
         )
         score = _score(item, packet)
         assert score >= 0.45, f"Expected high score, got {score}"
+
+    def test_matching_headline_has_acceptance_diagnostics(self):
+        packet = _make_packet()
+        item = _make_item(
+            title="Senator Smith vetoes education funding bill",
+            summary="The bill HR-4521 was vetoed.",
+        )
+
+        diagnostics = _diagnostics(item, packet)
+
+        assert diagnostics["accepted"] is True
+        assert diagnostics["total_score"] >= 0.45
+        assert diagnostics["candidate_title"] == item.title
+        assert diagnostics["candidate_url"] == item.url
+        assert diagnostics["rss_source"] == "Example News"
+        assert diagnostics["actor_overlap"] > 0
+        assert diagnostics["event_action_overlap"] > 0
+        assert diagnostics["date_window_overlap"] == 1.0
+        assert diagnostics["distinctive_marker_overlap"] > 0
+        assert diagnostics["rejection_reason"] is None
 
     def test_matching_headline_with_marker(self):
         """Marker overlap boosts score."""
@@ -91,6 +117,20 @@ class TestSameActorWrongEvent:
         score = _score(item, packet)
         assert score < 0.45, f"Expected low score for wrong event, got {score}"
 
+    def test_same_actor_wrong_event_diagnostics_explain_low_event_match(self):
+        packet = _make_packet()
+        item = _make_item(
+            title="Senator Smith launches presidential campaign",
+            summary="Smith announced a new presidential campaign today.",
+        )
+
+        diagnostics = _diagnostics(item, packet)
+
+        assert diagnostics["accepted"] is False
+        assert diagnostics["actor_overlap"] > 0
+        assert diagnostics["event_action_overlap"] == 0.0
+        assert diagnostics["rejection_reason"] == "low_event_action_overlap"
+
     def test_same_actor_must_not_have_rejection(self):
         """Items with must-not-have terms should score zero."""
         packet = _make_packet()
@@ -100,6 +140,19 @@ class TestSameActorWrongEvent:
         )
         score = _score(item, packet)
         assert score == 0.0, f"Expected 0 for must-not-have term, got {score}"
+
+    def test_must_not_have_rejection_names_matched_term(self):
+        packet = _make_packet()
+        item = _make_item(
+            title="Senator Smith vetoes healthcare reform bill",
+            summary="The healthcare bill was blocked by Smith.",
+        )
+
+        diagnostics = _diagnostics(item, packet)
+
+        assert diagnostics["accepted"] is False
+        assert diagnostics["must_not_have_matched_term"] == "healthcare"
+        assert diagnostics["rejection_reason"] == "must_not_have_matched:healthcare"
 
 
 class TestSameTopicWrongDate:
@@ -141,6 +194,18 @@ class TestSummaryOnlyMatch:
         # Should have some score but penalized for summary-only match
         # The penalty is 0.18 per the implementation
         assert score < 0.60, f"Summary-only match should be penalized, got {score}"
+
+    def test_summary_only_match_records_penalty(self):
+        packet = _make_packet()
+        item = _make_item(
+            title="Breaking political news today",
+            summary="Senator Smith vetoes education funding bill HR-4521.",
+        )
+
+        diagnostics = _diagnostics(item, packet)
+
+        assert diagnostics["summary_only_penalty"] == 0.18
+        assert diagnostics["total_score"] < 0.60
 
 
 class TestDistinctiveMarkerMatching:

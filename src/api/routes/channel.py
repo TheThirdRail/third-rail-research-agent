@@ -4,10 +4,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
+from src.api.dependencies import require_admin_api_key
 from src.core.config import settings
 from src.tools.channel_profile_loader import channel_loader
 
@@ -60,7 +61,11 @@ def get_channel_profile() -> ChannelProfileResponse:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@router.post("/upload", response_model=ChannelUploadResponse)
+@router.post(
+    "/upload",
+    response_model=ChannelUploadResponse,
+    dependencies=[Depends(require_admin_api_key)],
+)
 async def upload_channel_profile(file: UploadFile = File(...)) -> ChannelUploadResponse:
     """Upload and parse a channel scope document.
 
@@ -122,11 +127,20 @@ async def upload_channel_profile(file: UploadFile = File(...)) -> ChannelUploadR
         )
 
     except ValueError as e:
+        logger.warning(
+            "Invalid channel profile upload content: filename=%s format=%s error=%s",
+            file.filename,
+            format_hint,
+            e,
+        )
         raise HTTPException(status_code=400, detail=f"Invalid file content: {e}") from e
     except UnicodeDecodeError:
         raise HTTPException(
             status_code=400, detail="File must be UTF-8 encoded text"
         ) from None
     except Exception as e:
-        logger.error(f"Upload failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Upload failed: {e}") from e
+        logger.exception("Channel profile upload failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Upload failed. Check server logs for details.",
+        ) from e

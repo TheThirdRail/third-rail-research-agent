@@ -46,6 +46,18 @@ def test_tracker_creates_log_dir_and_appends_jsonl(tmp_path):
     assert json.loads(lines[1])["query_text"] == "Second query"
 
 
+def test_tracker_record_many_appends_jsonl_batch(tmp_path):
+    log_dir = tmp_path / "token-usage"
+    tracker = TokenUsageTracker(log_dir=log_dir)
+
+    tracker.record_many([_record(), _record("Second query")])
+
+    lines = (log_dir / "token-usage.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2
+    assert json.loads(lines[0])["query_text"] == "Analyze https://example.com/article"
+    assert json.loads(lines[1])["query_text"] == "Second query"
+
+
 def test_chat_completions_usage_maps_provider_fields():
     usage = extract_chat_completions_usage(
         {

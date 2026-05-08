@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from src.services import DiscoveryService
 
@@ -22,11 +23,15 @@ class DiscoverResponse(BaseModel):
 
 
 @router.post("/discover", response_model=DiscoverResponse)
-def discover_stories(request: DiscoverRequest) -> DiscoverResponse:
+async def discover_stories(request: DiscoverRequest) -> DiscoverResponse:
     """Discover relevant stories based on topics.
 
     If no topics are provided, uses the channel profile.
     """
-    service = DiscoveryService()
-    result = service.discover(request.topics)
+    result = await run_in_threadpool(_run_discovery_sync, request)
     return DiscoverResponse(**result)
+
+
+def _run_discovery_sync(request: DiscoverRequest) -> dict:
+    service = DiscoveryService()
+    return service.discover(request.topics)

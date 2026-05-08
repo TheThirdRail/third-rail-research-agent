@@ -1,6 +1,6 @@
 """Discovery Crew for finding relevant stories."""
 
-from crewai import Crew, Process, Task
+from crewai import Agent, Crew, Process, Task
 
 from src.agents import create_news_aggregator_agent
 
@@ -9,6 +9,7 @@ def create_discovery_tasks(
     channel_topics: list[str],
     count: int = 10,
     prefetched_context: str | None = None,
+    news_agent: Agent | None = None,
 ) -> list[Task]:
     """Create tasks for the discovery workflow.
 
@@ -26,6 +27,7 @@ def create_discovery_tasks(
     )
 
     max_count = max(1, count)
+    news_agent = news_agent or create_news_aggregator_agent()
 
     # Task 1: Aggregate news from RSS feeds
     rss_task = Task(
@@ -41,7 +43,7 @@ def create_discovery_tasks(
 
         Return a list of story titles with their sources and URLs.""",
         expected_output=f"A list of up to {max_count} news stories with titles, sources, and URLs.",
-        agent=create_news_aggregator_agent(),
+        agent=news_agent,
     )
 
     # Task 2: Search for additional stories
@@ -59,7 +61,7 @@ def create_discovery_tasks(
 
         Return additional stories with sources and URLs. Keep the total to roughly {max_count}.""",
         expected_output=f"Additional news stories so the combined output is around {max_count}.",
-        agent=create_news_aggregator_agent(),
+        agent=news_agent,
     )
 
     return [rss_task, search_task]
@@ -78,14 +80,16 @@ def run_discovery(
     Returns:
         Dictionary with discovered stories
     """
+    news_agent = create_news_aggregator_agent()
     tasks = create_discovery_tasks(
         channel_topics,
         count=count,
         prefetched_context=prefetched_context,
+        news_agent=news_agent,
     )
 
     crew = Crew(
-        agents=[create_news_aggregator_agent()],
+        agents=[news_agent],
         tasks=tasks,
         process=Process.sequential,
         verbose=True,

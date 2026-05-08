@@ -2,12 +2,12 @@
 
 import logging
 from dataclasses import dataclass
-from urllib.parse import urlparse
 
 import yaml
 from crewai.tools.base_tool import BaseTool
 
 from src.core.config import settings
+from src.utils.url_utils import extract_domain
 
 logger = logging.getLogger(__name__)
 
@@ -124,16 +124,6 @@ class BiasClassifier:
         """Initialize classifier."""
         self.local_db = LocalBiasDatabase()
 
-    def _extract_domain(self, url_or_domain: str) -> str:
-        """Extract domain from URL or clean domain string."""
-        if url_or_domain.startswith("http"):
-            try:
-                parsed = urlparse(url_or_domain)
-                return parsed.netloc.replace("www.", "")
-            except Exception:
-                pass
-        return url_or_domain.replace("www.", "").lower().strip()
-
     def classify(self, url_or_domain: str, article_text: str = "") -> BiasResult:
         """Classify bias of a source.
 
@@ -141,7 +131,7 @@ class BiasClassifier:
         from article text as a fallback; richer AllSides/LLM cascade behavior
         lives in BiasResolutionService to avoid recursive resolution.
         """
-        domain = self._extract_domain(url_or_domain)
+        domain = extract_domain(url_or_domain)
 
         result = self.local_db.lookup(domain)
         if result:

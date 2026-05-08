@@ -18,4 +18,5 @@ def test_raw_provider_rate_limit_maps_to_429(monkeypatch):
     assert response.status_code == 429
     detail = response.json()["detail"]
     assert "rate limit" in detail.lower()
-    assert "LM Studio fallback" in detail
+    assert "Check server logs" in detail
+    assert "SambanovaException" not in detail

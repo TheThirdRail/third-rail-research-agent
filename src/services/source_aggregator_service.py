@@ -38,6 +38,7 @@ from src.services.source_scoring import ScoredCandidate, score_candidate
 from src.tools.article_extractor import ArticleExtractor
 from src.tools.bias_classifier import BiasResult
 from src.tools.web_search import DuckDuckGoSearch, SearchResult, SearxngSearch
+from src.utils.url_utils import extract_domain
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,7 @@ class SourceAggregatorService:
         self._bucket_lane_attempts: list[BucketLaneAttempt] = []
         self._result_stage_by_url: dict[str, str] = {}
         self._result_bucket_by_url: dict[str, str] = {}
+        self._rss_story_diagnostics_by_url: dict[str, dict[str, object]] = {}
 
     def gather_sources(
         self,
@@ -215,7 +217,7 @@ class SourceAggregatorService:
                     )
 
         seed_bias = self._seed_bias(sources)
-        seed_domain = sources[0].domain if sources else self._extract_domain(url or "")
+        seed_domain = sources[0].domain if sources else extract_domain(url or "")
         plan = self._planner.plan(seed_bias=seed_bias, seed_domain=seed_domain)
         self._last_plan = plan
 
@@ -795,6 +797,7 @@ class SourceAggregatorService:
                         bucket_spec,
                         max_results=8,
                     )
+                    self._capture_rss_story_diagnostics()
                 else:
                     found = self._rss_retriever.search(
                         query,
@@ -910,7 +913,7 @@ class SourceAggregatorService:
             if not candidate_url.startswith("http"):
                 continue
             normalized_url = self._normalize_url(candidate_url)
-            domain = self._extract_domain(candidate_url)
+            domain = extract_domain(candidate_url)
             stage = self._result_stage_by_url.get(normalized_url, "open_web")
             planned_bucket = self._result_bucket_by_url.get(normalized_url)
             if normalized_url in candidate_urls or domain in candidate_domains:
@@ -1224,7 +1227,7 @@ class SourceAggregatorService:
                 )
             return SourceCandidate(
                 url=url,
-                domain=self._extract_domain(url),
+                domain=extract_domain(url),
                 title=article.title or "",
                 published_date=article.date,
                 author=article.author,
@@ -1311,6 +1314,12 @@ class SourceAggregatorService:
                 "image_alt_text_count": len(candidate.image_alt_text),
                 "media_caption_count": len(candidate.media_captions),
             }
+        relevance_payload = dict(relevance_diagnostics or {})
+        rss_diagnostics = self._rss_story_diagnostics_by_url.get(
+            self._normalize_url(url)
+        )
+        if stage == "rss" and rss_diagnostics:
+            relevance_payload["rss_story_match"] = rss_diagnostics
         self._candidate_decisions.append(
             CandidateDecision(
                 url=url,
@@ -1330,11 +1339,21 @@ class SourceAggregatorService:
                 extractor_method=candidate.extractor_method if candidate else None,
                 http_status=candidate.http_status if candidate else None,
                 relevance_score=candidate.relevance_score if candidate else None,
-                relevance_diagnostics=relevance_diagnostics or {},
+                relevance_diagnostics=relevance_payload,
                 source_score=candidate.source_score if candidate else None,
                 media_diagnostics=media_diagnostics,
             )
         )
+
+    def _capture_rss_story_diagnostics(self) -> None:
+        """Index latest RSS story-match diagnostics by normalized candidate URL."""
+        diagnostics = getattr(self._rss_retriever, "last_story_diagnostics", []) or []
+        for item in diagnostics:
+            url = str(item.get("candidate_url") or "")
+            if url:
+                self._rss_story_diagnostics_by_url[self._normalize_url(url)] = dict(
+                    item
+                )
 
     def _mark_candidate_decision(
         self,
@@ -1562,12 +1581,6 @@ class SourceAggregatorService:
             return SearxngSearch(settings.searxng_base_url, settings.searxng_api_key)
         return DuckDuckGoSearch()
 
-    def _extract_domain(self, url: str) -> str:
-        try:
-            parsed = urlparse(url)
-            return parsed.netloc.replace("www.", "")
-        except Exception:
-            return ""
 
     def _normalize_url(self, url: str) -> str:
         try:

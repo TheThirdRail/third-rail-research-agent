@@ -9,6 +9,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 
 from src.tools.rss_aggregator import FeedItem, RSSAggregator
+from src.utils.url_utils import extract_domain
 
 
 @dataclass
@@ -46,12 +47,6 @@ class RssFallbackService:
             return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{path}"
         except Exception:
             return url.lower().rstrip("/")
-
-    def _extract_domain(self, url: str) -> str:
-        try:
-            return urlparse(url).netloc.replace("www.", "").lower()
-        except Exception:
-            return ""
 
     def _clean_summary(self, value: str) -> str:
         text = re.sub(r"<[^>]+>", " ", value or "")
@@ -91,7 +86,7 @@ class RssFallbackService:
 
         for feed in self._aggregator.feeds:
             feed_url = feed.get("url", "")
-            feed_host = self._extract_domain(feed_url)
+            feed_host = extract_domain(feed_url)
             feed_name = (feed.get("name", "") or "").lower()
 
             if domain in feed_host or feed_host in domain:
@@ -123,7 +118,7 @@ class RssFallbackService:
     def resolve_by_url(self, url: str) -> RssFallbackResult | None:
         """Resolve exact URL match from RSS feeds."""
         normalized_target = self._normalize_url(url)
-        domain = self._extract_domain(url)
+        domain = extract_domain(url)
         feeds = self.get_candidate_feeds_for_domain(domain)
 
         for item in self._iter_feed_items(feeds):
@@ -141,7 +136,7 @@ class RssFallbackService:
         parsed = urlparse(url)
         slug_tokens = self._tokenize(parsed.path.replace("-", " "))
         title_tokens = self._tokenize(title_hint or "")
-        domain = self._extract_domain(url)
+        domain = extract_domain(url)
         feeds = self.get_candidate_feeds_for_domain(domain)
 
         best_item: FeedItem | None = None

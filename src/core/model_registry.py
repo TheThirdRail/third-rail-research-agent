@@ -369,32 +369,6 @@ class ModelRegistry:
 
         return models
 
-    def _get_anthropic_models(self) -> list[ModelInfo]:
-        """Get Anthropic models (fallback list)."""
-        return [
-            ModelInfo(
-                id="claude-3-5-sonnet-20241022",
-                name="Claude 3.5 Sonnet",
-                provider="anthropic",
-                is_free=False,
-                context_length=200000,
-            ),
-            ModelInfo(
-                id="claude-3-5-haiku-20241022",
-                name="Claude 3.5 Haiku",
-                provider="anthropic",
-                is_free=False,
-                context_length=200000,
-            ),
-            ModelInfo(
-                id="claude-3-opus-20240229",
-                name="Claude 3 Opus",
-                provider="anthropic",
-                is_free=False,
-                context_length=200000,
-            ),
-        ]
-
     async def _fetch_anthropic_models(self) -> list[ModelInfo]:
         """Fetch models from Anthropic API."""
         if not settings.anthropic_api_key:
@@ -626,3 +600,12 @@ def get_model_registry() -> ModelRegistry:
     if _registry is None:
         _registry = ModelRegistry()
     return _registry
+
+
+async def close_model_registry() -> None:
+    """Close the global model registry client without creating a new registry."""
+    global _registry
+    if _registry is None:
+        return
+    await _registry.close()
+    _registry = None

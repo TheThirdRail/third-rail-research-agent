@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from src.agents.config import AGENT_ROLES
+from src.api.dependencies import require_admin_api_key
 from src.core.config import settings
 from src.core.model_normalization import (
     normalize_model_for_provider,
@@ -107,7 +108,7 @@ async def _validate_model(provider: str, model: str) -> str:
     return normalized_model
 
 
-@router.post("/{name}/config")
+@router.post("/{name}/config", dependencies=[Depends(require_admin_api_key)])
 async def update_agent_config(
     name: str, config: AgentConfigUpdate, db: Session = Depends(get_db)
 ):

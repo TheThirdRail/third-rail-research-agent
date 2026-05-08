@@ -1,8 +1,9 @@
 """Budget API routes."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from src.api.dependencies import require_admin_api_key
 from src.core.budget_service import get_budget_service
 
 router = APIRouter()
@@ -35,7 +36,11 @@ def get_budget() -> BudgetStatus:
     return BudgetStatus(**service.get_status())
 
 
-@router.post("/budget/limit", response_model=SetLimitResponse)
+@router.post(
+    "/budget/limit",
+    response_model=SetLimitResponse,
+    dependencies=[Depends(require_admin_api_key)],
+)
 def set_budget_limit(request: SetLimitRequest) -> SetLimitResponse:
     """Set the daily budget limit.
 
@@ -46,7 +51,7 @@ def set_budget_limit(request: SetLimitRequest) -> SetLimitResponse:
     return SetLimitResponse(status="ok", new_limit=request.limit)
 
 
-@router.post("/budget/reset")
+@router.post("/budget/reset", dependencies=[Depends(require_admin_api_key)])
 def reset_budget() -> dict:
     """Reset today's spending to zero (admin only)."""
     service = get_budget_service()

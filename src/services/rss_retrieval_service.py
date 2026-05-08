@@ -220,8 +220,10 @@ class RssRetrievalService:
             score = max(0.0, min(1.0, raw_score))
 
         rejection_reason = None
+        reason = "accepted"
         if matched_must_not:
             rejection_reason = f"must_not_have_matched:{matched_must_not}"
+            reason = "must_not_have_match"
         elif score < threshold:
             if actor_overlap > 0 and verb_overlap == 0:
                 rejection_reason = "low_event_action_overlap"
@@ -229,12 +231,19 @@ class RssRetrievalService:
                 rejection_reason = "summary_only_below_threshold"
             else:
                 rejection_reason = "below_min_story_score"
+            reason = rejection_reason
 
         return {
             "candidate_title": title,
             "candidate_url": item.url,
             "rss_source": item.source_name,
             "candidate_domain": item.domain,
+            "status": "accepted" if rejection_reason is None else "rejected",
+            "reason": reason,
+            "details": {
+                "matched_terms": [matched_must_not] if matched_must_not else [],
+                "threshold": threshold,
+            },
             "total_score": score,
             "accepted": rejection_reason is None,
             "actor_overlap": actor_overlap,

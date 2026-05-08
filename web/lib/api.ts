@@ -1,4 +1,13 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const ADMIN_API_KEY = process.env.NEXT_PUBLIC_ADMIN_API_KEY || "";
+
+function adminHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {};
+    if (ADMIN_API_KEY) {
+        headers["X-Research-Agent-Key"] = ADMIN_API_KEY;
+    }
+    return headers;
+}
 
 export interface AgentConfig {
     agent_name: string;
@@ -30,7 +39,7 @@ export async function updateAgentConfig(
 ): Promise<AgentConfig> {
     const res = await fetch(`${API_URL}/api/agents/${agentName}/config`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...adminHeaders() },
         body: JSON.stringify(config),
     });
     if (!res.ok) {

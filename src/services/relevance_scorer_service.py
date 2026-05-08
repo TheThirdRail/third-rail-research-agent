@@ -15,6 +15,17 @@ from src.schemas.story_packet import StoryPacket
 
 logger = logging.getLogger(__name__)
 
+_POLITICAL_TERM_VARIANTS = {
+    "senate republicans": frozenset(
+        {"gop senators", "republican senators", "republicans"}
+    ),
+    "senate democrats": frozenset({"democratic senators", "democrats"}),
+    "house republicans": frozenset(
+        {"gop lawmakers", "republican lawmakers", "republicans"}
+    ),
+    "house democrats": frozenset({"democratic lawmakers", "democrats"}),
+}
+
 
 @dataclass
 class RelevanceScore:
@@ -372,12 +383,5 @@ class RelevanceScorerService:
             lowered.rstrip("e") + "ed",
             lowered.rstrip("s") + "ed",
         }
-        if lowered == "senate republicans":
-            variants.update({"gop senators", "republican senators", "republicans"})
-        elif lowered == "senate democrats":
-            variants.update({"democratic senators", "democrats"})
-        elif lowered == "house republicans":
-            variants.update({"gop lawmakers", "republican lawmakers", "republicans"})
-        elif lowered == "house democrats":
-            variants.update({"democratic lawmakers", "democrats"})
+        variants.update(_POLITICAL_TERM_VARIANTS.get(lowered, ()))
         return any(variant and variant in text for variant in variants)

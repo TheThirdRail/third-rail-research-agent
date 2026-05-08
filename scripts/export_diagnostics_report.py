@@ -35,7 +35,6 @@ def summarize_diagnostics(diagnostics: dict[str, Any]) -> dict[str, Any]:
     candidates = diagnostics.get("retrieval_candidates", []) or []
     visual = diagnostics.get("visual_evidence", {}) or {}
     records = visual.get("records", []) or []
-    limitations = visual.get("limitations", []) or []
     report_warnings = diagnostics.get("report_validation_warnings", []) or []
     run = diagnostics.get("analysis_run", {}) or {}
     census = diagnostics.get("candidate_census", {}) or {}
@@ -51,7 +50,7 @@ def summarize_diagnostics(diagnostics: dict[str, Any]) -> dict[str, Any]:
     visual_fallback_count = sum(
         1 for record in records if record.get("fallback_reason")
     )
-    warning_count = len(report_warnings) or len(limitations) + len(missing_buckets)
+    warning_count = len(report_warnings)
     runtime_seconds = _runtime_seconds(run.get("started_at"), run.get("completed_at"))
 
     return {

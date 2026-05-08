@@ -12,7 +12,9 @@ from datetime import UTC, datetime
 
 from src.schemas.story_packet import StoryPacket
 from src.services.rss_retrieval_service import RssRetrievalService
+from src.services.source_aggregator_service import SourceAggregatorService
 from src.tools.rss_aggregator import FeedItem
+from src.tools.web_search import SearchResult
 
 
 def _make_packet(**overrides: object) -> StoryPacket:
@@ -83,6 +85,8 @@ class TestHighConfidenceAcceptance:
         diagnostics = _diagnostics(item, packet)
 
         assert diagnostics["accepted"] is True
+        assert diagnostics["status"] == "accepted"
+        assert diagnostics["reason"] == "accepted"
         assert diagnostics["total_score"] >= 0.45
         assert diagnostics["candidate_title"] == item.title
         assert diagnostics["candidate_url"] == item.url
@@ -127,9 +131,11 @@ class TestSameActorWrongEvent:
         diagnostics = _diagnostics(item, packet)
 
         assert diagnostics["accepted"] is False
+        assert diagnostics["status"] == "rejected"
         assert diagnostics["actor_overlap"] > 0
         assert diagnostics["event_action_overlap"] == 0.0
         assert diagnostics["rejection_reason"] == "low_event_action_overlap"
+        assert diagnostics["reason"] == "low_event_action_overlap"
 
     def test_same_actor_must_not_have_rejection(self):
         """Items with must-not-have terms should score zero."""
@@ -151,8 +157,39 @@ class TestSameActorWrongEvent:
         diagnostics = _diagnostics(item, packet)
 
         assert diagnostics["accepted"] is False
+        assert diagnostics["status"] == "rejected"
+        assert diagnostics["reason"] == "must_not_have_match"
+        assert diagnostics["details"]["matched_terms"] == ["healthcare"]
         assert diagnostics["must_not_have_matched_term"] == "healthcare"
         assert diagnostics["rejection_reason"] == "must_not_have_matched:healthcare"
+
+    def test_rss_diagnostics_are_attached_to_candidate_decision(self):
+        service = SourceAggregatorService()
+        url = "https://example.com/article"
+        diagnostics = {
+            "candidate_url": url,
+            "status": "rejected",
+            "reason": "must_not_have_match",
+            "details": {"matched_terms": ["healthcare"]},
+        }
+        service._rss_story_diagnostics_by_url[service._normalize_url(url)] = diagnostics
+
+        service._record_candidate_decision(
+            candidate=None,
+            result=SearchResult(
+                title="Example",
+                url=url,
+                snippet="",
+                source="rss:Example News",
+            ),
+            stage="rss",
+            state="extraction_failed",
+            rejection_reason="no_extracted_text",
+            fallback_domain="example.com",
+        )
+
+        decision = service._candidate_decisions[-1]
+        assert decision.relevance_diagnostics["rss_story_match"] == diagnostics
 
 
 class TestSameTopicWrongDate:

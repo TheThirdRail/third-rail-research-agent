@@ -3,10 +3,29 @@ from types import SimpleNamespace
 
 os.environ["DEBUG"] = "true"
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.api.main import app
 from src.services.agent_config_service import AgentConfigService
+
+TEST_ADMIN_KEY = "test-model-norm-key"
+
+
+@pytest.fixture(autouse=True)
+def _set_admin_key(monkeypatch):
+    monkeypatch.setenv("ADMIN_API_KEY", TEST_ADMIN_KEY)
+    from src.core import config as _cfg
+
+    _cfg.get_settings.cache_clear()
+    _cfg.settings = _cfg.get_settings()
+    yield
+    _cfg.get_settings.cache_clear()
+    _cfg.settings = _cfg.get_settings()
+
+
+def _admin_headers() -> dict[str, str]:
+    return {"X-Research-Agent-Key": TEST_ADMIN_KEY}
 
 
 class _FakeModelService:
@@ -66,6 +85,7 @@ def test_update_agent_config_normalizes_gemini_model(monkeypatch):
     response = client.post(
         "/api/agents/bias_classifier/config",
         json={"provider": "gemini", "model": "models/gemini-2.0-flash"},
+        headers=_admin_headers(),
     )
 
     assert response.status_code == 200
@@ -125,6 +145,7 @@ def test_update_agent_config_saves_openai_fallback_model(monkeypatch):
             "model": "gpt-5.4",
             "reasoning_effort": "high",
         },
+        headers=_admin_headers(),
     )
 
     assert response.status_code == 200
@@ -156,6 +177,7 @@ def test_update_agent_config_rejects_invalid_openai_model(monkeypatch):
     response = client.post(
         "/api/agents/bias_classifier/config",
         json={"provider": "openai", "model": "not-a-real-model"},
+        headers=_admin_headers(),
     )
 
     assert response.status_code == 400
@@ -204,6 +226,7 @@ def test_update_agent_config_clears_reasoning_when_provider_changes(monkeypatch)
     response = client.post(
         "/api/agents/bias_classifier/config",
         json={"provider": "gemini", "reasoning_effort": None},
+        headers=_admin_headers(),
     )
 
     assert response.status_code == 200

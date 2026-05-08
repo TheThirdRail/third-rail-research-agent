@@ -1,9 +1,12 @@
 """Analysis API routes."""
 
+import logging
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
-from src.core.config import settings
 from src.core.exceptions import (
     BudgetExceededError,
     RateLimitExceededError,
@@ -12,6 +15,8 @@ from src.core.exceptions import (
 )
 from src.schemas.analysis_options import AnalysisOptions
 from src.services import AnalysisService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -37,20 +42,14 @@ class AnalyzeResponse(BaseModel):
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
-def analyze_story(request: AnalyzeRequest) -> AnalyzeResponse:
+async def analyze_story(request: AnalyzeRequest) -> AnalyzeResponse:
     """Analyze a story and generate a multi-source report.
 
     Aggregates sources from across the political spectrum,
     classifies bias, and generates a comprehensive report.
     """
     try:
-        service = AnalysisService()
-        if request.options is None:
-            result = service.analyze(request.description, request.url)
-        else:
-            result = service.analyze(
-                request.description, request.url, options=request.options
-            )
+        result = await run_in_threadpool(_run_analysis_sync, request)
         return AnalyzeResponse(**result)
     except SourceExtractionError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
@@ -60,22 +59,23 @@ def analyze_story(request: AnalyzeRequest) -> AnalyzeResponse:
         raise HTTPException(status_code=402, detail=str(e)) from e
     except Exception as e:
         if is_upstream_rate_limit_error(e):
-            fallback_enabled = settings.lmstudio_fallback_enabled and bool(
-                settings.lmstudio_fallback_model
-            )
-            fallback_note = (
-                "LM Studio fallback is enabled; request still failed."
-                if fallback_enabled
-                else "LM Studio fallback is disabled."
-            )
+            logger.warning("Upstream rate limit hit during analysis: %s", e)
             raise HTTPException(
                 status_code=429,
-                detail=f"Upstream provider rate limit exceeded. {fallback_note} Original error: {e}",
+                detail="Upstream provider rate limit exceeded. Check server logs for details.",
             ) from e
-        # Catch-all for other errors (keys, providers, etc)
+        logger.exception("Analysis failed")
         raise HTTPException(
-            status_code=500, detail=f"Internal Analysis Error: {str(e)}"
+            status_code=500,
+            detail="Analysis failed. Check server logs for details.",
         ) from e
+
+
+def _run_analysis_sync(request: AnalyzeRequest) -> dict[str, Any]:
+    service = AnalysisService()
+    if request.options is None:
+        return service.analyze(request.description, request.url)
+    return service.analyze(request.description, request.url, options=request.options)
 
 
 @router.get("/analysis/{story_id}")

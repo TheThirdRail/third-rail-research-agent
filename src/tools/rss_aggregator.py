@@ -4,7 +4,6 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
-from urllib.parse import urlparse
 
 import feedparser
 import httpx
@@ -13,8 +12,11 @@ from crewai.tools.base_tool import BaseTool
 
 from src.core.config import settings
 from src.core.time_utils import utc_now_naive
+from src.utils.url_utils import extract_domain
 
 logger = logging.getLogger(__name__)
+
+MAX_SUMMARY_CHARS = 500
 
 
 @dataclass
@@ -89,15 +91,6 @@ class RSSAggregator:
                 pass
         return None
 
-    def _extract_domain(self, url: str) -> str:
-        """Extract domain from URL."""
-        try:
-            parsed = urlparse(url)
-            domain = parsed.netloc.replace("www.", "")
-            return domain
-        except Exception:
-            return ""
-
     def fetch_feed(
         self,
         feed_url: str,
@@ -130,13 +123,13 @@ class RSSAggregator:
 
                 # Clean summary (remove HTML)
                 if summary:
-                    summary = summary[:500]  # Truncate
+                    summary = summary[:MAX_SUMMARY_CHARS]
 
                 items.append(
                     FeedItem(
                         title=title,
                         url=link,
-                        domain=self._extract_domain(link),
+                        domain=extract_domain(link),
                         published=self._parse_date(entry),
                         summary=summary,
                         bias=bias,

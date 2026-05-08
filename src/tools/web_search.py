@@ -75,8 +75,14 @@ class DuckDuckGoSearch:
                             source=r.get("source", ""),
                         )
                     )
-        except Exception as e:
-            logger.error(f"News search failed: {e}")
+        except Exception:
+            logger.warning(
+                "Search backend failed: backend=duckduckgo type=news query=%r max_results=%d time_range=%s",
+                _safe_query(query),
+                max_results,
+                time_range,
+                exc_info=True,
+            )
 
         return results
 
@@ -100,8 +106,13 @@ class DuckDuckGoSearch:
                             source=r.get("source", ""),
                         )
                     )
-        except Exception as e:
-            logger.error(f"Web search failed: {e}")
+        except Exception:
+            logger.warning(
+                "Search backend failed: backend=duckduckgo type=web query=%r max_results=%d",
+                _safe_query(query),
+                max_results,
+                exc_info=True,
+            )
 
         return results
 
@@ -158,8 +169,13 @@ class SearxngSearch:
                         source=source,
                     )
                 )
-        except Exception as e:
-            logger.error(f"SearxNG search failed: {e}")
+        except Exception:
+            logger.warning(
+                "Search backend failed: backend=searxng query=%r categories=%s",
+                _safe_query(params.get("q", "")),
+                params.get("categories", "general"),
+                exc_info=True,
+            )
 
         return results
 
@@ -319,3 +335,11 @@ def _docker_safe_searxng_base_url(base_url: str) -> str:
         return base_url
 
     return base_url
+
+
+def _safe_query(query: str, max_chars: int = 160) -> str:
+    """Return bounded query context for logs without request headers or keys."""
+    compacted = " ".join(str(query).split())
+    if len(compacted) <= max_chars:
+        return compacted
+    return compacted[:max_chars].rstrip() + "..."

@@ -3,10 +3,24 @@ from types import SimpleNamespace
 
 os.environ["DEBUG"] = "true"
 
+import pytest
 from fastapi.testclient import TestClient
 
-from src.api.main import app
 from src.services.agent_config_service import AgentConfigService
+
+TEST_ADMIN_KEY = "test-free-tier-key"
+
+
+@pytest.fixture(autouse=True)
+def _set_admin_key(monkeypatch):
+    monkeypatch.setenv("ADMIN_API_KEY", TEST_ADMIN_KEY)
+    from src.core import config as _cfg
+
+    _cfg.get_settings.cache_clear()
+    _cfg.settings = _cfg.get_settings()
+    yield
+    _cfg.get_settings.cache_clear()
+    _cfg.settings = _cfg.get_settings()
 
 
 def test_update_agent_config_free_tier(monkeypatch):
@@ -36,9 +50,13 @@ def test_update_agent_config_free_tier(monkeypatch):
     monkeypatch.setattr(AgentConfigService, "get_config", fake_get_config)
     monkeypatch.setattr(AgentConfigService, "set_config", fake_set_config)
 
+    from src.api.main import app
+
     client = TestClient(app)
     response = client.post(
-        "/api/agents/profile_reader/config", json={"free_tier": True}
+        "/api/agents/profile_reader/config",
+        json={"free_tier": True},
+        headers={"X-Research-Agent-Key": TEST_ADMIN_KEY},
     )
 
     assert response.status_code == 200

@@ -4,16 +4,17 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Awaitable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urlparse
 
 from crewai.tools.base_tool import BaseTool
 
 from src.core.config import settings
+from src.utils.url_utils import extract_domain
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,12 @@ ERROR_EMPTY_CONTENT = "empty_content"
 ERROR_TIMEOUT = "timeout"
 ERROR_PARSE_FAILURE = "parse_failure"
 ERROR_EXCEPTION = "exception"
+
+MIN_EXTRACTION_TEXT_LENGTH = 100
+PLAYWRIGHT_PAGE_TIMEOUT_MS = 25000
+CONTENT_PREVIEW_CHARS = 10000
+MULTI_ARTICLE_MAX_URLS = 10
+MULTI_ARTICLE_CONCURRENCY_LIMIT = 4
 
 _BLOCKED_SIGNATURES = (
     "access denied",
@@ -137,14 +144,6 @@ class ExtractedArticle:
 class ArticleExtractor:
     """Extracts article content from URLs using multiple methods."""
 
-    def _extract_domain(self, url: str) -> str:
-        """Extract domain from URL."""
-        try:
-            parsed = urlparse(url)
-            return parsed.netloc.replace("www.", "")
-        except Exception:
-            return ""
-
     def _failure(
         self,
         *,
@@ -159,7 +158,7 @@ class ArticleExtractor:
             text="",
             author=None,
             date=None,
-            domain=self._extract_domain(url),
+            domain=extract_domain(url),
             url=url,
             success=False,
             error=error,
@@ -227,7 +226,7 @@ class ArticleExtractor:
             text=result,
             author=author,
             date=date,
-            domain=self._extract_domain(url),
+            domain=extract_domain(url),
             url=url,
             success=True,
             error=None,
@@ -301,7 +300,7 @@ class ArticleExtractor:
                 text=article.text,
                 author=author,
                 date=date,
-                domain=self._extract_domain(url),
+                domain=extract_domain(url),
                 url=url,
                 success=True,
                 error=None,
@@ -364,7 +363,7 @@ class ArticleExtractor:
                 try:
                     page = browser.new_page()
                     response = page.goto(
-                        url, wait_until="domcontentloaded", timeout=25000
+                        url, wait_until="domcontentloaded", timeout=PLAYWRIGHT_PAGE_TIMEOUT_MS
                     )
                     if response is not None:
                         status = response.status
@@ -609,7 +608,7 @@ class ArticleExtractor:
                 try:
                     page = await browser.new_page()
                     response = await page.goto(
-                        url, wait_until="domcontentloaded", timeout=25000
+                        url, wait_until="domcontentloaded", timeout=PLAYWRIGHT_PAGE_TIMEOUT_MS
                     )
                     if response is not None:
                         status = response.status
@@ -672,23 +671,23 @@ class ArticleExtractor:
         _log_extractor_version_once()
 
         result = self.extract_trafilatura(url)
-        if result.success and len(result.text) > 100:
+        if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
 
         logger.info("Falling back to newspaper4k for %s", url)
         result = self.extract_newspaper(url)
-        if result.success and len(result.text) > 100:
+        if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
 
         logger.info("Falling back to Playwright sync for %s", url)
         result = self.extract_playwright(url)
-        if result.success and len(result.text) > 100:
+        if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
 
         if settings.enable_selenium_fallback:
             logger.info("Falling back to Selenium for %s", url)
             selenium_result = self.extract_selenium(url)
-            if selenium_result.success and len(selenium_result.text) > 100:
+            if selenium_result.success and len(selenium_result.text) > MIN_EXTRACTION_TEXT_LENGTH:
                 return selenium_result
             return selenium_result
 
@@ -724,23 +723,23 @@ class ArticleExtractor:
         _log_extractor_version_once()
 
         result = await self.extract_trafilatura_async(url)
-        if result.success and len(result.text) > 100:
+        if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
 
         logger.info("Falling back to newspaper4k for %s", url)
         result = await self.extract_newspaper_async(url)
-        if result.success and len(result.text) > 100:
+        if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
 
         logger.info("Falling back to Playwright async for %s", url)
         result = await self.extract_playwright_async(url)
-        if result.success and len(result.text) > 100:
+        if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
 
         if settings.enable_selenium_fallback:
             logger.info("Falling back to Selenium for %s", url)
             selenium_result = await self.extract_selenium_async(url)
-            if selenium_result.success and len(selenium_result.text) > 100:
+            if selenium_result.success and len(selenium_result.text) > MIN_EXTRACTION_TEXT_LENGTH:
                 return selenium_result
             return selenium_result
 
@@ -784,10 +783,10 @@ URL: {article.url}
 Method: {article.extractor_method or "unknown"}
 
 === FULL TEXT ===
-{article.text[:10000]}
+{article.text[:CONTENT_PREVIEW_CHARS]}
 """
-        if len(article.text) > 10000:
-            output += "\n[Content truncated - showing first 10000 characters]"
+        if len(article.text) > CONTENT_PREVIEW_CHARS:
+            output += f"\n[Content truncated - showing first {CONTENT_PREVIEW_CHARS} characters]"
 
         return output
 
@@ -828,6 +827,52 @@ class MultiArticleExtractorTool(BaseTool):
     Provide URLs separated by newlines or commas.
     Returns extracted content for each article."""
 
+    @staticmethod
+    def _parse_urls(urls: str) -> list[str]:
+        url_list = []
+        for line in urls.replace(",", "\n").split("\n"):
+            url = line.strip()
+            if url.startswith("http"):
+                url_list.append(url)
+        return url_list[:MULTI_ARTICLE_MAX_URLS]
+
+    @staticmethod
+    def _format_result(index: int, url: str, article: ExtractedArticle) -> str:
+        if article.success:
+            return (
+                f"--- Article {index} ---\n"
+                f"Title: {article.title}\n"
+                f"Source: {article.domain}\n"
+                f"URL: {url}\n"
+                f"Method: {article.extractor_method or 'unknown'}\n"
+                f"Length: {len(article.text)} characters\n"
+            )
+        return (
+            f"--- Article {index} ---\n"
+            f"URL: {url}\n"
+            f"Method: {article.extractor_method or 'unknown'}\n"
+            f"Error Code: {article.error_code or 'unknown'}\n"
+            f"Error: {article.error}\n"
+        )
+
+    async def _extract_many_async(
+        self, extractor: ArticleExtractor, url_list: list[str]
+    ) -> list[ExtractedArticle]:
+        semaphore = asyncio.Semaphore(MULTI_ARTICLE_CONCURRENCY_LIMIT)
+
+        async def one(url: str) -> ExtractedArticle:
+            async with semaphore:
+                return await extractor.extract_async(url)
+
+        return await asyncio.gather(*(one(url) for url in url_list))
+
+    def _extract_many_sync(
+        self, extractor: ArticleExtractor, url_list: list[str]
+    ) -> list[ExtractedArticle]:
+        max_workers = min(MULTI_ARTICLE_CONCURRENCY_LIMIT, len(url_list))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            return list(executor.map(extractor.extract, url_list))
+
     def run(self, *args, **kwargs):
         """Return awaitable in async contexts to avoid sync Playwright in event loop."""
         try:
@@ -854,74 +899,32 @@ class MultiArticleExtractorTool(BaseTool):
         else:
             return self._arun(urls)
 
-        url_list = []
-        for line in urls.replace(",", "\n").split("\n"):
-            url = line.strip()
-            if url.startswith("http"):
-                url_list.append(url)
+        url_list = self._parse_urls(urls)
 
         if not url_list:
             return "No valid URLs provided."
 
         extractor = ArticleExtractor()
-        results = []
-
-        for i, url in enumerate(url_list[:10], 1):
-            article = extractor.extract(url)
-
-            if article.success:
-                results.append(
-                    f"--- Article {i} ---\n"
-                    f"Title: {article.title}\n"
-                    f"Source: {article.domain}\n"
-                    f"URL: {url}\n"
-                    f"Method: {article.extractor_method or 'unknown'}\n"
-                    f"Length: {len(article.text)} characters\n"
-                )
-            else:
-                results.append(
-                    f"--- Article {i} ---\n"
-                    f"URL: {url}\n"
-                    f"Method: {article.extractor_method or 'unknown'}\n"
-                    f"Error Code: {article.error_code or 'unknown'}\n"
-                    f"Error: {article.error}\n"
-                )
+        articles = self._extract_many_sync(extractor, url_list)
+        results = [
+            self._format_result(i, url, article)
+            for i, (url, article) in enumerate(zip(url_list, articles, strict=True), 1)
+        ]
 
         return "\n".join(results)
 
     async def _arun(self, urls: str) -> str:
         """Extract multiple articles asynchronously."""
-        url_list = []
-        for line in urls.replace(",", "\n").split("\n"):
-            url = line.strip()
-            if url.startswith("http"):
-                url_list.append(url)
+        url_list = self._parse_urls(urls)
 
         if not url_list:
             return "No valid URLs provided."
 
         extractor = ArticleExtractor()
-        results = []
-
-        for i, url in enumerate(url_list[:10], 1):
-            article = await extractor.extract_async(url)
-
-            if article.success:
-                results.append(
-                    f"--- Article {i} ---\n"
-                    f"Title: {article.title}\n"
-                    f"Source: {article.domain}\n"
-                    f"URL: {url}\n"
-                    f"Method: {article.extractor_method or 'unknown'}\n"
-                    f"Length: {len(article.text)} characters\n"
-                )
-            else:
-                results.append(
-                    f"--- Article {i} ---\n"
-                    f"URL: {url}\n"
-                    f"Method: {article.extractor_method or 'unknown'}\n"
-                    f"Error Code: {article.error_code or 'unknown'}\n"
-                    f"Error: {article.error}\n"
-                )
+        articles = await self._extract_many_async(extractor, url_list)
+        results = [
+            self._format_result(i, url, article)
+            for i, (url, article) in enumerate(zip(url_list, articles, strict=True), 1)
+        ]
 
         return "\n".join(results)

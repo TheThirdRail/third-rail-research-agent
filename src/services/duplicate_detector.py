@@ -6,7 +6,8 @@ import logging
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from urllib.parse import urlparse
+
+from src.utils.url_utils import extract_domain
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ _WIRE_MARKERS = {
 _SHINGLE_SIZE = 5
 _SIMILARITY_THRESHOLD = 0.70
 _TITLE_SIMILARITY_THRESHOLD = 0.85
+_WIRE_MARKER_BODY_SCAN_CHARS = 500
 
 
 @dataclass
@@ -44,10 +46,10 @@ def check_duplicate(
     existing_sources: list[dict[str, str]],
 ) -> DuplicateResult:
     """Check if a candidate is a duplicate of existing sources."""
-    candidate_domain = _extract_domain(url)
+    candidate_domain = extract_domain(url)
 
     for existing in existing_sources:
-        existing_domain = existing.get("domain", _extract_domain(existing["url"]))
+        existing_domain = existing.get("domain", extract_domain(existing["url"]))
 
         if candidate_domain == existing_domain:
             return DuplicateResult(True, existing["url"], "same_domain", 1.0)
@@ -71,14 +73,6 @@ def check_duplicate(
     return DuplicateResult(False, None, "", 0.0)
 
 
-def _extract_domain(url: str) -> str:
-    try:
-        domain = urlparse(url).netloc.lower()
-        return domain[4:] if domain.startswith("www.") else domain
-    except Exception:
-        return url.lower()
-
-
 def _title_similarity(a: str, b: str) -> float:
     if not a or not b:
         return 0.0
@@ -90,10 +84,10 @@ def _is_wire_rewrite(
 ) -> bool:
     for marker in _WIRE_MARKERS:
         a_has = (auth_a and marker in auth_a.lower()) or (
-            body_a and marker in body_a[:500].lower()
+            body_a and marker in body_a[:_WIRE_MARKER_BODY_SCAN_CHARS].lower()
         )
         b_has = (auth_b and marker in auth_b.lower()) or (
-            body_b and marker in body_b[:500].lower()
+            body_b and marker in body_b[:_WIRE_MARKER_BODY_SCAN_CHARS].lower()
         )
         if a_has and b_has:
             return True

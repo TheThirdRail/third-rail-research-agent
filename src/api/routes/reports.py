@@ -1,8 +1,12 @@
 """Report export API routes."""
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Response
 from markdown import markdown as markdown_to_html
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -124,8 +128,10 @@ async def create_report_pdf(request: ReportPdfRequest) -> Response:
     try:
         pdf_bytes = await render_report_pdf(request.report_markdown)
     except Exception as exc:
+        logger.exception("PDF export failed")
         raise HTTPException(
-            status_code=500, detail=f"PDF export failed: {str(exc)}"
+            status_code=500,
+            detail="PDF export failed. Check server logs for details.",
         ) from exc
     return Response(
         content=pdf_bytes,

@@ -21,10 +21,35 @@ from src.core.lmstudio_utils import (
     normalize_lmstudio_base_url,
     resolve_lmstudio_api_key,
 )
+from src.core.model_registry import close_model_registry
 from src.core.task_timing import register_task_timing
 from src.database import init_db
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://frontend:3000",
+]
+
+
+def _cors_origins() -> list[str]:
+    """Build the allowed-origins list from settings.
+
+    Raises ``ValueError`` if wildcard ``*`` is combined with
+    ``allow_credentials=True`` (browser-enforced restriction).
+    """
+    from src.core import config as _cfg
+
+    raw = _cfg.settings.cors_origins
+    origins = [item.strip() for item in raw.split(",") if item.strip()]
+    if "*" in origins:
+        raise ValueError(
+            "Wildcard CORS origin ('*') cannot be used because the API "
+            "sends credentials.  Set CORS_ORIGINS to explicit origins."
+        )
+    return origins or _DEFAULT_ORIGINS
 
 
 async def _check_lmstudio_connectivity() -> None:
@@ -69,6 +94,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     init_db()
     yield
     # Shutdown (cleanup if needed)
+    await close_model_registry()
 
 
 app = FastAPI(
@@ -79,20 +105,9 @@ app = FastAPI(
 )
 
 # CORS middleware for frontend
-# CORS middleware for frontend
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://frontend:3000",
-]
-
-# Allow all origins in development for easier testing
-if settings.app_env == "development":
-    origins = ["*"]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

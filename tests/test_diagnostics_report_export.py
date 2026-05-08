@@ -67,6 +67,26 @@ def test_diagnostics_summary_tracks_runtime_rss_semantic_and_visual_metrics():
     ]
 
 
+def test_diagnostics_summary_does_not_recompute_validation_warnings():
+    diagnostics = {
+        "story_id": "story-123456789",
+        "analysis_id": "analysis-1",
+        "analysis_run": {},
+        "candidate_census": {"missing_buckets": ["center"]},
+        "visual_evidence": {
+            "records": [],
+            "limitations": ["metadata only"],
+        },
+        "report_validation_warnings": [],
+        "retrieval_candidates": [],
+    }
+
+    summary = summarize_diagnostics(diagnostics)
+
+    assert summary["warning_count"] == 0
+    assert summary["report_validation_warnings"] == []
+
+
 def test_diagnostics_report_markdown_and_json_are_stable():
     stories = [
         {

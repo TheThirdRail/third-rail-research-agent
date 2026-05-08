@@ -3,12 +3,18 @@
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+MAX_DESCRIPTION_CHARS = 2000
+MAX_TAGS = 20
+DEFAULT_SEARCH_RESULTS = 5
+
+TranscriptStatus = Literal["not_requested", "available_not_downloaded", "missing"]
 
 
 @dataclass
@@ -27,7 +33,7 @@ class VideoMetadata:
     comment_count: int
     tags: list[str] = field(default_factory=list)
     categories: list[str] = field(default_factory=list)
-    transcript: str = ""
+    transcript_status: TranscriptStatus = "not_requested"
     url: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -45,7 +51,7 @@ class VideoMetadata:
             "comment_count": self.comment_count,
             "tags": self.tags,
             "categories": self.categories,
-            "transcript": self.transcript[:500] if self.transcript else "",
+            "transcript_status": self.transcript_status,
             "url": self.url,
         }
 
@@ -54,7 +60,9 @@ class YouTubeSearchInput(BaseModel):
     """Input for YouTube search."""
 
     query: str = Field(description="Search query for YouTube")
-    max_results: int = Field(default=5, description="Maximum number of results")
+    max_results: int = Field(
+        default=DEFAULT_SEARCH_RESULTS, description="Maximum number of results"
+    )
 
 
 class YouTubeExtractInput(BaseModel):
@@ -86,7 +94,7 @@ class YouTubeResearchTool(BaseTool):
         """
         if action == "search":
             query = kwargs.get("query", "")
-            max_results = kwargs.get("max_results", 5)
+            max_results = kwargs.get("max_results", DEFAULT_SEARCH_RESULTS)
             return self._search(query, max_results)
         elif action == "extract":
             url = kwargs.get("url", "")
@@ -95,7 +103,7 @@ class YouTubeResearchTool(BaseTool):
         else:
             return f"Unknown action: {action}. Use 'search' or 'extract'."
 
-    def _search(self, query: str, max_results: int = 5) -> str:
+    def _search(self, query: str, max_results: int = DEFAULT_SEARCH_RESULTS) -> str:
         """Search YouTube for videos.
 
         Args:
@@ -189,7 +197,7 @@ class YouTubeResearchTool(BaseTool):
             metadata = VideoMetadata(
                 video_id=info.get("id", video_id),
                 title=info.get("title", ""),
-                description=info.get("description", "")[:2000],
+                description=info.get("description", "")[:MAX_DESCRIPTION_CHARS],
                 channel=info.get("channel", info.get("uploader", "")),
                 channel_id=info.get("channel_id", ""),
                 upload_date=info.get("upload_date", ""),
@@ -197,14 +205,14 @@ class YouTubeResearchTool(BaseTool):
                 view_count=info.get("view_count", 0),
                 like_count=info.get("like_count", 0),
                 comment_count=info.get("comment_count", 0),
-                tags=info.get("tags", [])[:20],
+                tags=info.get("tags", [])[:MAX_TAGS],
                 categories=info.get("categories", []),
                 url=url,
             )
 
-            # Extract transcript if requested
+            # Check transcript availability (download not implemented)
             if include_transcript:
-                metadata.transcript = self._extract_transcript(info)
+                metadata.transcript_status = self._check_transcript_availability(info)
 
             import json
 
@@ -226,23 +234,22 @@ class YouTubeResearchTool(BaseTool):
                 return match.group(1)
         return None
 
-    def _extract_transcript(self, info: dict[str, Any]) -> str:
-        """Extract transcript/captions from video info."""
-        # Check for manual or auto-generated subtitles
+    def _check_transcript_availability(self, info: dict[str, Any]) -> TranscriptStatus:
+        """Check whether English captions exist without downloading them.
+
+        Returns one of: ``"available_not_downloaded"``, ``"missing"``, or
+        ``"not_requested"``. Full transcript download is not yet implemented.
+        """
         subtitles = info.get("subtitles", {})
         auto_captions = info.get("automatic_captions", {})
 
-        # Prefer English manual subs, then auto
         for subs in [subtitles, auto_captions]:
             if "en" in subs:
-                # Get first available format (usually vtt or json3)
                 for sub_format in subs["en"]:
                     if sub_format.get("ext") in ["vtt", "json3", "srv1"]:
-                        # Note: actual download would require additional processing
-                        # For now, just indicate transcript is available
-                        return "[Transcript available - English captions detected]"
+                        return "available_not_downloaded"
 
-        return ""
+        return "missing"
 
 
 # Convenience function

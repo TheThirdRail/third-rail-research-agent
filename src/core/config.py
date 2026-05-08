@@ -299,6 +299,17 @@ class Settings(BaseSettings):
     # API
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+    admin_api_key: str = Field(
+        default="",
+        description="Shared secret for admin/mutation API routes. Leave empty to disable admin routes.",
+    )
+    cors_origins: str = Field(
+        default="",
+        description=(
+            "Comma-separated allowed CORS origins. "
+            "Defaults to localhost:3000 when empty."
+        ),
+    )
 
     # Paths
 

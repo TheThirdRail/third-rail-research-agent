@@ -93,6 +93,10 @@ class ChannelProfileLoader:
         """
         if format_hint == "auto":
             format_hint = self._detect_format(content)
+            if format_hint == "txt":
+                logger.warning(
+                    "Channel profile format could not be inferred; using plain-text parser fallback"
+                )
 
         if format_hint in {"yaml", "yml"}:
             return self._parse_yaml(content)
@@ -128,7 +132,7 @@ class ChannelProfileLoader:
         try:
             data = yaml.safe_load(content) or {}
         except yaml.YAMLError as e:
-            logger.error(f"Failed to parse YAML: {e}")
+            logger.warning("Failed to parse channel profile YAML: %s", e)
             raise ValueError(f"Invalid YAML: {e}") from e
 
         channel = data.get("channel", data)
@@ -161,7 +165,7 @@ class ChannelProfileLoader:
         try:
             data = json.loads(content)
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON: {e}")
+            logger.warning("Failed to parse channel profile JSON: %s", e)
             raise ValueError(f"Invalid JSON: {e}") from e
 
         return ChannelScope(

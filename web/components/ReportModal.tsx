@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence, useDragControls } from "framer-motion";
 import { X, FileText, Download, Terminal } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -17,6 +17,12 @@ export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
     const contentRef = useRef<HTMLDivElement | null>(null);
     const overlayRef = useRef<HTMLDivElement | null>(null);
     const dragControls = useDragControls();
+    const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+    const reportSessionId = useMemo(
+        () => Math.random().toString(36).substring(7).toUpperCase(),
+        [report],
+    );
 
     const extractSourceMatrixTable = (markdown: string) => {
         const lines = markdown.split(/\r?\n/);
@@ -118,7 +124,8 @@ export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
     };
 
     const handleExportPdf = async () => {
-        if (!report) return;
+        if (!report || isExportingPdf) return;
+        setIsExportingPdf(true);
         try {
             const blob = await exportReportPdf(report);
             const url = URL.createObjectURL(blob);
@@ -135,6 +142,8 @@ export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
                     ? error.message
                     : "Failed to export PDF.";
             alert(message);
+        } finally {
+            setIsExportingPdf(false);
         }
     };
 
@@ -235,7 +244,7 @@ export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
                         {/* Footer */}
                         <div className="p-4 border-t border-white/10 bg-void/50 flex flex-wrap gap-2 justify-between items-center">
                             <div className="text-[10px] text-gray-500 uppercase tracking-widest font-mono">
-                                End of transmission // ID: {Math.random().toString(36).substring(7).toUpperCase()}
+                                End of transmission // ID: {reportSessionId}
                             </div>
                             <div className="flex gap-4">
                                 <button
@@ -247,10 +256,11 @@ export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
                                 </button>
                                 <button
                                     onClick={handleExportPdf}
-                                    className="flex items-center gap-2 text-[10px] text-neon-purple hover:text-white transition-colors uppercase tracking-widest font-bold"
+                                    disabled={isExportingPdf}
+                                    className="flex items-center gap-2 text-[10px] text-neon-purple hover:text-white transition-colors uppercase tracking-widest font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <FileText className="w-3 h-3" />
-                                    Export PDF
+                                    {isExportingPdf ? "Exporting…" : "Export PDF"}
                                 </button>
                             </div>
                         </div>

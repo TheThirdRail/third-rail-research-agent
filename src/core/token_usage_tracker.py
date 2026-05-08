@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Iterable
 from datetime import datetime
 from math import ceil
 from pathlib import Path
@@ -367,13 +368,26 @@ class TokenUsageTracker:
 
     def record(self, record: TokenUsageRecord) -> None:
         """Append one JSON object per line, logging failures as warnings."""
+        self.record_many([record])
+
+    def record_many(self, records: Iterable[TokenUsageRecord]) -> None:
+        """Append multiple JSON objects with a single file open."""
         try:
-            enriched = dict(record)
-            if not enriched.get("date") or not enriched.get("time"):
-                enriched.update(timestamp_parts(self.timezone))
+            enriched_records = [self._enrich_record(record) for record in records]
+            if not enriched_records:
+                return
             self.log_dir.mkdir(parents=True, exist_ok=True)
             with self.log_path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(enriched, ensure_ascii=False, sort_keys=True))
-                handle.write("\n")
+                for enriched in enriched_records:
+                    handle.write(
+                        json.dumps(enriched, ensure_ascii=False, sort_keys=True)
+                    )
+                    handle.write("\n")
         except Exception:
             logger.warning("Failed to write token usage record", exc_info=True)
+
+    def _enrich_record(self, record: TokenUsageRecord) -> dict[str, Any]:
+        enriched = dict(record)
+        if not enriched.get("date") or not enriched.get("time"):
+            enriched.update(timestamp_parts(self.timezone))
+        return enriched

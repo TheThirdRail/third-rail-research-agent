@@ -18,7 +18,6 @@ from src.tools.keyword_extractor import (
     Keyword,
     KeywordExtractor,
     KeywordExtractorTool,
-    TopicMatcherTool,
 )
 from src.tools.rss_aggregator import (
     FeedItem,
@@ -31,11 +30,6 @@ from src.tools.web_search import (
     SearchResult,
     SearxngSearch,
     WebSearchTool,
-)
-from src.tools.youtube_research import (
-    VideoMetadata,
-    YouTubeResearchTool,
-    create_youtube_tool,
 )
 
 __all__ = [
@@ -64,10 +58,5 @@ __all__ = [
     # Keyword Extraction
     "KeywordExtractor",
     "KeywordExtractorTool",
-    "TopicMatcherTool",
     "Keyword",
-    # YouTube Research
-    "YouTubeResearchTool",
-    "VideoMetadata",
-    "create_youtube_tool",
 ]

@@ -91,7 +91,7 @@ def test_paid_mode_no_retry(monkeypatch):
     router = LLMRouter(provider="mistral", model="mistral-small-latest")
     router.free_tier = False
 
-    with pytest.raises(Exception):
+    with pytest.raises(DummyExc):
         router.complete([{"role": "user", "content": "hi"}])
 
     assert calls["count"] == 1

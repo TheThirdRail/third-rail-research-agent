@@ -68,7 +68,9 @@ export async function getModels(
 ): Promise<ModelInfo[]> {
     const params = new URLSearchParams({ provider });
     if (refresh) params.set("refresh", "true");
-    const res = await fetch(`${API_URL}/api/models?${params.toString()}`);
+    const res = await fetch(`${API_URL}/api/models?${params.toString()}`, {
+        headers: adminHeaders(),
+    });
     if (!res.ok) {
         console.error("Failed to fetch models", res.statusText);
         return [];

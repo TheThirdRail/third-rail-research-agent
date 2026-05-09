@@ -39,9 +39,6 @@ dependencies = [
     # Keyword Analysis
     "yake>=0.4.8",
     
-    # YouTube
-    "yt-dlp>=2024.0.0",
-    
     # Database
     "sqlalchemy>=2.0.0",
     "alembic>=1.14.0",

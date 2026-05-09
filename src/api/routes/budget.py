@@ -29,7 +29,11 @@ class SetLimitResponse(BaseModel):
     new_limit: float
 
 
-@router.get("/budget", response_model=BudgetStatus)
+@router.get(
+    "/budget",
+    response_model=BudgetStatus,
+    dependencies=[Depends(require_admin_api_key)],
+)
 def get_budget() -> BudgetStatus:
     """Get current budget status including spend and limit."""
     service = get_budget_service()

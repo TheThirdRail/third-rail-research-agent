@@ -38,7 +38,11 @@ class ChannelUploadResponse(BaseModel):
     profile: ChannelProfileResponse | None = None
 
 
-@router.get("/profile", response_model=ChannelProfileResponse)
+@router.get(
+    "/profile",
+    response_model=ChannelProfileResponse,
+    dependencies=[Depends(require_admin_api_key)],
+)
 def get_channel_profile() -> ChannelProfileResponse:
     """Get the current active channel profile."""
     try:

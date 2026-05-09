@@ -53,14 +53,22 @@ def test_root_no_key(client):
     assert resp.status_code == 200
 
 
-def test_get_config_no_key(client):
+def test_get_config_requires_key(client):
     resp = client.get("/api/config")
-    assert resp.status_code == 200
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Unauthorized."
 
 
-def test_get_budget_no_key(client):
+def test_get_budget_requires_key(client):
     resp = client.get("/api/budget")
-    assert resp.status_code == 200
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Unauthorized."
+
+
+def test_channel_profile_requires_key(client):
+    resp = client.get("/api/channel/profile")
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Unauthorized."
 
 
 # ── Protected routes reject anonymous requests ─────────────────────
@@ -125,6 +133,24 @@ def test_budget_reset_with_key(client, monkeypatch):
     assert resp.status_code == 200
 
 
+def test_get_config_with_key(client):
+    resp = client.get("/api/config", headers=_admin_headers())
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "llm_provider" in body
+    assert "selected_model" in body
+    assert "analysis_model" in body
+    assert "environment" in body
+
+
+def test_get_budget_with_key(client):
+    resp = client.get("/api/budget", headers=_admin_headers())
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "current_spend" in body
+    assert "limit" in body
+
+
 # ── Wrong key is rejected ──────────────────────────────────────────
 
 
@@ -153,6 +179,21 @@ def test_no_key_configured_returns_503(client, monkeypatch):
     resp = client.post(
         "/api/agents/profile_reader/config",
         json={"free_tier": True},
+        headers={"X-Research-Agent-Key": "anything"},
+    )
+    assert resp.status_code == 503
+    assert "not configured" in resp.json()["detail"]
+
+
+def test_protected_read_returns_503_when_admin_key_not_configured(client, monkeypatch):
+    monkeypatch.setenv("ADMIN_API_KEY", "")
+    from src.core import config as _cfg
+
+    _cfg.get_settings.cache_clear()
+    _cfg.settings = _cfg.get_settings()
+
+    resp = client.get(
+        "/api/config",
         headers={"X-Research-Agent-Key": "anything"},
     )
     assert resp.status_code == 503

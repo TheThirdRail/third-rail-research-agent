@@ -1,5 +1,8 @@
 """Regression tests for report rendering — no duplication, repair, structure."""
 
+import pytest
+
+from src.core.exceptions import SourceExtractionError
 from src.services.report_renderer import ReportRenderer, ReportSections, SourceRecord
 
 
@@ -80,11 +83,9 @@ class TestNoReportDuplication:
         sections = _make_sections(
             executive_summary="## Source Matrix\n\nSneaky duplicate"
         )
-        try:
+
+        with pytest.raises(SourceExtractionError):
             validate_structured_section_payload(sections)
-            assert False, "Should have raised"
-        except Exception:
-            pass  # Expected
 
 
 class TestSourceMatrixKeyFraming:
@@ -213,8 +214,6 @@ class TestReportPayloadExtraction:
         from src.schemas.analysis_report_sections import AnalysisReportSections
 
         payload = {"report": "## Executive Summary\n\nSome text here."}
-        try:
+
+        with pytest.raises(ValueError):
             AnalysisReportSections.from_crew_payload(payload)
-            assert False, "Should have raised ValueError"
-        except ValueError:
-            pass  # Expected

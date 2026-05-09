@@ -6,9 +6,10 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.dependencies import require_admin_api_key
 from src.api.routes.agents import router as agents_router
 from src.api.routes.analyze import router as analyze_router
 from src.api.routes.budget import router as budget_router
@@ -130,7 +131,7 @@ def root() -> dict[str, str]:
     }
 
 
-@app.get("/api/config")
+@app.get("/api/config", dependencies=[Depends(require_admin_api_key)])
 def get_config() -> dict[str, str]:
     """Get current LLM configuration (without sensitive keys)."""
     return {

@@ -1,11 +1,16 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from src.api.dependencies import require_admin_api_key
 from src.services.model_service import ModelInfo, ModelService
 
 router = APIRouter(prefix="/models", tags=["Models"])
 
 
-@router.get("", response_model=list[ModelInfo])
+@router.get(
+    "",
+    response_model=list[ModelInfo],
+    dependencies=[Depends(require_admin_api_key)],
+)
 async def list_models(
     provider: str = Query(
         ..., description="The LLM provider (e.g., openai, openrouter)"

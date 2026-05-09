@@ -26,7 +26,7 @@ mock_crewai.tools = mock_crewai_tools
 
 # Mock Agent class specifically
 class MockAgent:
-    def __init__(self, role, goal, backstory, tools, llm, **kwargs):
+    def __init__(self, role, goal, backstory, tools, llm, **_kwargs):
         self.role = role
         self.goal = goal
         self.backstory = backstory
@@ -42,7 +42,6 @@ MOCKED_DEPS = [
     "trafilatura",
     "newspaper",
     "feedparser",
-    "yt_dlp",
     "lancedb",
     "chromadb",
     "litellm",

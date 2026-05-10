@@ -5,6 +5,7 @@ os.environ["DEBUG"] = "true"
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session
 
+from src.database import session as db_session
 from src.database.models import AgentConfiguration, Base
 from src.database.session import (
     backfill_agent_config_models,
@@ -181,6 +182,60 @@ def test_hardening_migration_syncs_diagnostic_tables_and_snapshots(tmp_path):
         "summary",
         "payload_json",
     } <= agent_handoff_columns
+
+
+def test_init_db_does_not_call_schema_alter_helpers(monkeypatch, tmp_path):
+    db_path = tmp_path / "test_init_db_no_alter_helpers.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    calls: list[str] = []
+
+    monkeypatch.setattr(db_session, "engine", engine)
+    monkeypatch.setattr(
+        db_session,
+        "ensure_hardening_schema",
+        lambda _engine: calls.append("hardening"),
+    )
+    monkeypatch.setattr(
+        db_session,
+        "ensure_agent_config_schema",
+        lambda _engine: calls.append("agent_config"),
+    )
+
+    db_session.init_db()
+
+    assert calls == []
+
+
+def test_init_db_skips_agent_backfills_when_schema_is_not_current(
+    monkeypatch,
+    tmp_path,
+):
+    db_path = tmp_path / "test_init_db_legacy_agent_config.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE agent_configurations (agent_name VARCHAR(50) PRIMARY KEY)"
+            )
+    )
+
+    monkeypatch.setattr(db_session, "engine", engine)
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        db_session.logger,
+        "warning",
+        lambda message, *args, **kwargs: warnings.append(str(message)),
+    )
+
+    db_session.init_db()
+
+    columns = {
+        column["name"]
+        for column in inspect(engine).get_columns("agent_configurations")
+    }
+    assert "free_tier" not in columns
+    assert "reasoning_effort" not in columns
+    assert any("Skipping agent configuration backfills" in item for item in warnings)
 
 
 def test_backfill_normalizes_gemini_model_ids(tmp_path):

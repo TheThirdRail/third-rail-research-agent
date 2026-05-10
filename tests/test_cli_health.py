@@ -353,4 +353,4 @@ def test_init_command_falls_back_to_schema_sync_when_migration_unavailable(
 
     assert result.exit_code == 0
     assert calls == ["migrate", "init_db"]
-    assert "Used startup schema sync fallback." in result.output
+    assert "Created missing tables only" in result.output

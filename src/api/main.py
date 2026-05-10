@@ -24,7 +24,7 @@ from src.core.lmstudio_utils import (
 )
 from src.core.model_registry import close_model_registry
 from src.core.task_timing import register_task_timing
-from src.database import init_db
+from src.database import get_alembic_revision_status, init_db
 
 logger = logging.getLogger(__name__)
 
@@ -86,12 +86,24 @@ async def _check_lmstudio_connectivity() -> None:
         logger.warning("LM Studio connectivity check failed for %s: %s", endpoint, exc)
 
 
+def _log_migration_status() -> None:
+    """Log Alembic readiness without applying migrations."""
+    status, detail = get_alembic_revision_status()
+    if status == "ok":
+        logger.info(detail)
+    elif status == "warn":
+        logger.warning("%s Run `research-agent init` to apply migrations.", detail)
+    else:
+        logger.error(detail)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler."""
     # Startup
     register_task_timing()
     await _check_lmstudio_connectivity()
+    _log_migration_status()
     init_db()
     yield
     # Shutdown (cleanup if needed)

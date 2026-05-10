@@ -61,7 +61,7 @@ LOG_LEVEL=INFO
 PYTHONIOENCODING=utf-8
 
 LLM_PROVIDER=openrouter
-OPENROUTER_API_KEY=your_key_here
+OPENROUTER_API_KEY=your_openrouter_api_key_here
 
 DATABASE_URL=sqlite:///data/research_agent.db
 SEMANTIC_MEMORY_ENABLED=false
@@ -317,18 +317,18 @@ CEREBRAS_API_KEY=your_cerebras_api_key_here
 **SambaNova:**
 ```env
 LLM_PROVIDER=sambanova
-SAMBANOVA_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+SAMBANOVA_API_KEY=your_sambanova_api_key_here
 ```
 
 **Mistral:**
 ```env
 LLM_PROVIDER=mistral
-MISTRAL_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+MISTRAL_API_KEY=your_mistral_api_key_here
 ```
 
 **xAI (Grok):**
 ```env
-LLM_PROVIDER=lmstudio
+LLM_PROVIDER=grok
 XAI_API_KEY=your_xai_api_key_here
 ```
 
@@ -438,18 +438,21 @@ EXACT_CENTER_PREFERRED=true
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SEMANTIC_MEMORY_ENABLED` | `false` | Enable LanceDB vector store |
+| `SEMANTIC_MEMORY_ENABLED` | `false` | Enable semantic memory features |
+| `SEMANTIC_VECTOR_STORE` | `none` | Optional vector backend (`none` or `lancedb`) |
 | `SEMANTIC_QUERY_EXPANSION_ENABLED` | `false` | Expand queries with LLM |
 | `SEMANTIC_CANDIDATE_SCORING_ENABLED` | `false` | Score sources semantically |
 | `SEMANTIC_TOP_K` | `4` | Results per semantic query |
 | `EMBEDDING_PROVIDER` | `fake` | Embedding service (fake/lmstudio/ollama) |
 | `EMBEDDING_MODEL` | `fake-hash-v1` | Embedding model ID |
 
-**To enable semantic memory:**
+**To enable SQL-backed semantic memory:**
 1. Set `SEMANTIC_MEMORY_ENABLED=true`
 2. Load an embeddings model in LM Studio
 3. Set `EMBEDDING_PROVIDER=lmstudio` and `EMBEDDING_MODEL=<model-id>`
 4. Restart backend
+
+**To opt into LanceDB vector indexing:** also set `SEMANTIC_VECTOR_STORE=lancedb` after installing the optional LanceDB dependency.
 
 ---
 
@@ -473,7 +476,7 @@ EXACT_CENTER_PREFERRED=true
 1. Verify API key is in `.env` without quotes:
    ```env
    OPENROUTER_API_KEY=your_openrouter_api_key_here  # Correct
-   # OPENROUTER_API_KEY="sk-or-v1-xxxxx"  # Wrong (includes quotes)
+   # OPENROUTER_API_KEY="your_openrouter_api_key_here"  # Wrong (includes quotes)
    ```
 2. Test provider directly:
    ```bash

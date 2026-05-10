@@ -391,9 +391,9 @@ def create_app(settings: Settings) -> FastAPI:
         extra = _request_extra(request)
         prompt = _messages_to_prompt(request.messages)
         model = _normalize_model_id(request.model)
-        query_text = _metadata_query_text(extra) or extract_user_query_from_chat_messages(
-            request.messages
-        )
+        query_text = _metadata_query_text(
+            extra
+        ) or extract_user_query_from_chat_messages(request.messages)
         metadata_urls = _metadata_urls(extra)
         try:
             result = cli_adapter.run_prompt_with_model_result(
@@ -471,9 +471,9 @@ def create_app(settings: Settings) -> FastAPI:
         extra = _request_extra(request)
         prompt = _responses_input_to_prompt(request.input, request.instructions)
         model = _normalize_model_id(request.model)
-        query_text = _metadata_query_text(extra) or extract_user_query_from_responses_input(
-            request.input
-        )
+        query_text = _metadata_query_text(
+            extra
+        ) or extract_user_query_from_responses_input(request.input)
         metadata_urls = _metadata_urls(extra)
         reasoning_effort = (
             request.reasoning.get("effort")

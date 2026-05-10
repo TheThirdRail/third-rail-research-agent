@@ -1,6 +1,5 @@
 """Tests for the shared extract_domain utility."""
 
-
 from src.utils.url_utils import extract_domain
 
 

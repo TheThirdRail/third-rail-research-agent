@@ -1581,7 +1581,6 @@ class SourceAggregatorService:
             return SearxngSearch(settings.searxng_base_url, settings.searxng_api_key)
         return DuckDuckGoSearch()
 
-
     def _normalize_url(self, url: str) -> str:
         try:
             parsed = urlparse(url)

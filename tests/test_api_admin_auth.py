@@ -75,12 +75,8 @@ def test_channel_profile_requires_key(client):
 
 
 def test_agent_config_update_requires_key(client, monkeypatch):
-    monkeypatch.setattr(
-        AgentConfigService, "get_config", lambda self, name: None
-    )
-    resp = client.post(
-        "/api/agents/profile_reader/config", json={"free_tier": True}
-    )
+    monkeypatch.setattr(AgentConfigService, "get_config", lambda self, name: None)
+    resp = client.post("/api/agents/profile_reader/config", json={"free_tier": True})
     assert resp.status_code == 401
     assert resp.json()["detail"] == "Unauthorized."
 
@@ -99,9 +95,7 @@ def test_budget_reset_requires_key(client):
 
 
 def test_agent_config_update_with_key(client, monkeypatch):
-    monkeypatch.setattr(
-        AgentConfigService, "get_config", lambda self, name: None
-    )
+    monkeypatch.setattr(AgentConfigService, "get_config", lambda self, name: None)
     monkeypatch.setattr(
         AgentConfigService,
         "set_config",
@@ -143,7 +137,12 @@ def test_get_config_with_key(client):
     assert "environment" in body
 
 
-def test_get_budget_with_key(client):
+def test_get_budget_with_key(client, monkeypatch):
+    monkeypatch.setattr(
+        get_budget_service().__class__,
+        "get_status",
+        lambda self: {"current_spend": 0.0, "limit": 0.0},
+    )
     resp = client.get("/api/budget", headers=_admin_headers())
     assert resp.status_code == 200
     body = resp.json()
@@ -155,9 +154,7 @@ def test_get_budget_with_key(client):
 
 
 def test_wrong_key_rejected(client, monkeypatch):
-    monkeypatch.setattr(
-        AgentConfigService, "get_config", lambda self, name: None
-    )
+    monkeypatch.setattr(AgentConfigService, "get_config", lambda self, name: None)
     resp = client.post(
         "/api/agents/profile_reader/config",
         json={"free_tier": True},

@@ -93,6 +93,8 @@ async def upload_channel_profile(file: UploadFile = File(...)) -> ChannelUploadR
     try:
         # Read file content
         content = await file.read()
+        if len(content) > settings.max_upload_bytes:
+            raise HTTPException(status_code=413, detail="Uploaded file is too large")
         content_str = content.decode("utf-8")
 
         # Parse based on format
@@ -130,6 +132,8 @@ async def upload_channel_profile(file: UploadFile = File(...)) -> ChannelUploadR
             ),
         )
 
+    except HTTPException:
+        raise
     except ValueError as e:
         logger.warning(
             "Invalid channel profile upload content: filename=%s format=%s error=%s",

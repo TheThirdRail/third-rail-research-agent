@@ -9,13 +9,17 @@ import pytest
 
 def test_wildcard_cors_rejected(monkeypatch):
     """Wildcard CORS with credentials must raise ValueError."""
-    monkeypatch.setenv("CORS_ORIGINS", "*")
+    monkeypatch.setenv("CORS_ORIGINS", "https://bootstrap.example.com")
     from src.core import config as _cfg
 
     _cfg.get_settings.cache_clear()
     _cfg.settings = _cfg.get_settings()
 
     from src.api.main import _cors_origins
+
+    monkeypatch.setenv("CORS_ORIGINS", "*")
+    _cfg.get_settings.cache_clear()
+    _cfg.settings = _cfg.get_settings()
 
     with pytest.raises(ValueError, match="Wildcard"):
         _cors_origins()

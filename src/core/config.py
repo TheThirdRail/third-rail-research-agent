@@ -303,6 +303,14 @@ class Settings(BaseSettings):
         default="",
         description="Shared secret for admin/mutation API routes. Leave empty to disable admin routes.",
     )
+    max_report_markdown_chars: int = Field(
+        default=200000,
+        description="Maximum Markdown characters accepted by the PDF export route.",
+    )
+    max_upload_bytes: int = Field(
+        default=1000000,
+        description="Maximum bytes accepted by text upload routes.",
+    )
     cors_origins: str = Field(
         default="",
         description=(

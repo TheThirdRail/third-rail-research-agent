@@ -2,9 +2,12 @@
 
 import logging
 
+import bleach
 from fastapi import APIRouter, HTTPException, Response
 from markdown import markdown as markdown_to_html
 from pydantic import BaseModel, Field
+
+from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +15,43 @@ router = APIRouter()
 
 PDF_FORMAT = "Letter"
 PDF_MARGIN_MM = {"top": 20, "right": 20, "bottom": 20, "left": 20}
+REPORT_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline';"
+ALLOWED_REPORT_TAGS = frozenset(
+    {
+        "a",
+        "blockquote",
+        "br",
+        "code",
+        "em",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "hr",
+        "li",
+        "ol",
+        "p",
+        "pre",
+        "strong",
+        "sub",
+        "sup",
+        "table",
+        "tbody",
+        "td",
+        "th",
+        "thead",
+        "tr",
+        "ul",
+    }
+)
+ALLOWED_REPORT_ATTRIBUTES = {
+    "a": ["href", "title"],
+    "td": ["colspan", "rowspan"],
+    "th": ["colspan", "rowspan"],
+}
+ALLOWED_REPORT_PROTOCOLS = frozenset({"http", "https", "mailto"})
 
 
 class ReportPdfRequest(BaseModel):
@@ -78,15 +118,24 @@ NEON_STYLES = """
 
 def build_report_html(markdown: str) -> str:
     """Convert markdown report content into styled HTML."""
-    body = markdown_to_html(
+    raw_body = markdown_to_html(
         markdown,
         extensions=["tables", "footnotes", "fenced_code"],
         output_format="html5",
+    )
+    body = bleach.clean(
+        raw_body,
+        tags=ALLOWED_REPORT_TAGS,
+        attributes=ALLOWED_REPORT_ATTRIBUTES,
+        protocols=ALLOWED_REPORT_PROTOCOLS,
+        strip=True,
+        strip_comments=True,
     )
     return f"""<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="{REPORT_CSP}" />
     <title>Research Report</title>
     {NEON_STYLES}
   </head>
@@ -103,20 +152,36 @@ async def render_report_pdf(markdown: str) -> bytes:
 
     html = build_report_html(markdown)
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(args=["--no-sandbox"])
-        page = await browser.new_page()
-        await page.set_content(html, wait_until="networkidle")
-        pdf_bytes = await page.pdf(
-            format=PDF_FORMAT,
-            print_background=True,
-            margin={
-                "top": f"{PDF_MARGIN_MM['top']}mm",
-                "right": f"{PDF_MARGIN_MM['right']}mm",
-                "bottom": f"{PDF_MARGIN_MM['bottom']}mm",
-                "left": f"{PDF_MARGIN_MM['left']}mm",
-            },
-        )
-        await browser.close()
+        browser = None
+        context = None
+        page = None
+        try:
+            browser = await playwright.chromium.launch(args=["--no-sandbox"])
+            context = await browser.new_context(java_script_enabled=False)
+
+            async def _abort_route(route):
+                await route.abort()
+
+            await context.route("**/*", _abort_route)
+            page = await context.new_page()
+            await page.set_content(html, wait_until="load")
+            pdf_bytes = await page.pdf(
+                format=PDF_FORMAT,
+                print_background=True,
+                margin={
+                    "top": f"{PDF_MARGIN_MM['top']}mm",
+                    "right": f"{PDF_MARGIN_MM['right']}mm",
+                    "bottom": f"{PDF_MARGIN_MM['bottom']}mm",
+                    "left": f"{PDF_MARGIN_MM['left']}mm",
+                },
+            )
+        finally:
+            if page is not None:
+                await page.close()
+            if context is not None:
+                await context.close()
+            if browser is not None:
+                await browser.close()
     return pdf_bytes
 
 
@@ -125,6 +190,8 @@ async def create_report_pdf(request: ReportPdfRequest) -> Response:
     """Generate a PDF report from markdown."""
     if not request.report_markdown.strip():
         raise HTTPException(status_code=400, detail="report_markdown is required")
+    if len(request.report_markdown) > settings.max_report_markdown_chars:
+        raise HTTPException(status_code=413, detail="report_markdown is too large")
     try:
         pdf_bytes = await render_report_pdf(request.report_markdown)
     except Exception as exc:

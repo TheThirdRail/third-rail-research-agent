@@ -13,7 +13,8 @@ class CodexOAuthConfigError(ValueError):
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 DOCKER_LOCAL_HOSTS = {"host.docker.internal"}
 LOCAL_BRIDGE_HOSTS = LOCAL_HOSTS | DOCKER_LOCAL_HOSTS
-BLOCKED_HOSTS = {"0.0.0.0", "::"}
+# These are rejected input hostnames, not bind addresses.
+BLOCKED_HOSTS = {"0.0.0.0", "::"}  # nosec B104
 
 _SECRET_PATTERNS = [
     (re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+"), True),

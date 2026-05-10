@@ -534,18 +534,15 @@ class StoryParserService:
         matches = re.findall(date_pattern, text)
         if matches:
             for match in matches:
-                try:
-                    for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%m/%d/%y", "%m-%d-%y"):
-                        try:
-                            parsed = datetime.strptime(match, fmt)
-                            return (
-                                parsed - timedelta(days=3),
-                                parsed + timedelta(days=3),
-                            )
-                        except ValueError:
-                            continue
-                except Exception:
-                    continue
+                for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%m/%d/%y", "%m-%d-%y"):
+                    try:
+                        parsed = datetime.strptime(match, fmt)
+                    except ValueError:
+                        continue
+                    return (
+                        parsed - timedelta(days=3),
+                        parsed + timedelta(days=3),
+                    )
 
         # Default: ±7 days from now
         return (now - timedelta(days=7), now + timedelta(days=1))

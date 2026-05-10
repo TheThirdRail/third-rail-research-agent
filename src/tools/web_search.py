@@ -324,7 +324,7 @@ def _docker_safe_searxng_base_url(base_url: str) -> str:
         if os.path.exists("/.dockerenv") and parsed.hostname in {
             "localhost",
             "127.0.0.1",
-            "0.0.0.0",
+            "0.0.0.0",  # nosec B104
             "::1",
         }:
             netloc = "host.docker.internal"

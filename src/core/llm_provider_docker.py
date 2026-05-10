@@ -642,7 +642,7 @@ class LLMRouter:
             cost = completion_cost(completion_response=response)
             budget.track_spend(cost)
         except Exception:
-            pass  # Cost tracking failure is non-fatal
+            logger.debug("Cost tracking failed for sync completion", exc_info=True)
 
         return response.choices[0].message.content
 
@@ -717,7 +717,7 @@ class LLMRouter:
             cost = completion_cost(completion_response=response)
             budget.track_spend(cost)
         except Exception:
-            pass  # Cost tracking failure is non-fatal
+            logger.debug("Cost tracking failed for async completion", exc_info=True)
 
         return response.choices[0].message.content
 

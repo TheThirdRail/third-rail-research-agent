@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -72,7 +72,8 @@ def status(settings: Any) -> CodexCliStatus:
 
     timeout = min(max(getattr(settings, "codex_timeout_seconds", 300), 1), 30)
     try:
-        result = subprocess.run(
+        # The executable is resolved with shutil.which and args are fixed.
+        result = subprocess.run(  # nosec B603
             [executable, "login", "status"],
             capture_output=True,
             text=True,
@@ -168,7 +169,8 @@ def run_prompt_with_model_result(
         )
 
         try:
-            result = subprocess.run(
+            # The executable is resolved with shutil.which and args are fixed.
+            result = subprocess.run(  # nosec B603
                 args,
                 input=prompt,
                 capture_output=True,
@@ -268,7 +270,8 @@ def list_models(settings: Any) -> list[dict[str, Any]]:
     timeout = min(max(getattr(settings, "codex_timeout_seconds", 300), 1), 30)
 
     try:
-        result = subprocess.run(
+        # The executable is resolved with shutil.which and args are fixed.
+        result = subprocess.run(  # nosec B603
             [executable, "debug", "models"],
             capture_output=True,
             text=True,

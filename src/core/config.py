@@ -297,7 +297,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///data/research_agent.db"
 
     # API
-    api_host: str = "0.0.0.0"
+    # The container runtime needs to bind all interfaces; deployments constrain exposure.
+    api_host: str = "0.0.0.0"  # nosec B104
     api_port: int = 8000
     admin_api_key: str = Field(
         default="",

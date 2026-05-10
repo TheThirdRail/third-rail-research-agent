@@ -23,8 +23,8 @@ def extract_domain(url_or_domain: str) -> str:
             host = urlparse(text).netloc
             if host:
                 return host.lower().removeprefix("www.")
-        except Exception:
-            pass
+        except ValueError:
+            return text.lower().removeprefix("www.")
 
     # Bare domain or fallback — strip scheme-less www. prefix
     return text.lower().removeprefix("www.")

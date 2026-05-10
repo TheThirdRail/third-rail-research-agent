@@ -80,15 +80,21 @@ class RSSAggregator:
     def _parse_date(self, entry: dict) -> datetime | None:
         """Parse date from feed entry."""
         if hasattr(entry, "published_parsed") and entry.published_parsed:
+            published_at = None
             try:
-                return datetime(*entry.published_parsed[:6])
-            except Exception:
-                pass
+                published_at = datetime(*entry.published_parsed[:6])
+            except (TypeError, ValueError, OverflowError):
+                published_at = None
+            if published_at is not None:
+                return published_at
         if hasattr(entry, "updated_parsed") and entry.updated_parsed:
+            updated_at = None
             try:
-                return datetime(*entry.updated_parsed[:6])
-            except Exception:
-                pass
+                updated_at = datetime(*entry.updated_parsed[:6])
+            except (TypeError, ValueError, OverflowError):
+                updated_at = None
+            if updated_at is not None:
+                return updated_at
         return None
 
     def fetch_feed(

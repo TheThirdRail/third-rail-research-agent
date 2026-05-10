@@ -26,7 +26,7 @@ dependencies = [
     # Agent Framework
     "crewai[google-genai]>=0.95.0",
     "crewai-tools>=0.14.0",
-    "litellm>=1.50.0",
+    "litellm>=1.83.7",
     "openai>=1.0.0",  # For API compatibility with multiple providers
     "tiktoken>=0.7.0",
     
@@ -35,6 +35,7 @@ dependencies = [
     "ddgs>=6.0.0",
     "trafilatura>=1.12.0",
     "newspaper4k>=0.9.0",
+    "lxml>=6.1.0",
     
     # Keyword Analysis
     "yake>=0.4.8",

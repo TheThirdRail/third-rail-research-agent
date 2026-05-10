@@ -27,8 +27,21 @@ jobs:
         run: python -m ruff format --check .
       - name: Lint backend
         run: python -m ruff check .
+      - name: Audit Python dependencies
+        run: python -m pip_audit .
+      - name: Scan backend security
+        run: python -m bandit -r src
       - name: Run tests
         run: python -m pytest
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan committed secrets
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 detect --source=/repo --redact --no-banner --log-opts="--all"
 
   frontend:
     runs-on: ubuntu-latest

@@ -19,10 +19,16 @@ build
 .env
 .env.local
 .env.*.local
+*.secret
+*.secrets
+codex-token.json
+codex-session.json
 
 # IDE
 .idea
 .vscode
+.serena
+.serena/
 *.swp
 *.swo
 
@@ -42,8 +48,23 @@ node_modules
 !README.md
 
 # Research/education (AI generated)
+Agent-Context
+Agent-Context/
 research/
 education/
+data
+data/
+token-usage
+token-usage/
+.tokens
+.tokens/
+.auth
+.auth/
+.codex-auth
+.codex-auth/
+*.db
+*.sqlite
+*.sqlite3
 
 # OS
 .DS_Store

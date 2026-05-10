@@ -38,9 +38,7 @@ def test_budget_error_preserves_402_status(monkeypatch):
     assert response.json()["detail"] == "Daily budget exceeded."
 
 
-def test_channel_upload_parse_failure_is_400_and_logs_context(
-    monkeypatch, caplog
-):
+def test_channel_upload_parse_failure_is_400_and_logs_context(monkeypatch, caplog):
     monkeypatch.setattr(_cfg.settings, "admin_api_key", "test-admin-key")
     caplog.set_level(logging.WARNING)
 

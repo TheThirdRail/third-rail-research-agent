@@ -31,7 +31,9 @@ def test_wildcard_cors_rejected(monkeypatch):
 
 def test_explicit_origins_accepted(monkeypatch):
     """Explicit comma-separated origins are returned as-is."""
-    monkeypatch.setenv("CORS_ORIGINS", "https://app.example.com, https://staging.example.com")
+    monkeypatch.setenv(
+        "CORS_ORIGINS", "https://app.example.com, https://staging.example.com"
+    )
     from src.core import config as _cfg
 
     _cfg.get_settings.cache_clear()

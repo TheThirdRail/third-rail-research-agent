@@ -242,9 +242,7 @@ def test_bridge_responses_writes_estimated_token_usage(monkeypatch, tmp_path):
     monkeypatch.setattr(
         openai_bridge.cli_adapter,
         "run_prompt_with_model_result",
-        lambda *_args, **_kwargs: CodexCliRunResult(
-            content="responses bridge output"
-        ),
+        lambda *_args, **_kwargs: CodexCliRunResult(content="responses bridge output"),
     )
 
     response = TestClient(app).post(

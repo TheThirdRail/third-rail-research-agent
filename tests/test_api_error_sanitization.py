@@ -58,3 +58,17 @@ def test_channel_upload_parse_failure_is_400_and_logs_context(
     assert "Invalid channel profile upload content" in caplog.text
     assert "profile.yaml" in caplog.text
     assert "test-admin-key" not in caplog.text
+
+
+def test_channel_upload_rejects_oversized_file_before_decoding(monkeypatch):
+    monkeypatch.setattr(_cfg.settings, "admin_api_key", "test-admin-key")
+    monkeypatch.setattr(_cfg.settings, "max_upload_bytes", 4)
+
+    response = TestClient(app).post(
+        "/api/channel/upload",
+        files={"file": ("profile.txt", b"too large", "text/plain")},
+        headers={"x-research-agent-key": "test-admin-key"},
+    )
+
+    assert response.status_code == 413
+    assert response.json()["detail"] == "Uploaded file is too large"

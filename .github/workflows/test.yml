@@ -48,3 +48,5 @@ jobs:
         run: npm run build
       - name: Lint frontend
         run: npm run lint
+      - name: Audit frontend dependencies
+        run: npm audit --audit-level=moderate

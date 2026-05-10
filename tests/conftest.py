@@ -5,6 +5,9 @@ import logging
 import pytest
 from sqlalchemy import create_engine
 
+from src.api import main as api_main_module
+from src.api.routes import channel as channel_route_module
+from src.api.routes import reports as reports_route_module
 from src.core import config as core_config
 from src.core import embedding_provider as embedding_provider_module
 from src.database.models import Base
@@ -17,6 +20,9 @@ from src.services import vector_store_service as vector_store_service_module
 @pytest.fixture(autouse=True)
 def isolate_live_semantic_runtime_settings(monkeypatch) -> None:
     """Keep default tests from inheriting live embedding/vector-store settings."""
+    monkeypatch.setattr(api_main_module, "settings", core_config.settings)
+    monkeypatch.setattr(channel_route_module, "settings", core_config.settings)
+    monkeypatch.setattr(reports_route_module, "settings", core_config.settings)
     monkeypatch.setattr(embedding_provider_module, "settings", core_config.settings)
     monkeypatch.setattr(
         semantic_memory_service_module, "settings", core_config.settings
@@ -29,6 +35,9 @@ def isolate_live_semantic_runtime_settings(monkeypatch) -> None:
 
     settings_refs = (
         core_config.settings,
+        api_main_module.settings,
+        channel_route_module.settings,
+        reports_route_module.settings,
         embedding_provider_module.settings,
         semantic_memory_service_module.settings,
         vector_store_service_module.settings,
@@ -48,6 +57,7 @@ def isolate_logging_capture_state(monkeypatch) -> None:
     """Reset global logger muting so caplog assertions stay order independent."""
     logging.disable(logging.NOTSET)
     for logger_name in (
+        "src.api.main",
         "src.api.routes.channel",
         "src.tools.channel_profile_loader",
     ):

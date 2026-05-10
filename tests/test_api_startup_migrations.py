@@ -50,7 +50,9 @@ async def test_lifespan_logs_migration_status_before_initializing(monkeypatch, c
     async def fake_close_model_registry() -> None:
         calls.append("close")
 
-    monkeypatch.setattr(api_main, "register_task_timing", lambda: calls.append("timing"))
+    monkeypatch.setattr(
+        api_main, "register_task_timing", lambda: calls.append("timing")
+    )
     monkeypatch.setattr(api_main, "_check_lmstudio_connectivity", fake_lmstudio_check)
     monkeypatch.setattr(
         api_main,

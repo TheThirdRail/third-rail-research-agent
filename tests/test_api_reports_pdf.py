@@ -40,7 +40,7 @@ def test_report_html_strips_active_content():
 
     assert "<script" not in html
     assert "onclick" not in html
-    assert "style=\"color:red\"" not in html
+    assert 'style="color:red"' not in html
     assert "<iframe" not in html
     assert "<img" not in html
     assert 'href="https://example.test/source"' in html

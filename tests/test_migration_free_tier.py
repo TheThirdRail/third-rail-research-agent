@@ -217,7 +217,7 @@ def test_init_db_skips_agent_backfills_when_schema_is_not_current(
             text(
                 "CREATE TABLE agent_configurations (agent_name VARCHAR(50) PRIMARY KEY)"
             )
-    )
+        )
 
     monkeypatch.setattr(db_session, "engine", engine)
     warnings: list[str] = []
@@ -230,8 +230,7 @@ def test_init_db_skips_agent_backfills_when_schema_is_not_current(
     db_session.init_db()
 
     columns = {
-        column["name"]
-        for column in inspect(engine).get_columns("agent_configurations")
+        column["name"] for column in inspect(engine).get_columns("agent_configurations")
     }
     assert "free_tier" not in columns
     assert "reasoning_effort" not in columns

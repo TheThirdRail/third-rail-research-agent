@@ -82,10 +82,18 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def init_db() -> None:
-    """Initialize database tables."""
+    """Initialize missing database tables and safe seed/backfill rows.
+
+    Existing schema changes are intentionally left to Alembic migrations. This
+    keeps normal API/CLI startup from masking drift in already-created tables.
+    """
     Base.metadata.create_all(bind=engine)
-    ensure_hardening_schema(engine)
-    ensure_agent_config_schema(engine)
+    if not _agent_config_schema_ready(engine):
+        logger.warning(
+            "Skipping agent configuration backfills because the database schema "
+            "is not current. Run `research-agent init` to apply migrations."
+        )
+        return
     ensure_agent_config_rows(engine)
     backfill_agent_config_models(engine)
     backfill_known_bad_agent_models(engine)
@@ -168,6 +176,24 @@ def _default_fallback_model(provider: str) -> str:
         return FALLBACK_MODELS.get(LLMProvider(provider), "")
     except Exception:
         return ""
+
+
+def _agent_config_schema_ready(target_engine) -> bool:
+    """Return whether agent_configurations can be safely queried by the ORM."""
+    try:
+        inspector = inspect(target_engine)
+        if AgentConfiguration.__tablename__ not in inspector.get_table_names():
+            return False
+        columns = {
+            column["name"]
+            for column in inspector.get_columns(AgentConfiguration.__tablename__)
+        }
+    except Exception:
+        logger.warning("Could not inspect agent configuration schema", exc_info=True)
+        return False
+
+    required_columns = set(AgentConfiguration.__table__.columns.keys())
+    return required_columns <= columns
 
 
 def ensure_agent_config_rows(target_engine) -> None:

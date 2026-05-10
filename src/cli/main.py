@@ -1386,7 +1386,10 @@ def init() -> None:
         console.print(f"[bold green]OK[/bold green] {migration_detail}")
     else:
         console.print(f"[yellow]![/yellow] {migration_detail}")
-        console.print("[dim]Used startup schema sync fallback.[/dim]")
+        console.print(
+            "[dim]Created missing tables only; existing schema changes require "
+            "Alembic migrations.[/dim]"
+        )
 
     # Check config files
     if settings.channel_profile_path.exists():

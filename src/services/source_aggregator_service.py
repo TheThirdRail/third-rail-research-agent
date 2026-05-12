@@ -38,7 +38,7 @@ from src.services.source_scoring import ScoredCandidate, score_candidate
 from src.tools.article_extractor import ArticleExtractor
 from src.tools.bias_classifier import BiasResult
 from src.tools.web_search import DuckDuckGoSearch, SearchResult, SearxngSearch
-from src.utils.url_utils import extract_domain
+from src.utils.url_utils import blocked_public_url_reason, extract_domain, normalize_url
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +169,12 @@ class SourceAggregatorService:
         # Try extracting the provided URL first, but do not hard-fail if it is
         # blocked/paywalled; continue discovery from search in that case.
         if url:
-            primary = self._extract_url(url, require_success=False)
+            primary_blocked_reason = blocked_public_url_reason(url, resolve_dns=False)
+            primary = (
+                self._blocked_source_candidate(url, primary_blocked_reason)
+                if primary_blocked_reason
+                else self._extract_url(url, require_success=False)
+            )
             if primary.full_text and len(primary.full_text) >= self.MIN_TEXT_LENGTH:
                 sources.append(primary)
                 seen_urls.add(self._normalize_url(primary.url))
@@ -178,14 +183,19 @@ class SourceAggregatorService:
             else:
                 primary_error = primary.extraction_error or "No content extracted"
                 primary_error_code = primary.extraction_error_code
-                self._record_primary_decision(
-                    primary,
-                    state="extraction_failed",
-                    rejection_reason=(
+                rejection_reason = (
+                    primary_error
+                    if primary_error_code == "unsafe_url"
+                    else (
                         "extracted_text_too_short"
                         if primary.full_text
                         else "no_extracted_text"
-                    ),
+                    )
+                )
+                self._record_primary_decision(
+                    primary,
+                    state="extraction_failed",
+                    rejection_reason=rejection_reason,
                 )
                 logger.warning(
                     "Primary URL extraction failed for %s: %s (%s); continuing with discovery.",
@@ -916,6 +926,21 @@ class SourceAggregatorService:
             domain = extract_domain(candidate_url)
             stage = self._result_stage_by_url.get(normalized_url, "open_web")
             planned_bucket = self._result_bucket_by_url.get(normalized_url)
+            blocked_reason = blocked_public_url_reason(
+                candidate_url,
+                resolve_dns=False,
+            )
+            if blocked_reason:
+                self._record_candidate_decision(
+                    candidate=None,
+                    result=result,
+                    stage=stage,
+                    state="extraction_failed",
+                    rejection_reason=blocked_reason,
+                    fallback_domain=domain,
+                    fallback_bucket_label=planned_bucket,
+                )
+                continue
             if normalized_url in candidate_urls or domain in candidate_domains:
                 continue
 
@@ -1263,6 +1288,21 @@ class SourceAggregatorService:
             media_captions=article.media_captions,
         )
 
+    def _blocked_source_candidate(self, url: str, reason: str) -> SourceCandidate:
+        return SourceCandidate(
+            url=url,
+            domain=extract_domain(url),
+            title="",
+            published_date=None,
+            author=None,
+            full_text="",
+            extraction_error=reason,
+            extraction_error_code="unsafe_url",
+            extractor_method="url_safety",
+            http_status=None,
+            bias_result=None,
+        )
+
     def _record_primary_decision(
         self,
         candidate: SourceCandidate,
@@ -1521,6 +1561,14 @@ class SourceAggregatorService:
                 continue
             if self._normalize_url(result.url) == self._normalize_url(url):
                 continue
+            blocked_reason = blocked_public_url_reason(result.url, resolve_dns=False)
+            if blocked_reason:
+                logger.info(
+                    "Skipping unsafe additional-article URL %s: %s",
+                    result.url,
+                    blocked_reason,
+                )
+                continue
             article = self._extractor.extract(result.url)
             if article.success and len(article.text) >= self.MIN_TEXT_LENGTH:
                 return article.text
@@ -1582,12 +1630,7 @@ class SourceAggregatorService:
         return DuckDuckGoSearch()
 
     def _normalize_url(self, url: str) -> str:
-        try:
-            parsed = urlparse(url)
-            path = parsed.path.rstrip("/")
-            return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{path}"
-        except Exception:
-            return url.lower().rstrip("/")
+        return normalize_url(url)
 
     def _compact_text(self, text: str, max_chars: int) -> str:
         compacted = re.sub(r"\s+", " ", text or "").strip()

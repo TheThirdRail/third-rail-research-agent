@@ -12,7 +12,7 @@ from crewai.tools.base_tool import BaseTool
 
 from src.core.config import settings
 from src.core.time_utils import utc_now_naive
-from src.utils.url_utils import extract_domain
+from src.utils.url_utils import blocked_public_url_reason, extract_domain
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +126,14 @@ class RSSAggregator:
                 title = entry.get("title", "")
                 link = entry.get("link", "")
                 summary = entry.get("summary", entry.get("description", ""))
+                blocked_reason = blocked_public_url_reason(link)
+                if blocked_reason:
+                    logger.info(
+                        "Skipping unsafe RSS item URL from %s: %s",
+                        source_name,
+                        blocked_reason,
+                    )
+                    continue
 
                 # Clean summary (remove HTML)
                 if summary:

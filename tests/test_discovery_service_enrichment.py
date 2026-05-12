@@ -37,6 +37,10 @@ def test_prefetch_discovery_enrichment_when_rss_sparse(monkeypatch):
     monkeypatch.setattr(
         "src.services.discovery_service._get_searcher", lambda: DummySearcher()
     )
+    monkeypatch.setattr(
+        "src.services.discovery_service.blocked_public_url_reason",
+        lambda url: "",
+    )
 
     def fake_extract(self, url: str):
         from src.tools.article_extractor import ExtractedArticle
@@ -63,6 +67,34 @@ def test_prefetch_discovery_enrichment_when_rss_sparse(monkeypatch):
     assert "One RSS Story" in context
     assert "Extracted Search Story" in context
     assert "Method: playwright_async" in context
+
+
+def test_prefetch_discovery_skips_unsafe_search_result(monkeypatch):
+    service = DiscoveryService()
+
+    monkeypatch.setattr(
+        "src.services.discovery_service.RSSAggregator.search_feeds",
+        lambda self, keywords, max_age_hours=48, max_per_feed=10: [],
+    )
+    monkeypatch.setattr(
+        "src.services.discovery_service._get_searcher", lambda: DummySearcher()
+    )
+    monkeypatch.setattr(
+        "src.services.discovery_service.blocked_public_url_reason",
+        lambda url: "blocked_private_or_local_url",
+    )
+
+    def fail_extract(self, url: str):
+        raise AssertionError("unsafe URL reached article extraction")
+
+    monkeypatch.setattr(
+        "src.services.discovery_service.ArticleExtractor.extract",
+        fail_extract,
+    )
+
+    context = service._prefetch_discovery_context(["politics"], count=2)
+
+    assert "Search Found Story" not in context
 
 
 def test_discover_passes_prefetched_context_to_crew(monkeypatch):

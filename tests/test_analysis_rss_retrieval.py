@@ -1,3 +1,4 @@
+import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -76,6 +77,38 @@ def test_fetch_feed_returns_empty_on_timeout(monkeypatch):
     assert (
         aggregator.fetch_feed("https://feeds.example.com/rss", timeout_seconds=1) == []
     )
+
+
+def test_fetch_all_fetches_feeds_concurrently_and_preserves_order():
+    class SlowAggregator(RSSAggregator):
+        def __init__(self):
+            self.feeds = [
+                {"url": f"https://feeds{i}.example.com/rss", "name": f"Feed {i}"}
+                for i in range(4)
+            ]
+
+        def fetch_feed(self, **kwargs):
+            time.sleep(0.05)
+            return [
+                FeedItem(
+                    title=kwargs["source_name"],
+                    url=kwargs["feed_url"],
+                    domain=kwargs["feed_url"].split("/")[2],
+                    published=None,
+                    summary="summary",
+                    bias=0,
+                    source_name=kwargs["source_name"],
+                )
+            ]
+
+    aggregator = SlowAggregator()
+
+    started_at = time.perf_counter()
+    items = aggregator.fetch_all(max_age_hours=24, max_per_feed=1)
+    elapsed = time.perf_counter() - started_at
+
+    assert elapsed < 0.16
+    assert [item.title for item in items] == ["Feed 0", "Feed 1", "Feed 2", "Feed 3"]
 
 
 def test_rss_retrieval_caps_feed_attempts_and_passes_timeout():

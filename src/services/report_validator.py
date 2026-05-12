@@ -20,6 +20,7 @@ _CORE_SECTION_PATTERNS: dict[str, re.Pattern[str]] = {
         re.IGNORECASE,
     ),
 }
+_GENERIC_FILLER = {"n/a", "none", "no framing", "see report", "tbd", ""}
 
 
 def validate_report_sources(report_markdown: str, allowed_urls: Iterable[str]) -> None:
@@ -254,7 +255,6 @@ def validate_source_findings(
         warnings.append(f"Duplicate source findings: {', '.join(duplicates)}")
 
     # Check for empty key framing
-    _GENERIC_FILLER = {"n/a", "none", "no framing", "see report", "tbd", ""}
     empty_framing: list[str] = []
     for finding in findings:
         sid = str(finding.get("source_id", "")).strip().upper()

@@ -1,6 +1,7 @@
 """RSS News Aggregator Tool for CrewAI."""
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -17,6 +18,7 @@ from src.utils.url_utils import extract_domain
 logger = logging.getLogger(__name__)
 
 MAX_SUMMARY_CHARS = 500
+RSS_FETCH_MAX_WORKERS = 8
 
 
 @dataclass
@@ -155,24 +157,34 @@ class RSSAggregator:
         categories: list[str] | None = None,
     ) -> list[FeedItem]:
         """Fetch items from all configured feeds."""
-        all_items = []
+        all_items: list[FeedItem] = []
         cutoff = utc_now_naive() - timedelta(hours=max_age_hours)
 
-        for feed in self.feeds:
-            if categories and feed.get("category") not in categories:
-                continue
+        feeds = [
+            feed
+            for feed in self.feeds
+            if not categories or feed.get("category") in categories
+        ]
+        if not feeds:
+            return []
 
-            items = self.fetch_feed(
+        def fetch_configured_feed(feed: dict[str, Any]) -> list[FeedItem]:
+            return self.fetch_feed(
                 feed_url=feed["url"],
                 max_items=max_per_feed,
                 bias=feed.get("bias", 0),
                 source_name=feed.get("name", "Unknown"),
             )
 
-            # Filter by age
-            for item in items:
-                if item.published is None or item.published > cutoff:
-                    all_items.append(item)
+        max_workers = min(RSS_FETCH_MAX_WORKERS, len(feeds))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            feed_results = executor.map(fetch_configured_feed, feeds)
+
+            for items in feed_results:
+                # Filter by age
+                for item in items:
+                    if item.published is None or item.published > cutoff:
+                        all_items.append(item)
 
         return all_items
 

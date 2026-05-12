@@ -5,6 +5,7 @@ for CLI and API consumers.
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from src.core.config import settings
@@ -15,6 +16,8 @@ from src.tools.rss_aggregator import FeedItem, RSSAggregator
 from src.tools.web_search import _get_searcher
 
 logger = logging.getLogger(__name__)
+
+DISCOVERY_EXTRACT_MAX_WORKERS = 4
 
 
 class DiscoveryService:
@@ -115,9 +118,10 @@ class DiscoveryService:
             )
             searcher = _get_searcher()
             extractor = ArticleExtractor()
+            search_candidates: list[tuple[Any, str]] = []
 
             for query in self._build_queries(topics):
-                if len(records) >= target:
+                if len(records) + len(search_candidates) >= target:
                     break
                 try:
                     results = searcher.news_search(
@@ -128,7 +132,7 @@ class DiscoveryService:
                     continue
 
                 for result in results:
-                    if len(records) >= target:
+                    if len(records) + len(search_candidates) >= target:
                         break
                     normalized = self._normalize_url(result.url)
                     if not normalized or normalized in seen_urls:
@@ -137,34 +141,43 @@ class DiscoveryService:
                         continue
 
                     seen_urls.add(normalized)
-                    article = extractor.extract(result.url)
+                    search_candidates.append((result, normalized))
 
-                    if article.success and len(article.text) >= 200:
-                        records.append(
-                            {
-                                "title": article.title or result.title,
-                                "url": result.url,
-                                "domain": article.domain,
-                                "summary": article.text[:1200],
-                                "source": result.source,
-                                "method": article.extractor_method or "search_extract",
-                                "published": (
-                                    article.date.isoformat() if article.date else ""
-                                ),
-                            }
-                        )
-                    else:
-                        records.append(
-                            {
-                                "title": result.title,
-                                "url": result.url,
-                                "domain": self._normalize_url(result.url).split("/")[2],
-                                "summary": result.snippet[:800],
-                                "source": result.source,
-                                "method": "search_snippet",
-                                "published": "",
-                            }
-                        )
+            def build_search_record(candidate: tuple[Any, str]) -> dict[str, str]:
+                result, normalized = candidate
+                article = extractor.extract(result.url)
+
+                if article.success and len(article.text) >= 200:
+                    return {
+                        "title": article.title or result.title,
+                        "url": result.url,
+                        "domain": article.domain,
+                        "summary": article.text[:1200],
+                        "source": result.source,
+                        "method": article.extractor_method or "search_extract",
+                        "published": (
+                            article.date.isoformat() if article.date else ""
+                        ),
+                    }
+
+                normalized_parts = normalized.split("/")
+                domain = normalized_parts[2] if len(normalized_parts) > 2 else ""
+                return {
+                    "title": result.title,
+                    "url": result.url,
+                    "domain": domain,
+                    "summary": result.snippet[:800],
+                    "source": result.source,
+                    "method": "search_snippet",
+                    "published": "",
+                }
+
+            if search_candidates:
+                max_workers = min(
+                    DISCOVERY_EXTRACT_MAX_WORKERS, len(search_candidates)
+                )
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    records.extend(executor.map(build_search_record, search_candidates))
 
         lines = ["DETERMINISTIC PREFETCHED DISCOVERY INPUTS (Prioritize these):"]
         for idx, record in enumerate(records[: target * 2], 1):

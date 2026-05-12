@@ -12,9 +12,10 @@ interface AgentCardProps {
 
 export function AgentCard({ agent, onConfigure }: AgentCardProps) {
     // Format budget currency
-    const limit = agent.config.budget_limit
-        ? `$${agent.config.budget_limit.toFixed(2)}`
-        : "∞";
+    const budgetLimit = agent.config.budget_limit;
+    const limit = budgetLimit === null || budgetLimit === undefined
+        ? "∞"
+        : `$${budgetLimit.toFixed(2)}`;
 
     return (
         <motion.div

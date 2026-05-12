@@ -72,17 +72,17 @@ async def analyze_story(request: AnalyzeRequest) -> AnalyzeResponse:
 
 
 def _run_analysis_sync(request: AnalyzeRequest) -> dict[str, Any]:
-    service = AnalysisService()
-    if request.options is None:
-        return service.analyze(request.description, request.url)
-    return service.analyze(request.description, request.url, options=request.options)
+    with AnalysisService() as service:
+        if request.options is None:
+            return service.analyze(request.description, request.url)
+        return service.analyze(request.description, request.url, options=request.options)
 
 
 @router.get("/analysis/{story_id}")
 def get_analysis(story_id: str) -> dict:
     """Retrieve existing analysis for a story."""
-    service = AnalysisService()
-    result = service.get_analysis(story_id)
+    with AnalysisService() as service:
+        result = service.get_analysis(story_id)
     if not result:
         raise HTTPException(status_code=404, detail="Analysis not found")
     return result
@@ -91,8 +91,8 @@ def get_analysis(story_id: str) -> dict:
 @router.get("/analysis/{story_id}/diagnostics")
 def get_analysis_diagnostics(story_id: str) -> dict:
     """Retrieve persisted retrieval and analysis diagnostics for a story."""
-    service = AnalysisService()
-    result = service.get_diagnostics(story_id)
+    with AnalysisService() as service:
+        result = service.get_diagnostics(story_id)
     if not result:
         raise HTTPException(status_code=404, detail="Analysis diagnostics not found")
     return result
@@ -101,8 +101,8 @@ def get_analysis_diagnostics(story_id: str) -> dict:
 @router.get("/analysis/{story_id}/handoff/{stage}")
 def get_analysis_handoff(story_id: str, stage: str) -> dict:
     """Retrieve a persisted handoff bundle for a story and stage."""
-    service = AnalysisService()
-    result = service.get_handoff(story_id, stage)
+    with AnalysisService() as service:
+        result = service.get_handoff(story_id, stage)
     if not result:
         raise HTTPException(status_code=404, detail="Analysis handoff not found")
     return result

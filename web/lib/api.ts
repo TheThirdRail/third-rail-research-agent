@@ -100,8 +100,14 @@ export async function analyzeStory(request: AnalyzeRequest): Promise<AnalyzeResp
         body: JSON.stringify(request),
     });
     if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.detail || "Analysis failed");
+        let detail = "Analysis failed";
+        try {
+            const error = await res.json();
+            if (error?.detail) detail = error.detail;
+        } catch {
+            // ignore JSON parse errors
+        }
+        throw new Error(detail);
     }
     return res.json();
 }

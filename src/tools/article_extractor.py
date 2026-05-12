@@ -10,11 +10,18 @@ from datetime import datetime
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urljoin
 
+import httpx
 from crewai.tools.base_tool import BaseTool
 
 from src.core.config import settings
-from src.utils.url_utils import extract_domain
+from src.utils.url_utils import (
+    UnsafeUrlError,
+    blocked_public_url_reason,
+    extract_domain,
+    validate_public_http_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +34,14 @@ ERROR_EMPTY_CONTENT = "empty_content"
 ERROR_TIMEOUT = "timeout"
 ERROR_PARSE_FAILURE = "parse_failure"
 ERROR_EXCEPTION = "exception"
+ERROR_UNSAFE_URL = "unsafe_url"
 
 MIN_EXTRACTION_TEXT_LENGTH = 100
 PLAYWRIGHT_PAGE_TIMEOUT_MS = 25000
 CONTENT_PREVIEW_CHARS = 10000
 MULTI_ARTICLE_MAX_URLS = 10
 MULTI_ARTICLE_CONCURRENCY_LIMIT = 4
+MAX_SAFE_REDIRECTS = 5
 
 _BLOCKED_SIGNATURES = (
     "access denied",
@@ -176,6 +185,61 @@ class ArticleExtractor:
         haystack = f"{title}\n{body_text}\n{html_content}".lower()
         return any(sig in haystack for sig in _BLOCKED_SIGNATURES)
 
+    def _unsafe_url_failure(
+        self,
+        *,
+        url: str,
+        method: str,
+        reason: str,
+    ) -> ExtractedArticle:
+        return self._failure(
+            url=url,
+            error=reason,
+            error_code=ERROR_UNSAFE_URL,
+            method=method,
+        )
+
+    def _validate_url_for_fetch(
+        self, url: str, *, method: str
+    ) -> str | ExtractedArticle:
+        try:
+            return validate_public_http_url(url)
+        except UnsafeUrlError as exc:
+            return self._unsafe_url_failure(
+                url=url,
+                method=method,
+                reason=exc.reason,
+            )
+
+    def _safe_prefetch_html(self, url: str) -> tuple[str, int | None, str]:
+        current_url = validate_public_http_url(url)
+        timeout = max(1, settings.analysis_rss_timeout_seconds)
+        headers = {"User-Agent": "ResearchAgent/1.0"}
+
+        with httpx.Client(
+            follow_redirects=False,
+            timeout=timeout,
+            headers=headers,
+        ) as client:
+            for redirect_count in range(MAX_SAFE_REDIRECTS + 1):
+                response = client.get(current_url)
+                if response.is_redirect:
+                    if redirect_count >= MAX_SAFE_REDIRECTS:
+                        raise UnsafeUrlError("too_many_redirects")
+                    location = response.headers.get("location")
+                    if not location:
+                        raise UnsafeUrlError("invalid_redirect")
+                    current_url = validate_public_http_url(
+                        urljoin(str(response.url), location)
+                    )
+                    continue
+
+                response.raise_for_status()
+                final_url = validate_public_http_url(str(response.url))
+                return response.text, response.status_code, final_url
+
+        raise UnsafeUrlError("too_many_redirects")
+
     def _extract_from_html(
         self,
         *,
@@ -241,10 +305,12 @@ class ArticleExtractor:
 
     def extract_trafilatura(self, url: str) -> ExtractedArticle:
         """Extract using trafilatura (primary method)."""
-        try:
-            import trafilatura
+        validated = self._validate_url_for_fetch(url, method="trafilatura")
+        if isinstance(validated, ExtractedArticle):
+            return validated
 
-            downloaded = trafilatura.fetch_url(url)
+        try:
+            downloaded, http_status, final_url = self._safe_prefetch_html(validated)
             if not downloaded:
                 return self._failure(
                     url=url,
@@ -254,9 +320,27 @@ class ArticleExtractor:
                 )
 
             return self._extract_from_html(
-                url=url,
+                url=final_url,
                 html_content=downloaded,
                 method="trafilatura",
+                http_status=http_status,
+            )
+        except UnsafeUrlError as exc:
+            return self._unsafe_url_failure(
+                url=url,
+                method="trafilatura",
+                reason=exc.reason,
+            )
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            code = ERROR_HTTP_403 if status == 403 else ERROR_EXCEPTION
+            logger.warning("Trafilatura fetch failed for %s: %s", url, exc)
+            return self._failure(
+                url=url,
+                error=f"HTTP status {status}",
+                error_code=code,
+                method="trafilatura",
+                http_status=status,
             )
         except Exception as exc:
             logger.warning("Trafilatura failed for %s: %s", url, exc)
@@ -269,11 +353,16 @@ class ArticleExtractor:
 
     def extract_newspaper(self, url: str) -> ExtractedArticle:
         """Extract using newspaper4k (fallback method)."""
+        validated = self._validate_url_for_fetch(url, method="newspaper4k")
+        if isinstance(validated, ExtractedArticle):
+            return validated
+
         try:
             from newspaper import Article
 
-            article = Article(url)
-            article.download()
+            downloaded, http_status, final_url = self._safe_prefetch_html(validated)
+            article = Article(final_url)
+            article.download(input_html=downloaded)
             article.parse()
 
             date = None
@@ -300,15 +389,32 @@ class ArticleExtractor:
                 text=article.text,
                 author=author,
                 date=date,
-                domain=extract_domain(url),
-                url=url,
+                domain=extract_domain(final_url),
+                url=final_url,
                 success=True,
                 error=None,
                 error_code=None,
+                http_status=http_status,
                 extractor_method="newspaper4k",
                 og_image_url=article.top_image or None,
             )
 
+        except UnsafeUrlError as exc:
+            return self._unsafe_url_failure(
+                url=url,
+                method="newspaper4k",
+                reason=exc.reason,
+            )
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            code = ERROR_HTTP_403 if status == 403 else ERROR_EXCEPTION
+            return self._failure(
+                url=url,
+                error=f"HTTP status {status}",
+                error_code=code,
+                method="newspaper4k",
+                http_status=status,
+            )
         except Exception as exc:
             logger.warning("Newspaper4k failed for %s: %s", url, exc)
             msg = str(exc)
@@ -341,6 +447,10 @@ class ArticleExtractor:
                 method="playwright_sync",
             )
 
+        validated = self._validate_url_for_fetch(url, method="playwright_sync")
+        if isinstance(validated, ExtractedArticle):
+            return validated
+
         try:
             from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
             from playwright.sync_api import sync_playwright
@@ -362,8 +472,9 @@ class ArticleExtractor:
                 browser = playwright.chromium.launch(args=["--no-sandbox"])
                 try:
                     page = browser.new_page()
+                    page.route("**/*", self._guarded_playwright_route)
                     response = page.goto(
-                        url,
+                        validated,
                         wait_until="domcontentloaded",
                         timeout=PLAYWRIGHT_PAGE_TIMEOUT_MS,
                     )
@@ -395,7 +506,7 @@ class ArticleExtractor:
                 )
 
             return self._extract_from_html(
-                url=url,
+                url=validated,
                 html_content=html_content,
                 method="playwright_sync",
                 http_status=status,
@@ -453,6 +564,10 @@ class ArticleExtractor:
         self, url: str, user_agent: str | None
     ) -> ExtractedArticle:
         """Extract page using Selenium Chrome driver."""
+        validated = self._validate_url_for_fetch(url, method="selenium")
+        if isinstance(validated, ExtractedArticle):
+            return validated
+
         try:
             from selenium import webdriver
             from selenium.common.exceptions import TimeoutException, WebDriverException
@@ -489,7 +604,7 @@ class ArticleExtractor:
             )
             driver = webdriver.Chrome(service=service, options=options)
             driver.set_page_load_timeout(settings.selenium_timeout_seconds)
-            driver.get(url)
+            driver.get(validated)
 
             html_content = driver.page_source or ""
             title = driver.title or ""
@@ -588,6 +703,10 @@ class ArticleExtractor:
 
     async def extract_playwright_async(self, url: str) -> ExtractedArticle:
         """Extract using Playwright async API (fallback for dynamic/paywalled sites)."""
+        validated = self._validate_url_for_fetch(url, method="playwright_async")
+        if isinstance(validated, ExtractedArticle):
+            return validated
+
         try:
             from playwright.async_api import TimeoutError as PlaywrightTimeoutError
             from playwright.async_api import async_playwright
@@ -609,8 +728,9 @@ class ArticleExtractor:
                 browser = await playwright.chromium.launch(args=["--no-sandbox"])
                 try:
                     page = await browser.new_page()
+                    await page.route("**/*", self._guarded_playwright_route_async)
                     response = await page.goto(
-                        url,
+                        validated,
                         wait_until="domcontentloaded",
                         timeout=PLAYWRIGHT_PAGE_TIMEOUT_MS,
                     )
@@ -643,7 +763,7 @@ class ArticleExtractor:
 
             return await asyncio.to_thread(
                 self._extract_from_html,
-                url=url,
+                url=validated,
                 html_content=html_content,
                 method="playwright_async",
                 http_status=status,
@@ -670,34 +790,45 @@ class ArticleExtractor:
         """Run Selenium extraction in a worker thread."""
         return await asyncio.to_thread(self.extract_selenium, url)
 
+    @staticmethod
+    def _guarded_playwright_route(route) -> None:
+        reason = blocked_public_url_reason(route.request.url)
+        if reason:
+            route.abort()
+            return
+        route.continue_()
+
+    @staticmethod
+    async def _guarded_playwright_route_async(route) -> None:
+        reason = blocked_public_url_reason(route.request.url)
+        if reason:
+            await route.abort()
+            return
+        await route.continue_()
+
     def extract(self, url: str) -> ExtractedArticle:
         """Extract article with automatic fallback."""
         _log_extractor_version_once()
+        validated = self._validate_url_for_fetch(url, method="url_validation")
+        if isinstance(validated, ExtractedArticle):
+            return validated
 
-        result = self.extract_trafilatura(url)
+        result = self.extract_trafilatura(validated)
         if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
 
         logger.info("Falling back to newspaper4k for %s", url)
-        result = self.extract_newspaper(url)
+        result = self.extract_newspaper(validated)
         if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
 
         logger.info("Falling back to Playwright sync for %s", url)
-        result = self.extract_playwright(url)
+        result = self.extract_playwright(validated)
         if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
 
-        if settings.enable_selenium_fallback:
-            logger.info("Falling back to Selenium for %s", url)
-            selenium_result = self.extract_selenium(url)
-            if (
-                selenium_result.success
-                and len(selenium_result.text) > MIN_EXTRACTION_TEXT_LENGTH
-            ):
-                return selenium_result
-            return selenium_result
-
+        # Selenium cannot intercept redirects or subresource requests here, so
+        # automatic untrusted fallback stays disabled.
         return result
 
     def _extract_media_metadata(self, html_content: str) -> dict[str, object]:
@@ -728,31 +859,26 @@ class ArticleExtractor:
     async def extract_async(self, url: str) -> ExtractedArticle:
         """Extract article with automatic fallback (async-safe)."""
         _log_extractor_version_once()
+        validated = self._validate_url_for_fetch(url, method="url_validation")
+        if isinstance(validated, ExtractedArticle):
+            return validated
 
-        result = await self.extract_trafilatura_async(url)
+        result = await self.extract_trafilatura_async(validated)
         if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
 
         logger.info("Falling back to newspaper4k for %s", url)
-        result = await self.extract_newspaper_async(url)
+        result = await self.extract_newspaper_async(validated)
         if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
 
         logger.info("Falling back to Playwright async for %s", url)
-        result = await self.extract_playwright_async(url)
+        result = await self.extract_playwright_async(validated)
         if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
 
-        if settings.enable_selenium_fallback:
-            logger.info("Falling back to Selenium for %s", url)
-            selenium_result = await self.extract_selenium_async(url)
-            if (
-                selenium_result.success
-                and len(selenium_result.text) > MIN_EXTRACTION_TEXT_LENGTH
-            ):
-                return selenium_result
-            return selenium_result
-
+        # Selenium cannot intercept redirects or subresource requests here, so
+        # automatic untrusted fallback stays disabled.
         return result
 
 

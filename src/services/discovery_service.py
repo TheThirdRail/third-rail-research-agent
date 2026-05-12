@@ -13,6 +13,7 @@ from src.tools.article_extractor import ArticleExtractor
 from src.tools.channel_profile_loader import channel_loader
 from src.tools.rss_aggregator import FeedItem, RSSAggregator
 from src.tools.web_search import _get_searcher
+from src.utils.url_utils import blocked_public_url_reason, extract_domain, normalize_url
 
 logger = logging.getLogger(__name__)
 
@@ -45,16 +46,7 @@ class DiscoveryService:
             return ["politics", "geopolitics", "news"]
 
     def _normalize_url(self, url: str) -> str:
-        if not url:
-            return ""
-        try:
-            from urllib.parse import urlparse
-
-            parsed = urlparse(url)
-            path = parsed.path.rstrip("/")
-            return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{path}"
-        except Exception:
-            return url.lower().rstrip("/")
+        return normalize_url(url)
 
     def _build_queries(self, topics: list[str]) -> list[str]:
         queries: list[str] = []
@@ -135,6 +127,14 @@ class DiscoveryService:
                         continue
                     if not result.url.startswith("http"):
                         continue
+                    blocked_reason = blocked_public_url_reason(result.url)
+                    if blocked_reason:
+                        logger.info(
+                            "Skipping unsafe discovery result URL %s: %s",
+                            result.url,
+                            blocked_reason,
+                        )
+                        continue
 
                     seen_urls.add(normalized)
                     article = extractor.extract(result.url)
@@ -158,7 +158,7 @@ class DiscoveryService:
                             {
                                 "title": result.title,
                                 "url": result.url,
-                                "domain": self._normalize_url(result.url).split("/")[2],
+                                "domain": extract_domain(result.url),
                                 "summary": result.snippet[:800],
                                 "source": result.source,
                                 "method": "search_snippet",

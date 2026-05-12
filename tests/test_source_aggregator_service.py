@@ -255,6 +255,51 @@ def test_search_queries_round_robins_bucket_steps(monkeypatch):
     ]
 
 
+def test_preflight_skips_private_candidate_before_probe(monkeypatch):
+    service = SourceAggregatorService()
+    monkeypatch.setattr(
+        service,
+        "_extract_url",
+        lambda url, require_success=False: (_ for _ in ()).throw(
+            AssertionError("unsafe candidate reached extraction")
+        ),
+    )
+    plan = SourcePlan(
+        required_buckets=[],
+        optional_buckets=[],
+        domain_targets_per_bucket={},
+        search_plan=[],
+        bucket_probe_sequence=[],
+        proceed_minimum_groups=[],
+        target_unique_exact_biases=0,
+        seed_bias=None,
+        seed_domain=None,
+    )
+
+    scored = service._preflight_search_results(
+        results=[
+            SearchResult(
+                title="Internal",
+                url="http://127.0.0.1/private",
+                snippet="snippet",
+                source="internal",
+            )
+        ],
+        description="story",
+        sources=[],
+        seen_urls=set(),
+        seen_domains=set(),
+        story_packet=None,
+        plan=plan,
+    )
+
+    assert scored == []
+    assert service._probed_count == 0
+    assert service.candidate_decisions[-1].rejection_reason == (
+        "blocked_private_or_local_url"
+    )
+
+
 def test_build_query_attempts_prefers_story_packet_query_families():
     service = SourceAggregatorService()
     packet = StoryPacket(

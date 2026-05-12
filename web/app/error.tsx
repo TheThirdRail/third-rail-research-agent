@@ -10,6 +10,8 @@ export default function Error({
     error: Error & { digest?: string };
     reset: () => void;
 }) {
+    const isDevelopment = process.env.NODE_ENV === "development";
+
     useEffect(() => {
         // Log the error to an analytics service
         console.error("Dashboard Error:", error);
@@ -27,9 +29,17 @@ export default function Error({
                     <p className="text-white/80">An unrecoverable handling error occurred within the dashboard matrix.</p>
 
                     <div className="bg-black/80 border border-white/10 p-4 rounded overflow-auto max-h-64">
-                        <p className="text-hot-pink font-bold mb-2">Error Digest: {error.digest}</p>
-                        <p className="text-terminal-green mb-2">Message: {error.message}</p>
-                        <pre className="text-xs text-gray-500 whitespace-pre-wrap">{error.stack}</pre>
+                        {error.digest ? (
+                            <p className="text-hot-pink font-bold mb-2">Error Digest: {error.digest}</p>
+                        ) : null}
+                        {isDevelopment ? (
+                            <>
+                                <p className="text-terminal-green mb-2">Message: {error.message}</p>
+                                <pre className="text-xs text-gray-500 whitespace-pre-wrap">{error.stack}</pre>
+                            </>
+                        ) : (
+                            <p className="text-terminal-green mb-2">Message: An unexpected dashboard error occurred.</p>
+                        )}
                     </div>
 
                     <button

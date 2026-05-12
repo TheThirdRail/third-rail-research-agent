@@ -652,8 +652,8 @@ def analyze(
 
     with console.status("[bold green]Running multi-source analysis..."):
         try:
-            service = AnalysisService()
-            result = service.analyze(story_desc, url, options=options)
+            with AnalysisService() as service:
+                result = service.analyze(story_desc, url, options=options)
             report = result.get("report", "No report generated")
 
             console.print("\n[bold green]Analysis Complete![/bold green]\n")
@@ -985,8 +985,8 @@ def diagnostics(story_id: str) -> None:
 
     from src.services import AnalysisService
 
-    service = AnalysisService()
-    result = service.get_diagnostics(story_id)
+    with AnalysisService() as service:
+        result = service.get_diagnostics(story_id)
     if not result:
         console.print(
             f"[bold red]Error:[/bold red] No diagnostics found for {story_id}"
@@ -1313,8 +1313,8 @@ def handoff(story_id: str, stage: str) -> None:
 
     from src.services import AnalysisService
 
-    service = AnalysisService()
-    result = service.get_handoff(story_id, stage)
+    with AnalysisService() as service:
+        result = service.get_handoff(story_id, stage)
     if not result:
         console.print(
             f"[bold red]Error:[/bold red] No handoff found for {story_id[:8]} / {stage}"

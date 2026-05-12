@@ -10,6 +10,12 @@ from src.core.exceptions import BudgetExceededError
 
 def test_unexpected_analysis_error_returns_safe_detail(monkeypatch):
     class FakeAnalysisService:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
         def analyze(self, description: str, url: str | None = None, options=None):
             raise RuntimeError(
                 "Traceback: provider key sk-live-secret failed inside internal stack"
@@ -34,6 +40,12 @@ def test_unexpected_analysis_error_returns_safe_detail(monkeypatch):
 
 def test_budget_error_preserves_402_status(monkeypatch):
     class FakeAnalysisService:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
         def analyze(self, description: str, url: str | None = None, options=None):
             raise BudgetExceededError("Daily budget exceeded.")
 

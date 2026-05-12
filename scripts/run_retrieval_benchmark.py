@@ -7,7 +7,7 @@ import html
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from scripts.export_diagnostics_report import (
     export_diagnostics,
@@ -134,7 +134,10 @@ def load_baseline(path: Path) -> dict[str, Any]:
     """Load benchmark baseline thresholds from JSON."""
     if not path.exists():
         raise FileNotFoundError(f"Benchmark baseline file not found: {path}")
-    return json.loads(path.read_text(encoding="utf-8"))
+    baseline = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(baseline, dict):
+        raise ValueError(f"Benchmark baseline must be a JSON object: {path}")
+    return cast(dict[str, Any], baseline)
 
 
 def apply_baseline(report: dict[str, Any], baseline: dict[str, Any]) -> dict[str, Any]:
@@ -152,31 +155,52 @@ def evaluate_baseline(
     report: dict[str, Any], baseline: dict[str, Any]
 ) -> list[dict[str, Any]]:
     """Compare report metrics against baseline thresholds."""
-    thresholds = baseline.get("thresholds", baseline)
+    thresholds_raw = baseline.get("thresholds", baseline)
+    if not isinstance(thresholds_raw, dict):
+        raise ValueError("Benchmark baseline thresholds must be a JSON object")
+    thresholds = cast(dict[str, Any], thresholds_raw)
     failures: list[dict[str, Any]] = []
-    for path, expected in (thresholds.get("minimums", {}) or {}).items():
-        actual = _metric_path(report, path)
-        if actual is None or float(actual) < float(expected):
+    minimums_raw = thresholds.get("minimums", {}) or {}
+    if not isinstance(minimums_raw, dict):
+        raise ValueError("Benchmark baseline minimums must be a JSON object")
+    for path, expected in minimums_raw.items():
+        metric_path = str(path)
+        actual = _metric_path(report, metric_path)
+        if actual is None or _metric_float(actual, metric_path) < _metric_float(
+            expected, metric_path
+        ):
             failures.append(
                 {
-                    "metric": path,
+                    "metric": metric_path,
                     "rule": "minimum",
                     "expected": expected,
                     "actual": actual,
                 }
             )
-    for path, expected in (thresholds.get("maximums", {}) or {}).items():
-        actual = _metric_path(report, path)
-        if actual is None or float(actual) > float(expected):
+    maximums_raw = thresholds.get("maximums", {}) or {}
+    if not isinstance(maximums_raw, dict):
+        raise ValueError("Benchmark baseline maximums must be a JSON object")
+    for path, expected in maximums_raw.items():
+        metric_path = str(path)
+        actual = _metric_path(report, metric_path)
+        if actual is None or _metric_float(actual, metric_path) > _metric_float(
+            expected, metric_path
+        ):
             failures.append(
                 {
-                    "metric": path,
+                    "metric": metric_path,
                     "rule": "maximum",
                     "expected": expected,
                     "actual": actual,
                 }
             )
     return failures
+
+
+def _metric_float(value: object, path: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        raise TypeError(f"Metric '{path}' must be numeric, got {type(value).__name__}")
+    return float(value)
 
 
 def run_live_benchmark(
@@ -527,6 +551,12 @@ def format_html(report: dict[str, Any]) -> str:
     fixture_report = report.get("fixtures", report)
     diagnostics = report.get("diagnostics") if "fixtures" in report else None
     live = report.get("live") if "fixtures" in report else None
+    regressions = report.get("regressions")
+    regression_section = (
+        _format_regression_html(cast(dict[str, Any], regressions))
+        if isinstance(regressions, dict)
+        else ""
+    )
     aggregate = fixture_report["aggregate"]
     fixture_rows = "\n".join(
         _html_row(
@@ -588,7 +618,7 @@ def format_html(report: dict[str, Any]) -> str:
   </section>
   {_format_live_html(live) if live else ""}
   {diagnostics_section}
-  {_format_regression_html(report.get("regressions")) if report.get("regressions") else ""}
+  {regression_section}
 </body>
 </html>
 """

@@ -3,10 +3,11 @@
 import logging
 
 import bleach
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from markdown import markdown as markdown_to_html
 from pydantic import BaseModel, Field
 
+from src.api.dependencies import require_admin_api_key, require_expensive_endpoint_slot
 from src.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -185,7 +186,13 @@ async def render_report_pdf(markdown: str) -> bytes:
     return pdf_bytes
 
 
-@router.post("/reports/pdf")
+@router.post(
+    "/reports/pdf",
+    dependencies=[
+        Depends(require_admin_api_key),
+        Depends(require_expensive_endpoint_slot),
+    ],
+)
 async def create_report_pdf(request: ReportPdfRequest) -> Response:
     """Generate a PDF report from markdown."""
     if not request.report_markdown.strip():

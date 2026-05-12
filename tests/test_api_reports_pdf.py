@@ -9,6 +9,24 @@ if "duckduckgo_search" not in sys.modules:
 
 from src.api.main import app
 from src.api.routes import reports
+from src.core import config as _cfg
+
+TEST_ADMIN_KEY = "test-secret-key-for-ci"
+
+
+@pytest.fixture(autouse=True)
+def _set_admin_key(monkeypatch):
+    monkeypatch.setenv("ADMIN_API_KEY", TEST_ADMIN_KEY)
+    _cfg.get_settings.cache_clear()
+    _cfg.settings = _cfg.get_settings()
+    monkeypatch.setattr(reports, "settings", _cfg.settings)
+    yield
+    _cfg.get_settings.cache_clear()
+    _cfg.settings = _cfg.get_settings()
+
+
+def _admin_headers() -> dict[str, str]:
+    return {"X-Research-Agent-Key": TEST_ADMIN_KEY}
 
 
 def test_reports_pdf_endpoint(monkeypatch):
@@ -18,7 +36,11 @@ def test_reports_pdf_endpoint(monkeypatch):
     monkeypatch.setattr(reports, "render_report_pdf", fake_render_report_pdf)
 
     client = TestClient(app)
-    response = client.post("/api/reports/pdf", json={"report_markdown": "# Test"})
+    response = client.post(
+        "/api/reports/pdf",
+        json={"report_markdown": "# Test"},
+        headers=_admin_headers(),
+    )
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
@@ -57,6 +79,7 @@ def test_reports_pdf_rejects_oversized_markdown(monkeypatch):
     response = TestClient(app).post(
         "/api/reports/pdf",
         json={"report_markdown": "too large"},
+        headers=_admin_headers(),
     )
 
     assert response.status_code == 413

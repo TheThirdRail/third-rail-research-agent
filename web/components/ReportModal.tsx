@@ -11,9 +11,15 @@ interface ReportModalProps {
     report: string | null;
     isOpen: boolean;
     onClose: () => void;
+    canExportPdf?: boolean;
 }
 
-export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
+export function ReportModal({
+    report,
+    isOpen,
+    onClose,
+    canExportPdf = true,
+}: ReportModalProps) {
     const contentRef = useRef<HTMLDivElement | null>(null);
     const overlayRef = useRef<HTMLDivElement | null>(null);
     const dragControls = useDragControls();
@@ -124,7 +130,7 @@ export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
     };
 
     const handleExportPdf = async () => {
-        if (!report || isExportingPdf) return;
+        if (!report || isExportingPdf || !canExportPdf) return;
         setIsExportingPdf(true);
         try {
             const blob = await exportReportPdf(report);
@@ -256,11 +262,15 @@ export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
                                 </button>
                                 <button
                                     onClick={handleExportPdf}
-                                    disabled={isExportingPdf}
+                                    disabled={isExportingPdf || !canExportPdf}
                                     className="flex items-center gap-2 text-[10px] text-neon-purple hover:text-white transition-colors uppercase tracking-widest font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <FileText className="w-3 h-3" />
-                                    {isExportingPdf ? "Exporting…" : "Export PDF"}
+                                    {isExportingPdf
+                                        ? "Exporting..."
+                                        : canExportPdf
+                                          ? "Export PDF"
+                                          : "Login Required"}
                                 </button>
                             </div>
                         </div>

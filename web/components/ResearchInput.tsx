@@ -7,15 +7,17 @@ import { motion } from "framer-motion";
 interface ResearchInputProps {
     onAnalyze: (description: string, url: string | null) => Promise<void>;
     isLoading: boolean;
+    disabled?: boolean;
 }
 
-export function ResearchInput({ onAnalyze, isLoading }: ResearchInputProps) {
+export function ResearchInput({ onAnalyze, isLoading, disabled = false }: ResearchInputProps) {
     const [description, setDescription] = useState("");
     const [url, setUrl] = useState("");
+    const controlsDisabled = isLoading || disabled;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!description.trim()) return;
+        if (disabled || !description.trim()) return;
         onAnalyze(description, url.trim() || null);
     };
 
@@ -37,7 +39,7 @@ export function ResearchInput({ onAnalyze, isLoading }: ResearchInputProps) {
                         onChange={(e) => setDescription(e.target.value)}
                         placeholder="Enter story description or news topic to research..."
                         className="w-full h-32 bg-void/80 border border-white/10 text-white p-4 focus:border-neon-cyan focus:outline-none focus:shadow-[0_0_15px_rgba(0,243,255,0.15)] font-mono text-sm placeholder:text-gray-600 resize-none transition-all"
-                        disabled={isLoading}
+                        disabled={controlsDisabled}
                     />
                 </div>
 
@@ -52,14 +54,14 @@ export function ResearchInput({ onAnalyze, isLoading }: ResearchInputProps) {
                                 onChange={(e) => setUrl(e.target.value)}
                                 placeholder="https://news-source.com/article"
                                 className="w-full bg-void/80 border border-white/10 text-white pl-10 pr-4 py-2 focus:border-neon-cyan focus:outline-none font-mono text-xs transition-all"
-                                disabled={isLoading}
+                                disabled={controlsDisabled}
                             />
                         </div>
                     </div>
 
                     <button
                         type="submit"
-                        disabled={isLoading || !description.trim()}
+                        disabled={controlsDisabled || !description.trim()}
                         className="w-full md:w-auto px-8 py-3 bg-neon-cyan text-void font-black uppercase text-xs tracking-[0.2em] shadow-[0_0_20px_rgba(0,243,255,0.4)] hover:shadow-[0_0_30px_rgba(0,243,255,0.6)] hover:bg-white transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:shadow-none"
                     >
                         {isLoading ? (
@@ -67,6 +69,8 @@ export function ResearchInput({ onAnalyze, isLoading }: ResearchInputProps) {
                                 <Loader2 className="w-4 h-4 animate-spin" />
                                 Analyzing...
                             </>
+                        ) : disabled ? (
+                            "Login Required"
                         ) : (
                             <>
                                 <Search className="w-4 h-4" />

@@ -27,7 +27,7 @@ class LanceDBVectorStore:
         table_name: str | None = None,
     ) -> None:
         try:
-            import lancedb  # type: ignore[import-not-found]
+            import lancedb
         except ImportError as exc:
             raise RuntimeError(
                 "LanceDB vector store is configured but the 'lancedb' package "
@@ -95,18 +95,18 @@ class LanceDBVectorStore:
             return
         self._delete_where(table, self._equals("story_id", story_id))
 
-    def _open_db(self):
+    def _open_db(self) -> Any:
         self._db_path.mkdir(parents=True, exist_ok=True)
         return self._lancedb.connect(str(self._db_path))
 
-    def _open_table(self):
+    def _open_table(self) -> Any:
         db = self._open_db()
         try:
             return db.open_table(self._table_name)
         except Exception as exc:
             raise RuntimeError("LanceDB semantic chunk table does not exist") from exc
 
-    def _open_or_create_table(self, sample: VectorRecord):
+    def _open_or_create_table(self, sample: VectorRecord) -> Any:
         db = self._open_db()
         try:
             return db.open_table(self._table_name)
@@ -117,7 +117,7 @@ class LanceDBVectorStore:
             )
 
     @staticmethod
-    def _schema(vector_dimensions: int):
+    def _schema(vector_dimensions: int) -> Any:
         import pyarrow as pa
 
         return pa.schema(

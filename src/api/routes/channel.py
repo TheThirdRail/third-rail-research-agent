@@ -10,7 +10,7 @@ from starlette.concurrency import run_in_threadpool
 
 from src.api.dependencies import require_admin_api_key
 from src.core.config import settings
-from src.tools.channel_profile_loader import channel_loader
+from src.tools.channel_profile_loader import ChannelScope, channel_loader
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ async def upload_channel_profile(file: UploadFile = File(...)) -> ChannelUploadR
         if format_hint in {"yaml", "yml"}:
             format_hint = "yaml"
 
-        def _parse_and_save():
+        def _parse_and_save() -> ChannelScope:
             scope = channel_loader.load_from_string(content_str, format_hint)
             output_path = settings.config_dir / "channel_profile.yaml"
             import yaml

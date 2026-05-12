@@ -10,6 +10,7 @@ from datetime import datetime
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import Any, TypedDict, cast
 from urllib.parse import urljoin
 
 import httpx
@@ -38,6 +39,15 @@ ERROR_UNSAFE_URL = "unsafe_url"
 
 MIN_EXTRACTION_TEXT_LENGTH = 100
 PLAYWRIGHT_PAGE_TIMEOUT_MS = 25000
+
+
+class MediaMetadata(TypedDict):
+    og_image_url: str | None
+    embedded_post_urls: list[str]
+    image_alt_text: list[str]
+    media_captions: list[str]
+
+
 CONTENT_PREVIEW_CHARS = 10000
 MULTI_ARTICLE_MAX_URLS = 10
 MULTI_ARTICLE_CONCURRENCY_LIMIT = 4
@@ -406,14 +416,14 @@ class ArticleExtractor:
                 reason=exc.reason,
             )
         except httpx.HTTPStatusError as exc:
-            status = exc.response.status_code
-            code = ERROR_HTTP_403 if status == 403 else ERROR_EXCEPTION
+            status_code = exc.response.status_code
+            code = ERROR_HTTP_403 if status_code == 403 else ERROR_EXCEPTION
             return self._failure(
                 url=url,
-                error=f"HTTP status {status}",
+                error=f"HTTP status {status_code}",
                 error_code=code,
                 method="newspaper4k",
-                http_status=status,
+                http_status=status_code,
             )
         except Exception as exc:
             logger.warning("Newspaper4k failed for %s: %s", url, exc)
@@ -421,13 +431,13 @@ class ArticleExtractor:
             code = (
                 ERROR_HTTP_403 if "status code 403" in msg.lower() else ERROR_EXCEPTION
             )
-            status = 403 if code == ERROR_HTTP_403 else None
+            fallback_status: int | None = 403 if code == ERROR_HTTP_403 else None
             return self._failure(
                 url=url,
                 error=msg,
                 error_code=code,
                 method="newspaper4k",
-                http_status=status,
+                http_status=fallback_status,
             )
 
     def extract_playwright(self, url: str) -> ExtractedArticle:
@@ -791,7 +801,7 @@ class ArticleExtractor:
         return await asyncio.to_thread(self.extract_selenium, url)
 
     @staticmethod
-    def _guarded_playwright_route(route) -> None:
+    def _guarded_playwright_route(route: Any) -> None:
         reason = blocked_public_url_reason(route.request.url)
         if reason:
             route.abort()
@@ -799,7 +809,7 @@ class ArticleExtractor:
         route.continue_()
 
     @staticmethod
-    async def _guarded_playwright_route_async(route) -> None:
+    async def _guarded_playwright_route_async(route: Any) -> None:
         reason = blocked_public_url_reason(route.request.url)
         if reason:
             await route.abort()
@@ -831,7 +841,7 @@ class ArticleExtractor:
         # automatic untrusted fallback stays disabled.
         return result
 
-    def _extract_media_metadata(self, html_content: str) -> dict[str, object]:
+    def _extract_media_metadata(self, html_content: str) -> MediaMetadata:
         parser = _MediaHTMLParser()
         with contextlib.suppress(Exception):
             parser.feed(html_content or "")
@@ -890,12 +900,12 @@ class ArticleExtractorTool(BaseTool):
     Returns the article title, author, publication date, and full text.
     Use this to get the complete content of a news article for analysis."""
 
-    def run(self, *args, **kwargs):
+    def run(self, *args: Any, **kwargs: Any) -> str | Awaitable[str]:
         """Return awaitable in async contexts to avoid sync Playwright in event loop."""
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            return super().run(*args, **kwargs)
+            return cast(str, super().run(*args, **kwargs))
         return self._arun(*args, **kwargs)
 
     @staticmethod
@@ -1009,12 +1019,12 @@ class MultiArticleExtractorTool(BaseTool):
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             return list(executor.map(extractor.extract, url_list))
 
-    def run(self, *args, **kwargs):
+    def run(self, *args: Any, **kwargs: Any) -> str | Awaitable[str]:
         """Return awaitable in async contexts to avoid sync Playwright in event loop."""
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            return super().run(*args, **kwargs)
+            return cast(str, super().run(*args, **kwargs))
         return self._arun(*args, **kwargs)
 
     def _run(self, urls: str) -> str | Awaitable[str]:

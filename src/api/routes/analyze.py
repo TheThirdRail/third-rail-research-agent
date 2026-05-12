@@ -83,11 +83,13 @@ def _run_analysis_sync(request: AnalyzeRequest) -> dict[str, Any]:
     with AnalysisService() as service:
         if request.options is None:
             return service.analyze(request.description, request.url)
-        return service.analyze(request.description, request.url, options=request.options)
+        return service.analyze(
+            request.description, request.url, options=request.options
+        )
 
 
 @router.get("/analysis/{story_id}")
-def get_analysis(story_id: str) -> dict:
+def get_analysis(story_id: str) -> dict[str, Any]:
     """Retrieve existing analysis for a story."""
     with AnalysisService() as service:
         result = service.get_analysis(story_id)
@@ -97,7 +99,7 @@ def get_analysis(story_id: str) -> dict:
 
 
 @router.get("/analysis/{story_id}/diagnostics")
-def get_analysis_diagnostics(story_id: str) -> dict:
+def get_analysis_diagnostics(story_id: str) -> dict[str, Any]:
     """Retrieve persisted retrieval and analysis diagnostics for a story."""
     with AnalysisService() as service:
         result = service.get_diagnostics(story_id)
@@ -107,7 +109,7 @@ def get_analysis_diagnostics(story_id: str) -> dict:
 
 
 @router.get("/analysis/{story_id}/handoff/{stage}")
-def get_analysis_handoff(story_id: str, stage: str) -> dict:
+def get_analysis_handoff(story_id: str, stage: str) -> dict[str, Any]:
     """Retrieve a persisted handoff bundle for a story and stage."""
     with AnalysisService() as service:
         result = service.get_handoff(story_id, stage)

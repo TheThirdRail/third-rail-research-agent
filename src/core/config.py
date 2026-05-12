@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     @field_validator("debug", mode="before")
     @classmethod
-    def _normalize_debug(cls, value):
+    def _normalize_debug(cls, value: object) -> object:
         if isinstance(value, str):
             normalized = value.strip().lower()
             if normalized in {"release", "prod", "production"}:

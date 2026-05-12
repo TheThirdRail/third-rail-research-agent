@@ -8,6 +8,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any, cast
 from urllib.parse import urlparse
 
 from src.core.config import settings
@@ -17,6 +18,8 @@ from src.schemas.retrieval_diagnostics import (
     BucketLaneAttempt,
     CandidateCensus,
     CandidateDecision,
+    CandidateStage,
+    CandidateState,
     MissingBucketExplanation,
 )
 from src.schemas.story_packet import StoryPacket
@@ -375,7 +378,7 @@ class SourceAggregatorService:
             "bias_spread_met": left > 0 and right > 0,
         }
 
-    def summarize_coverage(self, sources: list[SourceCandidate]) -> dict:
+    def summarize_coverage(self, sources: list[SourceCandidate]) -> dict[str, Any]:
         """Summarize coverage status including bucket details.
 
         Returns structured status: coverage_satisfied, missing_buckets,
@@ -483,7 +486,9 @@ class SourceAggregatorService:
                     bucket_label=bucket,
                     reason=reason,
                     probed_count=len(decisions),
-                    by_state=dict(state_counts),
+                    by_state={
+                        str(state): count for state, count in state_counts.items()
+                    },
                     rejection_reasons=dict(rejection_counts),
                     probe_limit_reached=(
                         self._probed_count >= settings.candidate_probe_limit
@@ -710,7 +715,7 @@ class SourceAggregatorService:
         query_attempts: list[QueryAttempt],
         plan: SourcePlan,
         story_packet: StoryPacket | None,
-        add_results,
+        add_results: Any,
         results: list[SearchResult],
     ) -> list[SearchResult]:
         steps_by_bucket: dict[str, list[dict[str, object]]] = {}
@@ -787,7 +792,7 @@ class SourceAggregatorService:
         step: dict[str, object],
         story_packet: StoryPacket | None,
         plan: SourcePlan | None,
-        add_results,
+        add_results: Any,
     ) -> int:
         found_count = 0
 
@@ -800,7 +805,12 @@ class SourceAggregatorService:
                 add_results(found)
 
         phase = step.get("phase")
-        domains = step.get("domains") or []
+        domains_value = step.get("domains")
+        domains = (
+            [str(domain) for domain in domains_value]
+            if isinstance(domains_value, list | tuple | set)
+            else []
+        )
         if phase == "rss":
             if not self._setting_bool("analysis_rss_first_enabled", True):
                 return 0
@@ -816,7 +826,7 @@ class SourceAggregatorService:
                 else:
                     found = self._rss_retriever.search(
                         query,
-                        domains=list(domains),
+                        domains=domains,
                         max_results=8,
                     )
                 add_found(found, "rss")
@@ -872,20 +882,27 @@ class SourceAggregatorService:
         exhausted_reason: str | None = None,
         query_family: str | None = None,
     ) -> None:
-        phase = str(step.get("phase") or "unknown")
-        if phase not in {"rss", "site_search", "open_web"}:
-            phase = "unknown"
-        domains = step.get("domains") or []
+        phase_text = str(step.get("phase") or "unknown")
+        phase: CandidateStage = (
+            cast(CandidateStage, phase_text)
+            if phase_text in {"rss", "site_search", "open_web"}
+            else "unknown"
+        )
+        domains_value = step.get("domains")
+        domains = (
+            [str(domain) for domain in domains_value]
+            if isinstance(domains_value, list | tuple | set)
+            else []
+        )
+        exact_bias = step.get("exact_bias")
         self._bucket_lane_attempts.append(
             BucketLaneAttempt(
                 bucket_label=str(step.get("bucket") or ""),
                 stage=phase,
                 query=query,
                 query_family=query_family,
-                exact_bias=step.get("exact_bias")
-                if isinstance(step.get("exact_bias"), int)
-                else None,
-                domains=[str(domain) for domain in domains],
+                exact_bias=exact_bias if isinstance(exact_bias, int) else None,
+                domains=domains,
                 result_count=result_count,
                 new_result_count=new_result_count,
                 exhausted_reason=exhausted_reason
@@ -1369,7 +1386,7 @@ class SourceAggregatorService:
         self,
         candidate: SourceCandidate,
         *,
-        state: str,
+        state: CandidateState,
         rejection_reason: str | None = None,
     ) -> None:
         self._record_candidate_decision(
@@ -1391,9 +1408,9 @@ class SourceAggregatorService:
         candidate: SourceCandidate | None,
         result: SearchResult,
         stage: str,
-        state: str,
+        state: CandidateState,
         rejection_reason: str | None = None,
-        relevance_diagnostics: dict[str, object] | None = None,
+        relevance_diagnostics: dict[str, Any] | None = None,
         fallback_domain: str = "",
         fallback_bucket_label: str | None = None,
     ) -> None:
@@ -1422,14 +1439,17 @@ class SourceAggregatorService:
         )
         if stage == "rss" and rss_diagnostics:
             relevance_payload["rss_story_match"] = rss_diagnostics
+        stage_value: CandidateStage = (
+            cast(CandidateStage, stage)
+            if stage in {"primary", "rss", "site_search", "open_web"}
+            else "unknown"
+        )
         self._candidate_decisions.append(
             CandidateDecision(
                 url=url,
                 domain=domain,
                 title=title,
-                stage=stage
-                if stage in {"primary", "rss", "site_search", "open_web"}
-                else "unknown",
+                stage=stage_value,
                 state=state,
                 bucket_label=bucket_label,
                 exact_bias=exact_bias,
@@ -1461,7 +1481,7 @@ class SourceAggregatorService:
         self,
         url: str,
         *,
-        state: str,
+        state: CandidateState,
         rejection_reason: str | None = None,
     ) -> None:
         normalized = self._normalize_url(url)
@@ -1480,7 +1500,7 @@ class SourceAggregatorService:
             self._candidate_decisions[index] = updated
             return
 
-    def _resolve_bias(self, domain: str, url: str, text: str):
+    def _resolve_bias(self, domain: str, url: str, text: str) -> BiasResult | None:
         if not domain:
             return None
 
@@ -1491,7 +1511,7 @@ class SourceAggregatorService:
             extra_texts=(),
         )
 
-        def _extra_provider():
+        def _extra_provider() -> list[str]:
             extra_article = self._find_additional_article(domain, url, text)
             return [extra_article] if extra_article else []
 
@@ -1685,7 +1705,7 @@ class SourceAggregatorService:
             ranked = sorted(freq.items(), key=lambda x: x[1], reverse=True)
             return [term for term, _ in ranked[:5]]
 
-    def _init_searcher(self):
+    def _init_searcher(self) -> SearxngSearch | DuckDuckGoSearch:
         if settings.searxng_base_url:
             return SearxngSearch(settings.searxng_base_url, settings.searxng_api_key)
         return DuckDuckGoSearch()

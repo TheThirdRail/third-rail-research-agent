@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import urlparse
@@ -37,6 +38,7 @@ from src.services.rss_retrieval_service import RssRetrievalService
 from src.services.source_scoring import ScoredCandidate, score_candidate
 from src.tools.article_extractor import ArticleExtractor
 from src.tools.bias_classifier import BiasResult
+from src.tools.keyword_extractor import KeywordExtractor
 from src.tools.web_search import DuckDuckGoSearch, SearchResult, SearxngSearch
 from src.utils.url_utils import blocked_public_url_reason, extract_domain, normalize_url
 
@@ -57,6 +59,8 @@ MAX_QUERIES_PER_FAMILY: dict[str, int] = {
     "rss_summary": 2,
     "url_slug": 2,
 }
+
+SOURCE_PREFLIGHT_MAX_WORKERS = 4
 
 
 @dataclass(frozen=True)
@@ -138,6 +142,7 @@ class SourceAggregatorService:
         self._result_stage_by_url: dict[str, str] = {}
         self._result_bucket_by_url: dict[str, str] = {}
         self._rss_story_diagnostics_by_url: dict[str, dict[str, object]] = {}
+        self._keyword_extractor: KeywordExtractor | None = None
 
     def gather_sources(
         self,
@@ -914,8 +919,13 @@ class SourceAggregatorService:
         semantic_scorer = self._build_candidate_semantic_scorer(
             story_packet, description
         )
+        prefetched_candidates = self._prefetch_preflight_candidates(
+            results=results,
+            seen_urls=seen_urls,
+            seen_domains=seen_domains,
+        )
 
-        for result in results:
+        for result_index, result in enumerate(results):
             if self._probed_count >= settings.candidate_probe_limit:
                 break
 
@@ -945,7 +955,10 @@ class SourceAggregatorService:
                 continue
 
             self._probed_count += 1
-            candidate = self._extract_url(candidate_url, require_success=False)
+            if result_index in prefetched_candidates:
+                candidate = prefetched_candidates[result_index]
+            else:
+                candidate = self._extract_url(candidate_url, require_success=False)
             if not candidate or not candidate.full_text:
                 self._record_candidate_decision(
                     candidate=candidate,
@@ -1105,6 +1118,55 @@ class SourceAggregatorService:
             candidate_domains.add(domain)
 
         return scored_candidates
+
+    def _prefetch_preflight_candidates(
+        self,
+        *,
+        results: list[SearchResult],
+        seen_urls: set[str],
+        seen_domains: set[str],
+    ) -> dict[int, SourceCandidate | None]:
+        """Extract likely probe candidates ahead of ordered scoring.
+
+        Probe counters and diagnostics stay in the ordered caller so prefetch
+        does not change observable candidate accounting.
+        """
+        remaining_probe_count = max(
+            0, settings.candidate_probe_limit - self._probed_count
+        )
+        if remaining_probe_count <= 1:
+            return {}
+
+        candidate_urls = set(seen_urls)
+        candidate_domains = set(seen_domains)
+        pending: list[tuple[int, SearchResult]] = []
+        for result_index, result in enumerate(results):
+            if len(pending) >= remaining_probe_count:
+                break
+
+            candidate_url = result.url
+            if not candidate_url.startswith("http"):
+                continue
+            normalized_url = self._normalize_url(candidate_url)
+            domain = extract_domain(candidate_url)
+            if normalized_url in candidate_urls or domain in candidate_domains:
+                continue
+
+            pending.append((result_index, result))
+
+        if len(pending) <= 1:
+            return {}
+
+        def extract_pending(
+            pending_result: tuple[int, SearchResult],
+        ) -> tuple[int, SourceCandidate | None]:
+            result_index, result = pending_result
+            candidate = self._extract_url(result.url, require_success=False)
+            return result_index, candidate
+
+        max_workers = min(SOURCE_PREFLIGHT_MAX_WORKERS, len(pending))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            return dict(executor.map(extract_pending, pending))
 
     def _build_candidate_semantic_scorer(
         self,
@@ -1610,10 +1672,9 @@ class SourceAggregatorService:
     def _extract_keywords(self, text: str) -> list[str]:
         # Best-effort keyword extraction without hard dependency on YAKE
         try:
-            from src.tools.keyword_extractor import KeywordExtractor
-
-            extractor = KeywordExtractor()
-            keywords = extractor.extract(text, top_n=5)
+            if self._keyword_extractor is None:
+                self._keyword_extractor = KeywordExtractor()
+            keywords = self._keyword_extractor.extract(text, top_n=5)
             return [kw.term for kw in keywords if kw.term]
         except Exception:
             # Fallback: simple word frequency

@@ -1,4 +1,6 @@
+import time
 from datetime import datetime
+from threading import Lock
 
 from src.services.discovery_service import DiscoveryService
 from src.tools.rss_aggregator import FeedItem
@@ -95,6 +97,77 @@ def test_prefetch_discovery_skips_unsafe_search_result(monkeypatch):
     context = service._prefetch_discovery_context(["politics"], count=2)
 
     assert "Search Found Story" not in context
+
+
+def test_prefetch_discovery_extracts_search_results_concurrently(monkeypatch):
+    service = DiscoveryService()
+
+    monkeypatch.setattr(
+        "src.services.discovery_service.RSSAggregator.search_feeds",
+        lambda self, keywords, max_age_hours=48, max_per_feed=10: [],
+    )
+    monkeypatch.setattr(
+        "src.services.discovery_service.blocked_public_url_reason",
+        lambda url: "",
+    )
+
+    class SlowSearcher:
+        def news_search(self, query: str, max_results: int = 10, time_range: str = "w"):
+            return [
+                SearchResult(
+                    title=f"Search Story {idx}",
+                    url=f"https://example{idx}.com/story",
+                    snippet="search snippet",
+                    source=f"example{idx}",
+                )
+                for idx in range(4)
+            ]
+
+    monkeypatch.setattr(
+        "src.services.discovery_service._get_searcher", lambda: SlowSearcher()
+    )
+
+    active = 0
+    max_active = 0
+    lock = Lock()
+
+    def fake_extract(self, url: str):
+        nonlocal active, max_active
+        from src.tools.article_extractor import ExtractedArticle
+
+        with lock:
+            active += 1
+            max_active = max(max_active, active)
+        time.sleep(0.05)
+        with lock:
+            active -= 1
+
+        return ExtractedArticle(
+            title=f"Extracted {url}",
+            text="x" * 600,
+            author=None,
+            date=None,
+            domain=url.split("/")[2],
+            url=url,
+            success=True,
+            error=None,
+            error_code=None,
+            extractor_method="test",
+        )
+
+    monkeypatch.setattr(
+        "src.services.discovery_service.ArticleExtractor.extract", fake_extract
+    )
+
+    started_at = time.perf_counter()
+    context = service._prefetch_discovery_context(["politics"], count=4)
+    elapsed = time.perf_counter() - started_at
+
+    assert elapsed < 0.16
+    assert max_active > 1
+    assert context.index("https://example0.com/story") < context.index(
+        "https://example3.com/story"
+    )
 
 
 def test_discover_passes_prefetched_context_to_crew(monkeypatch):

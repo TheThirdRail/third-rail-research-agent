@@ -127,7 +127,7 @@ def _resolve_host_ips(
 ) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
     addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
     for addr in socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM):
-        ip = _parse_ip_address(addr[4][0])
+        ip = _parse_ip_address(str(addr[4][0]))
         if ip is not None and ip not in addresses:
             addresses.append(ip)
     return addresses

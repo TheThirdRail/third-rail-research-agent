@@ -15,6 +15,8 @@ from src.core.codex_oauth.safety import CodexOAuthConfigError, redact_secrets
 from src.core.config import Settings
 from src.core.token_usage_tracker import (
     NormalizedUsage,
+    TokenUsageRecord,
+    TokenUsageStatus,
     TokenUsageTracker,
     estimate_usage_from_texts,
     extract_links,
@@ -322,7 +324,7 @@ def create_app(settings: Settings) -> FastAPI:
         *,
         endpoint: str,
         model: str,
-        status: str,
+        status: TokenUsageStatus,
         started_at: float,
         started_timestamp: dict[str, str],
         query_text: str | None,
@@ -338,23 +340,31 @@ def create_app(settings: Settings) -> FastAPI:
 
         links_provided = extract_links(query_text)
         sites = normalize_sites_from_urls([*metadata_urls, *links_provided])
-        tracker.record(
-            {
-                "event": "llm_token_usage",
-                "run_id": new_run_id(),
-                "request_id": request_id,
-                **started_timestamp,
-                "provider": "openai-oauth-bridge",
-                "endpoint": endpoint,
-                "model": model,
-                "status": status,  # type: ignore[typeddict-item]
-                "query_text": query_text,
-                "links_provided": links_provided,
-                "sites_scanned_or_analyzed": sites,
-                **usage,
-                "duration_ms": int((time.time() - started_at) * 1000),
-            }
-        )
+        record: TokenUsageRecord = {
+            "event": "llm_token_usage",
+            "run_id": new_run_id(),
+            "request_id": request_id,
+            "timestamp": started_timestamp["timestamp"],
+            "date": started_timestamp.get("date", ""),
+            "time": started_timestamp.get("time", ""),
+            "timezone": started_timestamp.get("timezone", ""),
+            "provider": "openai-oauth-bridge",
+            "endpoint": endpoint,
+            "model": model,
+            "status": status,
+            "query_text": query_text,
+            "links_provided": links_provided,
+            "sites_scanned_or_analyzed": sites,
+            "total_input_tokens": usage["total_input_tokens"],
+            "total_output_tokens": usage["total_output_tokens"],
+            "total_tokens": usage["total_tokens"],
+            "cached_input_tokens": usage["cached_input_tokens"],
+            "reasoning_tokens": usage["reasoning_tokens"],
+            "usage_source": usage["usage_source"],
+            "is_estimate": usage["is_estimate"],
+            "duration_ms": int((time.time() - started_at) * 1000),
+        }
+        tracker.record(record)
 
     @app.get("/health")
     def health() -> dict[str, Any]:

@@ -3,13 +3,14 @@
 import logging
 from dataclasses import dataclass
 from threading import Lock
+from typing import Any
 
 from crewai.tools.base_tool import BaseTool
 
 logger = logging.getLogger(__name__)
 
 _YAKE_TOP = 20
-_YAKE_EXTRACTOR_CACHE: dict[tuple[str, int, float, int], object] = {}
+_YAKE_EXTRACTOR_CACHE: dict[tuple[str, int, float, int], Any] = {}
 _YAKE_EXTRACTOR_CACHE_LOCK = Lock()
 
 
@@ -29,14 +30,14 @@ class KeywordExtractor:
         language: str = "en",
         max_ngram_size: int = 2,
         deduplication_threshold: float = 0.9,
-    ):
+    ) -> None:
         """Initialize extractor."""
         self.language = language
         self.max_ngram_size = max_ngram_size
         self.dedup_threshold = deduplication_threshold
-        self._extractor = None
+        self._extractor: Any | None = None
 
-    def _get_extractor(self):
+    def _get_extractor(self) -> Any:
         """Lazy load YAKE extractor."""
         if self._extractor is None:
             try:

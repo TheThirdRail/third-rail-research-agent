@@ -4,6 +4,7 @@ import importlib.util
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import click
 import yaml
@@ -62,7 +63,7 @@ def _pytesseract_ocr_available() -> tuple[bool, str]:
     import tempfile
 
     try:
-        import pytesseract  # type: ignore[import-not-found]
+        import pytesseract
         from PIL import Image, ImageDraw
     except Exception as exc:
         return False, f"OCR import failed: {exc}"
@@ -86,7 +87,7 @@ def _ocr_image_text(image_path: Path) -> str:
     if settings.screenshot_ocr_engine != "pytesseract":
         raise RuntimeError(f"Unsupported OCR engine: {settings.screenshot_ocr_engine}")
     try:
-        import pytesseract  # type: ignore[import-not-found]
+        import pytesseract
     except Exception as exc:
         raise RuntimeError(f"pytesseract is unavailable: {exc}") from exc
     try:
@@ -204,14 +205,20 @@ def _format_ocr_validation_markdown(report: dict[str, object]) -> str:
         "| Image | Status | Score | Expected | Actual/Error |",
         "|---|---|---:|---|---|",
     ]
-    for result in report["results"]:  # type: ignore[index]
-        actual_or_error = result.get("actual_text") or result.get("error")  # type: ignore[union-attr]
+    results = report.get("results", [])
+    if not isinstance(results, list):
+        results = []
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        row: dict[str, Any] = result
+        actual_or_error = row.get("actual_text") or row.get("error")
         lines.append(
             "| {image} | {status} | {score:.3f} | {expected_text} | {actual} |".format(
-                image=result.get("image", ""),  # type: ignore[union-attr]
-                status=result.get("status", ""),  # type: ignore[union-attr]
-                score=float(result.get("score", 0.0)),  # type: ignore[union-attr]
-                expected_text=result.get("expected_text", ""),  # type: ignore[union-attr]
+                image=row.get("image", ""),
+                status=row.get("status", ""),
+                score=float(row.get("score", 0.0)),
+                expected_text=row.get("expected_text", ""),
                 actual=actual_or_error,
             )
         )
@@ -642,7 +649,7 @@ def analyze(
         option_kwargs["embedding_model"] = embedding_model
     if vector_store is not None:
         option_kwargs["vector_store"] = vector_store
-    options = AnalysisOptions(**option_kwargs) if option_kwargs else None
+    options = AnalysisOptions.model_validate(option_kwargs) if option_kwargs else None
 
     console.print(Panel(f"[bold]Analyzing story:[/bold]\n{story_desc[:200]}"))
     if options:

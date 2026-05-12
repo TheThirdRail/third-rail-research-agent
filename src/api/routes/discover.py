@@ -37,9 +37,13 @@ async def discover_stories(request: DiscoverRequest) -> DiscoverResponse:
     If no topics are provided, uses the channel profile.
     """
     result = await run_in_threadpool(_run_discovery_sync, request)
-    return DiscoverResponse(**result)
+    topics = result.get("topics_searched", [])
+    return DiscoverResponse(
+        topics_searched=topics if isinstance(topics, list) else [],
+        raw_output=str(result.get("raw_output", "")),
+    )
 
 
-def _run_discovery_sync(request: DiscoverRequest) -> dict:
+def _run_discovery_sync(request: DiscoverRequest) -> dict[str, object]:
     service = DiscoveryService()
     return service.discover(request.topics)

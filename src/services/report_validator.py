@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from urllib.parse import urlparse
 
 from src.core.exceptions import SourceExtractionError
@@ -199,7 +199,7 @@ def validate_orphaned_citations(report_markdown: str) -> list[str]:
 
 
 def validate_source_findings(
-    source_findings: list[object],
+    source_findings: Sequence[object],
     retained_source_count: int,
 ) -> list[str]:
     """Validate source findings completeness and correctness.
@@ -224,7 +224,7 @@ def validate_source_findings(
     findings: list[dict[str, str]] = []
     for f in source_findings:
         if hasattr(f, "model_dump"):
-            findings.append(f.model_dump())  # type: ignore[union-attr]
+            findings.append(f.model_dump())
         elif isinstance(f, dict):
             findings.append(f)
 

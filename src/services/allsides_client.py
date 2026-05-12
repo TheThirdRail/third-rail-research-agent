@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import logging
 import re
+from collections.abc import Mapping
 
 import httpx
 
@@ -76,7 +77,10 @@ class AllSidesClient:
             return None
 
     def _get_text(
-        self, url: str, params: dict | None = None, timeout: float = 10.0
+        self,
+        url: str,
+        params: Mapping[str, str | int | float | bool | None] | None = None,
+        timeout: float = 10.0,
     ) -> str | None:
         headers = {
             "User-Agent": "Mozilla/5.0 (ResearchAgent/2.0)",

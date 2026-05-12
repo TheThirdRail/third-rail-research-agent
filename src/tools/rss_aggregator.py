@@ -79,7 +79,7 @@ class RSSAggregator:
             logger.error(f"Failed to load feeds config: {e}")
             return []
 
-    def _parse_date(self, entry: dict) -> datetime | None:
+    def _parse_date(self, entry: dict[str, Any]) -> datetime | None:
         """Parse date from feed entry."""
         if hasattr(entry, "published_parsed") and entry.published_parsed:
             published_at = None

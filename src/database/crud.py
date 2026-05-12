@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import desc
@@ -117,8 +118,8 @@ class SourceCRUD:
         embedded_post_urls: list[str] | tuple[str, ...] | None = None,
         image_alt_text: list[str] | tuple[str, ...] | None = None,
         media_captions: list[str] | tuple[str, ...] | None = None,
-        relevance_diagnostics: dict | None = None,
-        media_diagnostics: dict | None = None,
+        relevance_diagnostics: dict[str, Any] | None = None,
+        media_diagnostics: dict[str, Any] | None = None,
     ) -> Source:
         """Create a new source."""
         source = Source(
@@ -195,15 +196,15 @@ class AnalysisCRUD:
         mainstream_narrative: str = "",
         alternative_takes: str = "",
         libertarian_angle: str = "",
-        opinions_by_side: dict | None = None,
+        opinions_by_side: dict[str, Any] | None = None,
         outline: str = "",
         full_report_md: str = "",
-        full_report_json: dict | None = None,
-        coverage_snapshot_json: dict | None = None,
-        candidate_census_json: dict | None = None,
-        visual_evidence_json: dict | None = None,
+        full_report_json: dict[str, Any] | None = None,
+        coverage_snapshot_json: dict[str, Any] | None = None,
+        candidate_census_json: dict[str, Any] | None = None,
+        visual_evidence_json: dict[str, Any] | None = None,
         report_validation_warnings_json: list[str] | None = None,
-        agent_handoff_snapshot_json: dict | None = None,
+        agent_handoff_snapshot_json: dict[str, Any] | None = None,
     ) -> Analysis:
         """Create analysis for a story."""
         analysis = Analysis(
@@ -247,7 +248,7 @@ class AnalysisRunCRUD:
         self,
         story_id: str,
         status: str = "running",
-        options_snapshot: dict | None = None,
+        options_snapshot: dict[str, Any] | None = None,
     ) -> AnalysisRun:
         run = AnalysisRun(
             id=str(uuid4()),
@@ -265,8 +266,8 @@ class AnalysisRunCRUD:
         run_id: str,
         *,
         status: str,
-        coverage_snapshot: dict | None = None,
-        candidate_census: dict | None = None,
+        coverage_snapshot: dict[str, Any] | None = None,
+        candidate_census: dict[str, Any] | None = None,
         report_validation_warnings: list[str] | None = None,
         error: str | None = None,
     ) -> AnalysisRun | None:
@@ -420,7 +421,7 @@ class AgentFindingCRUD:
         *,
         story_id: str,
         analysis_id: str,
-        findings: list[dict],
+        findings: list[dict[str, Any]],
     ) -> list[AgentFinding]:
         rows = [
             AgentFinding(
@@ -455,7 +456,7 @@ class AgentHandoffCRUD:
         from_agent: str = "",
         to_agent: str = "",
         summary: str = "",
-        payload: dict | None = None,
+        payload: dict[str, Any] | None = None,
         analysis_id: str | None = None,
     ) -> AgentHandoff:
         handoff = AgentHandoff(

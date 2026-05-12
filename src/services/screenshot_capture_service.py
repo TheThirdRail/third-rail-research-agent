@@ -7,6 +7,7 @@ import hashlib
 import re
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from src.core.config import settings
@@ -172,7 +173,7 @@ class ScreenshotCaptureService:
         if not self.ocr_enabled:
             return "", {"ocr_status": "disabled"}
         try:
-            import pytesseract  # type: ignore[import-not-found]
+            import pytesseract
         except Exception as exc:
             return "", {
                 "ocr_status": "unavailable",
@@ -212,7 +213,7 @@ class ScreenshotCaptureService:
         return blocked_public_url_reason(target_url)
 
     @staticmethod
-    def _guarded_playwright_route(route) -> None:
+    def _guarded_playwright_route(route: Any) -> None:
         reason = blocked_public_url_reason(route.request.url)
         if reason:
             route.abort()

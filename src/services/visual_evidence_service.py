@@ -214,6 +214,8 @@ class VisualEvidenceService:
 
     @staticmethod
     def _confidence(value: object) -> float:
+        if not isinstance(value, str | int | float):
+            return 0.5
         try:
             return max(0.0, min(1.0, float(value)))
         except Exception:

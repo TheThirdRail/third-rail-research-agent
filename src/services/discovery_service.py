@@ -144,7 +144,7 @@ class DiscoveryService:
                     search_candidates.append((result, normalized))
 
             def build_search_record(candidate: tuple[Any, str]) -> dict[str, str]:
-                result, _normalized = candidate
+                result, normalized = candidate
                 article = extractor.extract(result.url)
 
                 if article.success and len(article.text) >= 200:
@@ -155,15 +155,13 @@ class DiscoveryService:
                         "summary": article.text[:1200],
                         "source": result.source,
                         "method": article.extractor_method or "search_extract",
-                        "published": (
-                            article.date.isoformat() if article.date else ""
-                        ),
+                        "published": (article.date.isoformat() if article.date else ""),
                     }
 
                 return {
                     "title": result.title,
                     "url": result.url,
-                    "domain": extract_domain(result.url),
+                    "domain": extract_domain(normalized),
                     "summary": result.snippet[:800],
                     "source": result.source,
                     "method": "search_snippet",
@@ -171,9 +169,7 @@ class DiscoveryService:
                 }
 
             if search_candidates:
-                max_workers = min(
-                    DISCOVERY_EXTRACT_MAX_WORKERS, len(search_candidates)
-                )
+                max_workers = min(DISCOVERY_EXTRACT_MAX_WORKERS, len(search_candidates))
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     records.extend(executor.map(build_search_record, search_candidates))
 

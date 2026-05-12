@@ -3,10 +3,11 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
+from src.api.dependencies import require_admin_api_key, require_expensive_endpoint_slot
 from src.core.exceptions import (
     BudgetExceededError,
     RateLimitExceededError,
@@ -41,7 +42,14 @@ class AnalyzeResponse(BaseModel):
     right_source_count: int | None = None
 
 
-@router.post("/analyze", response_model=AnalyzeResponse)
+@router.post(
+    "/analyze",
+    response_model=AnalyzeResponse,
+    dependencies=[
+        Depends(require_admin_api_key),
+        Depends(require_expensive_endpoint_slot),
+    ],
+)
 async def analyze_story(request: AnalyzeRequest) -> AnalyzeResponse:
     """Analyze a story and generate a multi-source report.
 

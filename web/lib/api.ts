@@ -1,12 +1,51 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const ADMIN_API_KEY = process.env.NEXT_PUBLIC_ADMIN_API_KEY || "";
+const BACKEND_PROXY_URL = "/api/backend";
 
-function adminHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {};
-    if (ADMIN_API_KEY) {
-        headers["X-Research-Agent-Key"] = ADMIN_API_KEY;
+async function errorDetail(res: Response, fallback: string): Promise<string> {
+    try {
+        const error = await res.json();
+        if (error?.detail) {
+            return String(error.detail);
+        }
+    } catch {
+        // ignore JSON parse errors
     }
-    return headers;
+    return fallback;
+}
+
+function backendPath(path: string): string {
+    return `${BACKEND_PROXY_URL}${path}`;
+}
+
+export interface AdminSession {
+    authenticated: boolean;
+}
+
+export async function getAdminSession(): Promise<AdminSession> {
+    const res = await fetch("/api/admin/session", { cache: "no-store" });
+    if (!res.ok) {
+        return { authenticated: false };
+    }
+    return res.json();
+}
+
+export async function loginAdmin(adminKey: string): Promise<AdminSession> {
+    const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminKey }),
+    });
+    if (!res.ok) {
+        throw new Error(await errorDetail(res, "Admin login failed"));
+    }
+    return res.json();
+}
+
+export async function logoutAdmin(): Promise<void> {
+    const res = await fetch("/api/admin/logout", { method: "POST" });
+    if (!res.ok) {
+        throw new Error(await errorDetail(res, "Admin logout failed"));
+    }
 }
 
 export interface AgentConfig {
@@ -37,20 +76,13 @@ export async function updateAgentConfig(
     agentName: string,
     config: Partial<AgentConfig>
 ): Promise<AgentConfig> {
-    const res = await fetch(`${API_URL}/api/agents/${agentName}/config`, {
+    const res = await fetch(backendPath(`/api/agents/${agentName}/config`), {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...adminHeaders() },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
     });
     if (!res.ok) {
-        let detail = "Failed to update config";
-        try {
-            const error = await res.json();
-            if (error?.detail) detail = error.detail;
-        } catch {
-            // ignore JSON parse errors
-        }
-        throw new Error(detail);
+        throw new Error(await errorDetail(res, "Failed to update config"));
     }
     return res.json();
 }
@@ -68,9 +100,7 @@ export async function getModels(
 ): Promise<ModelInfo[]> {
     const params = new URLSearchParams({ provider });
     if (refresh) params.set("refresh", "true");
-    const res = await fetch(`${API_URL}/api/models?${params.toString()}`, {
-        headers: adminHeaders(),
-    });
+    const res = await fetch(backendPath(`/api/models?${params.toString()}`));
     if (!res.ok) {
         console.error("Failed to fetch models", res.statusText);
         return [];
@@ -94,33 +124,25 @@ export interface AnalyzeResponse {
 }
 
 export async function analyzeStory(request: AnalyzeRequest): Promise<AnalyzeResponse> {
-    const res = await fetch(`${API_URL}/api/analyze`, {
+    const res = await fetch(backendPath("/api/analyze"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
     });
     if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.detail || "Analysis failed");
+        throw new Error(await errorDetail(res, "Analysis failed"));
     }
     return res.json();
 }
 
 export async function exportReportPdf(report_markdown: string): Promise<Blob> {
-    const res = await fetch(`${API_URL}/api/reports/pdf`, {
+    const res = await fetch(backendPath("/api/reports/pdf"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ report_markdown }),
     });
     if (!res.ok) {
-        let detail = "Failed to export PDF";
-        try {
-            const error = await res.json();
-            if (error?.detail) detail = error.detail;
-        } catch {
-            // ignore JSON parse errors
-        }
-        throw new Error(detail);
+        throw new Error(await errorDetail(res, "Failed to export PDF"));
     }
     return res.blob();
 }

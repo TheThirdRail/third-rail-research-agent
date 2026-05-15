@@ -26,7 +26,7 @@ dependencies = [
     # Agent Framework
     "crewai[google-genai]>=0.95.0",
     "crewai-tools>=0.14.0",
-    "litellm>=1.50.0",
+    "litellm>=1.83.7",
     "openai>=1.0.0",  # For API compatibility with multiple providers
     "tiktoken>=0.7.0",
     
@@ -35,7 +35,7 @@ dependencies = [
     "ddgs>=6.0.0",
     "trafilatura>=1.12.0",
     "newspaper4k>=0.9.0",
-    "fundus>=0.5.6",
+    "lxml>=6.1.0",
     
     # Keyword Analysis
     "yake>=0.4.8",
@@ -48,12 +48,11 @@ dependencies = [
     # API
     "fastapi>=0.115.0",
     "uvicorn>=0.32.0",
-    "python-multipart>=0.0.9",  # For file uploads
+    "python-multipart>=0.0.27,<0.1",  # For file uploads
     "aiofiles>=24.1.0",  # For async file operations
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
     "email-validator>=2.2.0",
-    "fastapi-sso>=0.16.0",
     
     # CLI
     "click>=8.1.0",
@@ -63,7 +62,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "httpx>=0.28.0",
     "markdown>=3.6.0",
-    "apscheduler>=3.10.4",
+    "bleach>=6.2.0",
     "playwright>=1.41.0",
     "selenium>=4.28.0",
     "pyyaml>=6.0.0",
@@ -77,6 +76,8 @@ dev = [
     "ruff==0.14.14",
     "mypy>=1.13.0",
     "pre-commit>=4.0.0",
+    "pip-audit>=2.10.0",
+    "bandit>=1.8.0",
 ]
 
 ml = [

@@ -44,6 +44,27 @@ def test_story_parser_extracts_quote_number_and_platform_markers_from_seed_url()
     assert "X" in packet.distinctive_terms
 
 
+def test_story_parser_uses_seed_article_context_before_search_queries():
+    packet = StoryParserService().parse(
+        "Find other coverage of the linked article.",
+        seed_url="https://example.com/politics/jane-smith-school-funding",
+        seed_title="Senator Jane Smith vetoes school funding bill",
+        seed_text=(
+            'Senator Jane Smith vetoed the school funding bill after calling '
+            'the AB123 formula "unworkable" during a press conference.'
+        ),
+    )
+
+    assert packet.canonical_headline == "Senator Jane Smith vetoes school funding bill"
+    assert "Senator Jane Smith" in packet.actors
+    assert "vetoed" in packet.action_verbs
+    assert "AB123" in packet.number_markers
+    assert any(
+        "Senator Jane Smith vetoes school funding bill" in query
+        for query in packet.query_pack
+    )
+
+
 def test_story_parser_builds_query_families_for_bucket_lanes():
     packet = StoryParserService().parse(
         "James Comey was indicted over an X post showing seashells arranged as 8647."

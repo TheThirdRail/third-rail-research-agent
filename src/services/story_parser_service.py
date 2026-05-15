@@ -23,6 +23,8 @@ from src.services.semantic_query_expansion_service import (
 
 logger = logging.getLogger(__name__)
 
+SEED_ARTICLE_CONTEXT_CHARS = 2400
+
 
 class StoryParserService:
     """Parse story descriptions into structured StoryPacket objects.
@@ -41,6 +43,8 @@ class StoryParserService:
         seed_url: str | None = None,
         rss_title: str | None = None,
         rss_summary: str | None = None,
+        seed_title: str | None = None,
+        seed_text: str | None = None,
     ) -> StoryPacket:
         """Parse a story description into a structured packet.
 
@@ -49,18 +53,32 @@ class StoryParserService:
             seed_url: Optional seed article URL.
             rss_title: Optional RSS-matched headline.
             rss_summary: Optional RSS-matched summary.
+            seed_title: Optional extracted seed article title.
+            seed_text: Optional extracted seed article body text.
 
         Returns:
             StoryPacket with extracted metadata.
         """
-        # Combine all text sources for extraction
-        combined = description
-        if rss_title:
-            combined = f"{rss_title}. {combined}"
-        if rss_summary:
-            combined = f"{combined} {rss_summary}"
+        seed_title = (seed_title or "").strip()
+        seed_excerpt = self._compact_seed_text(seed_text)
 
-        headline = rss_title or self._extract_headline(description)
+        # Combine all current-story sources for extraction before retrieval.
+        combined_parts = []
+        if rss_title:
+            combined_parts.append(rss_title)
+        elif seed_title:
+            combined_parts.append(seed_title)
+        if description.strip():
+            combined_parts.append(description)
+        if rss_summary:
+            combined_parts.append(rss_summary)
+        if seed_excerpt:
+            combined_parts.append(seed_excerpt)
+        combined = ". ".join(combined_parts) or description
+
+        headline = rss_title or seed_title or self._extract_headline(
+            description or seed_excerpt
+        )
         actors = self._extract_actors(combined)
         aliases = self._extract_aliases(actors, combined)
         verbs = self._extract_action_verbs(combined)
@@ -126,7 +144,13 @@ class StoryParserService:
             packet.query_pack + query_expander.flatten(packet.query_families)
         )[:12]
         if self._semantic_query_expansion_enabled():
-            self._expand_queries_with_llm(packet, description, rss_summary)
+            self._expand_queries_with_llm(
+                packet,
+                description,
+                rss_summary,
+                seed_title=seed_title,
+                seed_text=seed_excerpt,
+            )
 
         logger.info(
             "Parsed story: headline=%r, actors=%d, queries=%d",
@@ -147,6 +171,9 @@ class StoryParserService:
         packet: StoryPacket,
         description: str,
         rss_summary: str | None,
+        *,
+        seed_title: str | None = None,
+        seed_text: str | None = None,
     ) -> None:
         """Append LLM-generated semantic queries, failing open on any issue."""
         try:
@@ -158,7 +185,13 @@ class StoryParserService:
                 )
             )
             raw = router.complete(
-                self._semantic_query_messages(packet, description, rss_summary),
+                self._semantic_query_messages(
+                    packet,
+                    description,
+                    rss_summary,
+                    seed_title=seed_title,
+                    seed_text=seed_text,
+                ),
                 temperature=0.1,
                 max_tokens=500,
             )
@@ -211,6 +244,9 @@ class StoryParserService:
         packet: StoryPacket,
         description: str,
         rss_summary: str | None,
+        *,
+        seed_title: str | None = None,
+        seed_text: str | None = None,
     ) -> list[dict[str, str]]:
         system = (
             "Generate search phrases that help find articles about the same news "
@@ -221,6 +257,8 @@ class StoryParserService:
             [
                 f"Canonical headline: {packet.canonical_headline}",
                 f"Description: {description[:1200]}",
+                f"Seed article title: {(seed_title or '')[:300]}",
+                f"Seed article text: {(seed_text or '')[:1200]}",
                 f"RSS summary: {(rss_summary or '')[:800]}",
                 f"Actors: {', '.join(packet.actors)}",
                 f"Actions: {', '.join(packet.action_verbs)}",
@@ -363,6 +401,11 @@ class StoryParserService:
                 for family, queries in packet.query_families.items()
             },
         }
+
+    @staticmethod
+    def _compact_seed_text(seed_text: str | None) -> str:
+        compacted = re.sub(r"\s+", " ", seed_text or "").strip()
+        return compacted[:SEED_ARTICLE_CONTEXT_CHARS]
 
     def _extract_headline(self, description: str) -> str:
         """Extract or generate a canonical headline from description."""
@@ -534,15 +577,18 @@ class StoryParserService:
         matches = re.findall(date_pattern, text)
         if matches:
             for match in matches:
-                for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%m/%d/%y", "%m-%d-%y"):
-                    try:
-                        parsed = datetime.strptime(match, fmt)
-                    except ValueError:
-                        continue
-                    return (
-                        parsed - timedelta(days=3),
-                        parsed + timedelta(days=3),
-                    )
+                try:
+                    for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%m/%d/%y", "%m-%d-%y"):
+                        try:
+                            parsed = datetime.strptime(match, fmt)
+                            return (
+                                parsed - timedelta(days=3),
+                                parsed + timedelta(days=3),
+                            )
+                        except ValueError:
+                            continue
+                except Exception:
+                    continue
 
         # Default: ±7 days from now
         return (now - timedelta(days=7), now + timedelta(days=1))

@@ -61,7 +61,7 @@ LOG_LEVEL=INFO
 PYTHONIOENCODING=utf-8
 
 LLM_PROVIDER=openrouter
-OPENROUTER_API_KEY=your_openrouter_api_key_here
+OPENROUTER_API_KEY=replace-with-openrouter-api-key
 
 DATABASE_URL=sqlite:///data/research_agent.db
 SEMANTIC_MEMORY_ENABLED=false
@@ -110,8 +110,8 @@ uvicorn src.api.main:app --reload
 # Navigate to web directory
 cd web
 
-# Install dependencies (first time only)
-npm install
+# Install dependencies from the lockfile (first time only)
+npm ci
 
 # Start development server
 npm run dev
@@ -153,6 +153,8 @@ docker compose up --build
 # - API docs: http://localhost:8000/docs
 ```
 
+For a full rebuild/restart sequence, use [Docker Restart Instructions](docs/docker-restart-instructions.md).
+
 ### Service Architecture
 
 **backend** — FastAPI + CrewAI agents
@@ -165,6 +167,7 @@ docker compose up --build
 - Port: 3000
 - Depends on: backend service
 - Build arg: `NEXT_PUBLIC_API_URL=http://localhost:8000`
+- The URL is baked into the browser bundle and must be reachable from your browser, so the local Docker default is `http://localhost:8000`, not `http://backend:8000`.
 
 **ollama** (optional) — Local LLM runtime
 - Port: 11434
@@ -195,6 +198,13 @@ docker compose up --build
 
 # Run migrations in existing container
 docker compose exec backend research-agent init
+
+# Clean rebuild and restart
+docker compose down
+docker compose build --no-cache
+docker compose up -d
+docker compose exec backend research-agent init
+docker compose exec backend research-agent health --strict
 ```
 
 ### Environment Configuration in Docker
@@ -240,7 +250,7 @@ Choose **one primary provider** and optional fallbacks. OpenRouter is recommende
 5. Add to `.env`:
    ```env
    LLM_PROVIDER=openrouter
-   OPENROUTER_API_KEY=your_openrouter_api_key_here
+   OPENROUTER_API_KEY=replace-with-openrouter-api-key
    ```
 
 **Model selection (UI or env var):**
@@ -258,7 +268,7 @@ Choose **one primary provider** and optional fallbacks. OpenRouter is recommende
 3. Add to `.env`:
    ```env
    LLM_PROVIDER=anthropic
-   ANTHROPIC_API_KEY=your_anthropic_api_key_here
+   ANTHROPIC_API_KEY=replace-with-anthropic-api-key
    ```
 
 **Models available:** Claude 3 (Opus, Sonnet, Haiku)
@@ -289,7 +299,7 @@ OPENAI_BASE_URL=http://localhost:8000/v1
 3. Add to `.env`:
    ```env
    LLM_PROVIDER=gemini
-   GEMINI_API_KEY=your_gemini_api_key_here
+   GEMINI_API_KEY=replace-with-gemini-api-key
    ```
 
 ### Groq
@@ -301,7 +311,7 @@ OPENAI_BASE_URL=http://localhost:8000/v1
 3. Add to `.env`:
    ```env
    LLM_PROVIDER=groq
-   GROQ_API_KEY=your_groq_api_key_here
+   GROQ_API_KEY=replace-with-groq-api-key
    ```
 
 **Note:** Groq has rate limits (~30 requests/minute on free tier). Excellent for local testing.
@@ -311,25 +321,25 @@ OPENAI_BASE_URL=http://localhost:8000/v1
 **Cerebras:**
 ```env
 LLM_PROVIDER=cerebras
-CEREBRAS_API_KEY=your_cerebras_api_key_here
+CEREBRAS_API_KEY=replace-with-cerebras-api-key
 ```
 
 **SambaNova:**
 ```env
 LLM_PROVIDER=sambanova
-SAMBANOVA_API_KEY=your_sambanova_api_key_here
+SAMBANOVA_API_KEY=replace-with-sambanova-api-key
 ```
 
 **Mistral:**
 ```env
 LLM_PROVIDER=mistral
-MISTRAL_API_KEY=your_mistral_api_key_here
+MISTRAL_API_KEY=replace-with-mistral-api-key
 ```
 
 **xAI (Grok):**
 ```env
 LLM_PROVIDER=grok
-XAI_API_KEY=your_xai_api_key_here
+XAI_API_KEY=replace-with-xai-key
 ```
 
 ### Local / Offline Options
@@ -398,7 +408,8 @@ LM_STUDIO_FALLBACK_MODEL=qwen2.5-7b-instruct
 |----------|---------|---------|
 | `API_HOST` | `0.0.0.0` | Bind address for FastAPI backend |
 | `API_PORT` | `8000` | Port for FastAPI backend |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Frontend API endpoint (baked at build) |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Browser-facing frontend API endpoint baked at build time |
+| `ADMIN_API_KEY` | empty | Shared key for admin-protected backend routes; leave empty to disable admin routes |
 
 ### Database
 
@@ -438,21 +449,21 @@ EXACT_CENTER_PREFERRED=true
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SEMANTIC_MEMORY_ENABLED` | `false` | Enable semantic memory features |
-| `SEMANTIC_VECTOR_STORE` | `none` | Optional vector backend (`none` or `lancedb`) |
+| `SEMANTIC_MEMORY_ENABLED` | `false` | Enable SQL-backed semantic memory indexing |
 | `SEMANTIC_QUERY_EXPANSION_ENABLED` | `false` | Expand queries with LLM |
 | `SEMANTIC_CANDIDATE_SCORING_ENABLED` | `false` | Score sources semantically |
+| `SEMANTIC_VECTOR_STORE` | `none` | Optional vector backend; use `lancedb` only when you want the opt-in vector index |
 | `SEMANTIC_TOP_K` | `4` | Results per semantic query |
 | `EMBEDDING_PROVIDER` | `fake` | Embedding service (fake/lmstudio/ollama) |
 | `EMBEDDING_MODEL` | `fake-hash-v1` | Embedding model ID |
 
-**To enable SQL-backed semantic memory:**
+**To enable semantic memory:**
 1. Set `SEMANTIC_MEMORY_ENABLED=true`
-2. Load an embeddings model in LM Studio
-3. Set `EMBEDDING_PROVIDER=lmstudio` and `EMBEDDING_MODEL=<model-id>`
-4. Restart backend
-
-**To opt into LanceDB vector indexing:** also set `SEMANTIC_VECTOR_STORE=lancedb` after installing the optional LanceDB dependency.
+2. For SQL-only local indexing, keep `SEMANTIC_VECTOR_STORE=none`
+3. To enable the optional LanceDB vector index, set `SEMANTIC_VECTOR_STORE=lancedb`
+4. Load an embeddings model in LM Studio
+5. Set `EMBEDDING_PROVIDER=lmstudio` and `EMBEDDING_MODEL=<model-id>`
+6. Restart backend
 
 ---
 
@@ -475,8 +486,8 @@ EXACT_CENTER_PREFERRED=true
 **Solution:**
 1. Verify API key is in `.env` without quotes:
    ```env
-   OPENROUTER_API_KEY=your_openrouter_api_key_here  # Correct
-   # OPENROUTER_API_KEY="your_openrouter_api_key_here"  # Wrong (includes quotes)
+   OPENROUTER_API_KEY=replace-with-openrouter-api-key  # Correct
+   # OPENROUTER_API_KEY="replace-with-openrouter-api-key"  # Wrong (includes quotes)
    ```
 2. Test provider directly:
    ```bash
@@ -512,12 +523,12 @@ EXACT_CENTER_PREFERRED=true
 
 **Solution:**
 1. Verify backend is running: `curl http://localhost:8000/health`
-2. Check `NEXT_PUBLIC_API_URL` in `.env` or Next.js `.env.local`
-3. In Docker: Frontend must reach backend via service name:
+2. Check `NEXT_PUBLIC_API_URL` in `.env`, Next.js `.env.local`, or the `docker-compose.yml` frontend build args
+3. In local Docker Compose, keep the browser-facing value as:
    ```env
-   NEXT_PUBLIC_API_URL=http://backend:8000  # Inside Docker Compose
+   NEXT_PUBLIC_API_URL=http://localhost:8000
    ```
-4. For local development, use `http://localhost:8000`
+4. Only server-side code inside the Compose network should use `http://backend:8000`
 
 ### Docker Container Exits Immediately
 
@@ -530,6 +541,7 @@ EXACT_CENTER_PREFERRED=true
    - Database initialization failed: Run `docker compose exec backend research-agent init`
    - Port already in use: Stop other containers or map to different port
 3. Rebuild image: `docker compose up --build`
+4. For a clean local retry, follow `docs/docker-restart-instructions.md`
 
 ### Health Check Fails
 
@@ -548,10 +560,11 @@ EXACT_CENTER_PREFERRED=true
 **Error:** `LanceDB initialization failed` or `Embedding provider unreachable`
 
 **Solution:**
-1. Semantic memory is optional; disable if not needed:
+1. LanceDB is optional; use the default SQL-backed path if you do not need the vector index:
    ```env
    SEMANTIC_MEMORY_ENABLED=false
    SEMANTIC_QUERY_EXPANSION_ENABLED=false
+   SEMANTIC_VECTOR_STORE=none
    ```
 2. If using LM Studio embeddings, verify:
    - LM Studio is running and has an embeddings model loaded

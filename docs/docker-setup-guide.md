@@ -2,6 +2,9 @@
 
 This guide walks you through setting up and running the Research Agent using Docker.
 
+For a copy-paste restart sequence after code or configuration changes, see
+[Docker Restart Instructions](docker-restart-instructions.md).
+
 ---
 
 ## Prerequisites
@@ -37,7 +40,7 @@ Make sure your `.env` file exists and has your API keys:
 cat .env
 ```
 
-You should see your API keys filled in (e.g., `OPENROUTER_API_KEY=your_openrouter_api_key_here`).
+You should see your API keys filled in (for example, `OPENROUTER_API_KEY=replace-with-openrouter-api-key`).
 
 ### Step 3: Build the Docker Images
 
@@ -114,6 +117,8 @@ docker compose down
 ```powershell
 docker compose build --no-cache
 docker compose up -d
+docker compose exec backend research-agent init
+docker compose exec backend research-agent health --strict
 ```
 
 ### Include Local Ollama (Optional)
@@ -158,7 +163,7 @@ The current Alembic baseline bootstraps the existing schema. Future schema chang
 
 1. Make sure backend is running: `docker compose ps`
 2. Check if backend is healthy: `curl http://localhost:8000/health`
-3. Verify `NEXT_PUBLIC_API_URL` in docker-compose.yml
+3. Verify `NEXT_PUBLIC_API_URL` in `docker-compose.yml`. For this local Docker setup it should stay browser-facing as `http://localhost:8000`.
 
 ### Database issues
 
@@ -167,6 +172,7 @@ The SQLite database is stored in `./data/research_agent.db`. To reset:
 ```powershell
 rm data/research_agent.db
 docker compose restart backend
+docker compose exec backend research-agent init
 ```
 
 ---

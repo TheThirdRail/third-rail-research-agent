@@ -6,10 +6,12 @@ from src.schemas.story_packet import StoryPacket
 from src.services.balanced_source_planner import BucketSpec, SourcePlan
 from src.services.source_aggregator_service import (
     QueryAttempt,
+    SeedExtractionContext,
     SourceAggregatorService,
     SourceCandidate,
 )
 from src.services.source_scoring import ScoredCandidate
+from src.services.story_parser_service import StoryParserService
 from src.tools.bias_classifier import BiasResult
 from src.tools.web_search import SearchResult
 
@@ -171,6 +173,85 @@ def test_gather_sources_records_successful_seed_url_as_primary(monkeypatch):
     assert primary_decision.state == "retained"
     assert primary_decision.domain == "reuters.com"
     assert service.candidate_census().by_stage["primary"] == 1
+
+
+def test_seed_context_is_parsed_then_reused_for_search(monkeypatch):
+    calls = []
+
+    class DummySearcher:
+        def news_search(self, query: str, max_results: int = 10, time_range: str = "m"):
+            calls.append(("search", query))
+            return []
+
+        def web_search(self, query: str, max_results: int = 10):
+            calls.append(("web", query))
+            return []
+
+    seed_url = "https://reuters.com/school-funding"
+
+    monkeypatch.setattr(
+        SourceAggregatorService, "_init_searcher", lambda self: DummySearcher()
+    )
+
+    def fake_extract_url(
+        self, url: str, require_success: bool = False
+    ) -> SourceCandidate:
+        calls.append(("extract", url))
+        return SourceCandidate(
+            url=url,
+            domain="reuters.com",
+            title="Senator Jane Smith vetoes school funding bill",
+            published_date=None,
+            author=None,
+            full_text=(
+                'Senator Jane Smith vetoed AB123 after calling the formula '
+                '"unworkable". '
+            )
+            * 8,
+            extraction_error=None,
+            bias_result=BiasResult(
+                domain="reuters.com",
+                bias=0,
+                bias_label="Center",
+                confidence=1.0,
+                method="dataset",
+                factual_rating="high",
+                category="mainstream",
+            ),
+        )
+
+    monkeypatch.setattr(SourceAggregatorService, "_extract_url", fake_extract_url)
+
+    with patch("src.services.source_aggregator_service.settings") as mock_settings:
+        mock_settings.retained_source_min = 1
+        mock_settings.retained_source_max = 2
+        mock_settings.candidate_probe_limit = 5
+        mock_settings.rss_seed_fallback_enabled = False
+        mock_settings.strict_bucket_enforcement = False
+        mock_settings.required_bucket_groups = "center"
+        mock_settings.analysis_rss_first_enabled = False
+        service = SourceAggregatorService()
+        seed_context = service.prepare_seed_context(seed_url)
+        assert isinstance(seed_context, SeedExtractionContext)
+        assert seed_context.primary is not None
+        story_packet = StoryParserService().parse(
+            "Find other coverage of the linked article.",
+            seed_url=seed_url,
+            seed_title=seed_context.primary.title,
+            seed_text=seed_context.primary.full_text,
+        )
+        sources = service.gather_sources(
+            description="Find other coverage of the linked article.",
+            url=seed_url,
+            story_packet=story_packet,
+            seed_context=seed_context,
+        )
+
+    assert calls.count(("extract", seed_url)) == 1
+    assert calls[0] == ("extract", seed_url)
+    assert any(call[0] in {"search", "web"} for call in calls[1:])
+    assert sources[0].title == "Senator Jane Smith vetoes school funding bill"
+    assert story_packet.canonical_headline == sources[0].title
 
 
 def test_search_queries_round_robins_bucket_steps(monkeypatch):

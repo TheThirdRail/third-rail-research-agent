@@ -42,13 +42,15 @@ API_PORT=8000
 
 ```ini
 NEXT_PUBLIC_API_URL=http://localhost:8000
+ADMIN_API_KEY=
 ```
 
 | Variable | Purpose |
 | :--- | :--- |
-| `NEXT_PUBLIC_API_URL` | URL the Next.js frontend uses to call the backend. Must match `API_HOST:API_PORT`. |
+| `NEXT_PUBLIC_API_URL` | Browser-facing URL the Next.js frontend uses to call the backend. In local Docker Compose this should normally remain `http://localhost:8000`. |
+| `ADMIN_API_KEY` | Shared key for admin-protected backend routes. Leave empty to disable admin routes. |
 
-**No action required** for standard local development. If running in Docker, this might change to `http://backend:8000`.
+**No action required** for standard local development unless you need admin UI operations. If you do set `ADMIN_API_KEY`, generate a random local value and keep it out of screenshots, issue reports, and committed files.
 
 ---
 
@@ -150,7 +152,7 @@ ANTHROPIC_API_KEY=mock-ant-xxxxxxxx
 ### Google Gemini
 
 ```ini
-GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_API_KEY=replace-with-gemini-api-key
 ```
 
 **How to get:**
@@ -165,7 +167,7 @@ GEMINI_API_KEY=your_gemini_api_key_here
 ### Groq
 
 ```ini
-GROQ_API_KEY=your_groq_api_key_here
+GROQ_API_KEY=replace-with-groq-api-key
 ```
 
 **How to get:**
@@ -229,7 +231,7 @@ MISTRAL_API_KEY=xxxxxxxx
 ### xAI (Grok)
 
 ```ini
-XAI_API_KEY=your_xai_api_key_here
+XAI_API_KEY=replace-with-xai-key
 ```
 
 **How to get:**
@@ -275,7 +277,7 @@ SCREENSHOT_OCR_ENGINE=pytesseract
 | Variable | Purpose |
 | :--- | :--- |
 | `SEMANTIC_QUERY_EXPANSION_ENABLED` | Enables LLM-generated search phrases from the current requested story only. It does not reuse prior queries. |
-| `SEMANTIC_VECTOR_STORE` | Keep `none` for the default SQL-backed semantic memory path. Set `lancedb` to enable the opt-in Phase 3 vector index backed by SQL-linked metadata. |
+| `SEMANTIC_VECTOR_STORE` | Keep `none` for the default SQL-backed semantic memory path. Set `lancedb` to enable the opt-in vector index backed by SQL-linked metadata. |
 | `SCREENSHOT_CAPTURE_ENABLED` | Enables restricted Playwright screenshot capture for supported public visual/social evidence URLs. |
 | `SCREENSHOT_OCR_ENABLED` | Enables OCR extraction from captured screenshots when Tesseract is installed. |
 

@@ -88,7 +88,7 @@ class AnalysisService:
         """Run analysis workflow and persist results.
 
         Pipeline stages:
-        1. Story parsing (deterministic headline → StoryPacket)
+        1. Seed URL extraction and story parsing (deterministic headline → StoryPacket)
         2. Source gathering with coverage enforcement
         3. CrewAI analysis (facts, rhetoric, narrative)
         4. Report validation & deterministic rendering
@@ -122,8 +122,18 @@ class AnalysisService:
             ],
         )
 
-        # ── Stage 1: Story parsing ──────────────────────────────────
-        story_packet = story_parser.parse(description, url)
+        # ── Stage 1: Extract seed context and parse story before retrieval ─
+        seed_context = source_aggregator.prepare_seed_context(url)
+        seed_source = seed_context.primary if seed_context else None
+        rss_hint = seed_context.rss_hint if seed_context else None
+        story_packet = story_parser.parse(
+            description,
+            url,
+            rss_title=rss_hint.title if rss_hint else None,
+            rss_summary=rss_hint.summary if rss_hint else None,
+            seed_title=seed_source.title if seed_source else None,
+            seed_text=seed_source.full_text if seed_source else None,
+        )
         logger.info(
             "Story parsed: headline=%s, actors=%s, queries=%d",
             story_packet.canonical_headline[:60],
@@ -152,6 +162,7 @@ class AnalysisService:
                 description,
                 url,
                 story_packet=story_packet,
+                seed_context=seed_context,
             )
             coverage = source_aggregator.summarize_coverage(sources)
             sources_context = source_aggregator.format_sources_context(sources)

@@ -6,7 +6,7 @@ An AI-powered system for automating news research, multi-source bias analysis, a
 
 - **Multi-Source Aggregation** — Pulls coverage across the political spectrum using RSS feeds and DuckDuckGo search
 - **9-Point Political Bias Classification** — Rates sources from Far Left (-4) to Far Right (+4) using dataset-driven classification and LLM validation
-- **Semantic Memory & Retrieval** — SQL-backed memory by default, with optional LanceDB vector indexing for source-grounded evidence retrieval
+- **Semantic Memory & Retrieval** — SQL-backed semantic memory by default, with an optional LanceDB vector index for local advanced retrieval
 - **Fact vs. Opinion Separation** — Clearly distinguishes verifiable facts and visual evidence from editorial interpretation
 - **Balanced Source Planning** — Enforces ideological distribution across story coverage (left-side, center, right-side)
 - **Observability & Diagnostics** — Built-in handoff tracking and diagnostic commands for auditing agent reasoning and retrieval
@@ -48,8 +48,9 @@ research-agent health --strict
 # Start FastAPI backend (separate terminal)
 uvicorn src.api.main:app --reload
 
-# Start Next.js frontend (separate terminal, in ./web)
-npm run dev
+# Install and start Next.js frontend (separate terminal)
+npm --prefix web ci
+npm --prefix web run dev
 ```
 
 ### Docker Deployment (3 commands)
@@ -68,7 +69,7 @@ docker compose up --build
 # - API docs: http://localhost:8000/docs
 ```
 
-See [Deployment Guide](deployment-guide.md) for detailed setup and [Troubleshooting Guide](troubleshooting-guide.md) for common issues.
+See [Deployment Guide](deployment-guide.md) for detailed setup, [Docker Setup Guide](docs/docker-setup-guide.md) for container troubleshooting, and [Docker Restart Instructions](docs/docker-restart-instructions.md) when you want to rebuild and try the app locally.
 
 ## Usage
 
@@ -114,7 +115,7 @@ research-agent handoff <story_id> --stage post-retrieval
 
 ## Architecture
 
-Research Agent uses **CrewAI** for agent orchestration, **FastAPI** for the backend, **Next.js** for the frontend, SQLAlchemy for persistence, and optional LanceDB indexing for semantic memory.
+Research Agent uses **CrewAI** for agent orchestration, **FastAPI** for the backend, **Next.js** for the frontend, SQL for the default semantic memory path, and optional LanceDB for vector indexing.
 
 ### Core Workflows
 
@@ -161,8 +162,8 @@ All configuration is environment-driven via `.env` file. Key settings:
 |---------|---------|---------|
 | `LLM_PROVIDER` | Default LLM provider | `openrouter` |
 | `OPENROUTER_API_KEY` | OpenRouter API key (recommended) | Your key here |
-| `SEMANTIC_MEMORY_ENABLED` | Enable semantic memory features | `true` or `false` |
-| `SEMANTIC_VECTOR_STORE` | Optional vector backend | `none` or `lancedb` |
+| `SEMANTIC_MEMORY_ENABLED` | Enable SQL-backed semantic memory indexing | `true` or `false` |
+| `SEMANTIC_VECTOR_STORE` | Optional vector index backend | `none` or `lancedb` |
 | `SEMANTIC_QUERY_EXPANSION_ENABLED` | Expand queries with LLM | `true` or `false` |
 | `CANDIDATE_PROBE_LIMIT` | Max initial sources to probe | `15` |
 | `RETAINED_SOURCE_MIN/MAX` | Final source count range | `3` / `5` |
@@ -179,7 +180,7 @@ See `.env.example` for all options and detailed explanations.
 3. Add to `.env`:
    ```
    LLM_PROVIDER=openrouter
-   OPENROUTER_API_KEY=your_key_here
+   OPENROUTER_API_KEY=replace-with-openrouter-api-key
    ```
 4. Select model in UI or via `SELECTED_MODEL` env var
 
@@ -201,12 +202,11 @@ See [Deployment Guide](deployment-guide.md) for complete provider configuration.
 
 ## Current Status
 
-- **Backend Stable** — FastAPI routes, CLI commands, diagnostics, benchmarks, balanced source planning, and operator health checks are implemented.
-- **Frontend Available** — Next.js web UI is part of the normal local and Docker workflow.
-- **Advanced Memory Optional** — SQL-backed semantic memory is the local default; LanceDB indexing is opt-in for vector search.
-- **Production Hardening Ongoing** — Multi-instance deployment, monitoring, and rate limiting still need environment-specific decisions.
+- **Backend and CLI:** Active development, with database initialization managed through `research-agent init`.
+- **Web UI:** Available through the Next.js frontend at `http://localhost:3000`.
+- **Semantic memory:** SQL-backed by default; LanceDB remains opt-in through `SEMANTIC_VECTOR_STORE=lancedb`.
 
-**Production Readiness:** Not final. Run the full pytest suite, frontend build/lint checks, and benchmark harness before production use. Use `research-agent init` for database initialization and see [Troubleshooting Guide](troubleshooting-guide.md) for health checks.
+**Production Readiness:** Not final. Run the full pytest suite, frontend checks, and benchmark harness before production use. See [Docker Setup Guide](docs/docker-setup-guide.md) for container health checks.
 
 ## Commands Reference
 
@@ -231,9 +231,12 @@ docker compose logs -f backend     # Stream backend logs
 docker compose --profile local-llm up  # Include Ollama service
 ```
 
+For a clean local restart after code or config changes, follow [Docker Restart Instructions](docs/docker-restart-instructions.md).
+
 ## Support & Debugging
 
-- **Setup Issues** → [Troubleshooting Guide](troubleshooting-guide.md)
+- **Setup Issues** → [Docker Setup Guide](docs/docker-setup-guide.md)
+- **Docker Restart** → [Docker Restart Instructions](docs/docker-restart-instructions.md)
 - **Deployment** → [Deployment Guide](deployment-guide.md)
 - **Technical Details** → [Product Requirements](prd.md)
 - **Repository** → [GitHub](https://github.com/TheThirdRail/third-rail-research-agent)

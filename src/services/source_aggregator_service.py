@@ -100,6 +100,14 @@ class SourceCandidate:
     media_captions: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class SeedExtractionContext:
+    """Seed URL extraction result prepared before story parsing."""
+
+    primary: SourceCandidate | None = None
+    rss_hint: RssFallbackResult | None = None
+
+
 class SourceAggregatorService:
     """Preflight sources before running CrewAI analysis.
 
@@ -144,6 +152,7 @@ class SourceAggregatorService:
         description: str,
         url: str | None,
         story_packet: StoryPacket | None = None,
+        seed_context: SeedExtractionContext | None = None,
     ) -> list[SourceCandidate]:
         """Gather and preflight sources based on description and optional URL."""
         if not description.strip() and not url:
@@ -169,7 +178,7 @@ class SourceAggregatorService:
         # Try extracting the provided URL first, but do not hard-fail if it is
         # blocked/paywalled; continue discovery from search in that case.
         if url:
-            primary = self._extract_url(url, require_success=False)
+            primary = self._seed_primary_for_url(seed_context, url)
             if primary.full_text and len(primary.full_text) >= self.MIN_TEXT_LENGTH:
                 sources.append(primary)
                 seen_urls.add(self._normalize_url(primary.url))
@@ -193,10 +202,7 @@ class SourceAggregatorService:
                     primary_error,
                     primary_error_code or "unknown",
                 )
-                if self._rss_fallback:
-                    rss_hint = self._rss_fallback.resolve_by_url(url)
-                    if not rss_hint:
-                        rss_hint = self._rss_fallback.resolve_by_slug(url)
+                rss_hint = self._rss_hint_for_url(seed_context, url)
 
                 if rss_hint:
                     self._last_seed_context_note = (
@@ -271,6 +277,21 @@ class SourceAggregatorService:
             raise SourceExtractionError(detail)
 
         return sources
+
+    def prepare_seed_context(self, url: str | None) -> SeedExtractionContext | None:
+        """Extract seed URL and RSS metadata before StoryPacket parsing."""
+        if not url:
+            return None
+        primary = self._extract_url(url, require_success=False)
+        rss_hint = None
+        if (
+            (not primary.full_text or len(primary.full_text) < self.MIN_TEXT_LENGTH)
+            and self._rss_fallback
+        ):
+            rss_hint = self._rss_fallback.resolve_by_url(url)
+            if not rss_hint:
+                rss_hint = self._rss_fallback.resolve_by_slug(url)
+        return SeedExtractionContext(primary=primary, rss_hint=rss_hint)
 
     def format_sources_context(self, sources: list[SourceCandidate]) -> str:
         """Format sources into a context block for CrewAI tasks."""
@@ -481,6 +502,33 @@ class SourceAggregatorService:
     def missing_buckets(self) -> list[str]:
         """Return list of required but unfilled bias buckets."""
         return self._missing_buckets
+
+    def _seed_primary_for_url(
+        self,
+        seed_context: SeedExtractionContext | None,
+        url: str,
+    ) -> SourceCandidate:
+        if (
+            seed_context
+            and seed_context.primary
+            and self._normalize_url(seed_context.primary.url) == self._normalize_url(url)
+        ):
+            return seed_context.primary
+        return self._extract_url(url, require_success=False)
+
+    def _rss_hint_for_url(
+        self,
+        seed_context: SeedExtractionContext | None,
+        url: str,
+    ) -> RssFallbackResult | None:
+        if seed_context and seed_context.rss_hint:
+            return seed_context.rss_hint
+        if not self._rss_fallback:
+            return None
+        hint = self._rss_fallback.resolve_by_url(url)
+        if not hint:
+            hint = self._rss_fallback.resolve_by_slug(url)
+        return hint
 
     def _build_query_attempts(
         self,
@@ -1580,6 +1628,7 @@ class SourceAggregatorService:
         if settings.searxng_base_url:
             return SearxngSearch(settings.searxng_base_url, settings.searxng_api_key)
         return DuckDuckGoSearch()
+
 
     def _normalize_url(self, url: str) -> str:
         try:

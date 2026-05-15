@@ -10,6 +10,8 @@ from datetime import datetime
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import Any, TypedDict
+from urllib.parse import urlparse
 
 from crewai.tools.base_tool import BaseTool
 
@@ -18,7 +20,7 @@ from src.utils.url_utils import extract_domain
 
 logger = logging.getLogger(__name__)
 
-EXTRACTOR_VERSION = "2026-02-05-rss-selenium-fallback-v1"
+EXTRACTOR_VERSION = "2026-05-14-fundus-fallback-v1"
 _VERSION_LOGGED = False
 
 ERROR_BLOCKED_CHALLENGE = "blocked_challenge"
@@ -30,6 +32,7 @@ ERROR_EXCEPTION = "exception"
 
 MIN_EXTRACTION_TEXT_LENGTH = 100
 PLAYWRIGHT_PAGE_TIMEOUT_MS = 25000
+FUNDUS_TIMEOUT_SECONDS = 20
 CONTENT_PREVIEW_CHARS = 10000
 MULTI_ARTICLE_MAX_URLS = 10
 MULTI_ARTICLE_CONCURRENCY_LIMIT = 4
@@ -44,6 +47,13 @@ _BLOCKED_SIGNATURES = (
     "geo.captcha-delivery.com",
     "datadome",
 )
+
+
+class _MediaMetadata(TypedDict):
+    og_image_url: str | None
+    embedded_post_urls: list[str]
+    image_alt_text: list[str]
+    media_captions: list[str]
 
 
 class _MediaHTMLParser(HTMLParser):
@@ -324,6 +334,122 @@ class ArticleExtractor:
                 http_status=status,
             )
 
+    @staticmethod
+    def _normalized_host(value: str) -> str:
+        parsed = urlparse(value if "://" in value else f"https://{value}")
+        return parsed.netloc.lower().removeprefix("www.")
+
+    def _fundus_publisher_for_url(self, url: str) -> Any | None:
+        from fundus import PublisherCollection
+
+        url_host = self._normalized_host(url)
+        if not url_host:
+            return None
+
+        for publisher in PublisherCollection:
+            publisher_host = self._normalized_host(publisher.domain)
+            if not publisher_host:
+                continue
+            if url_host == publisher_host or url_host.endswith(f".{publisher_host}"):
+                return publisher
+        return None
+
+    def extract_fundus(self, url: str) -> ExtractedArticle:
+        """Extract using Fundus publisher-specific parsers."""
+        try:
+            import httpx
+
+            publisher = self._fundus_publisher_for_url(url)
+            if publisher is None:
+                return self._failure(
+                    url=url,
+                    error="Fundus has no parser for this publisher",
+                    error_code=ERROR_PARSE_FAILURE,
+                    method="fundus",
+                )
+
+            response = httpx.get(
+                url,
+                follow_redirects=True,
+                headers=publisher.request_header,
+                timeout=FUNDUS_TIMEOUT_SECONDS,
+            )
+            status = response.status_code
+            html_content = response.text or ""
+            title_hint = ""
+            with contextlib.suppress(Exception):
+                import lxml.html
+
+                title_hint = lxml.html.document_fromstring(html_content).findtext(
+                    ".//title"
+                ) or ""
+
+            if status == 403 or self._looks_blocked(html_content, title=title_hint):
+                return self._failure(
+                    url=url,
+                    error="Blocked by anti-bot challenge while using Fundus",
+                    error_code=ERROR_BLOCKED_CHALLENGE,
+                    method="fundus",
+                    http_status=status,
+                )
+
+            if response.is_error:
+                return self._failure(
+                    url=url,
+                    error=f"Fundus download failed with HTTP {status}",
+                    error_code=ERROR_HTTP_403 if status == 403 else ERROR_EXCEPTION,
+                    method="fundus",
+                    http_status=status,
+                )
+
+            extraction = publisher.parser(datetime.now()).parse(
+                html_content,
+                error_handling="suppress",
+            )
+            body = extraction.get("body")
+            text = str(body).strip() if body else ""
+            if not text:
+                return self._failure(
+                    url=url,
+                    error="No content extracted via Fundus",
+                    error_code=ERROR_EMPTY_CONTENT,
+                    method="fundus",
+                    http_status=status,
+                )
+
+            authors = extraction.get("authors") or []
+            author = authors[0] if authors else None
+            published = extraction.get("publishing_date")
+            date = published if isinstance(published, datetime) else None
+            media = self._extract_media_metadata(html_content)
+
+            return ExtractedArticle(
+                title=(extraction.get("title") or title_hint or "").strip(),
+                text=text,
+                author=author,
+                date=date,
+                domain=extract_domain(str(response.url) or url),
+                url=str(response.url) or url,
+                success=True,
+                error=None,
+                error_code=None,
+                http_status=status,
+                extractor_method="fundus",
+                og_image_url=media["og_image_url"],
+                embedded_post_urls=tuple(media["embedded_post_urls"]),
+                image_alt_text=tuple(media["image_alt_text"]),
+                media_captions=tuple(media["media_captions"]),
+            )
+
+        except Exception as exc:
+            logger.warning("Fundus failed for %s: %s", url, exc)
+            return self._failure(
+                url=url,
+                error=str(exc),
+                error_code=ERROR_EXCEPTION,
+                method="fundus",
+            )
+
     def extract_playwright(self, url: str) -> ExtractedArticle:
         """Extract using Playwright sync API (sync-only contexts)."""
         try:
@@ -363,9 +489,7 @@ class ArticleExtractor:
                 try:
                     page = browser.new_page()
                     response = page.goto(
-                        url,
-                        wait_until="domcontentloaded",
-                        timeout=PLAYWRIGHT_PAGE_TIMEOUT_MS,
+                        url, wait_until="domcontentloaded", timeout=PLAYWRIGHT_PAGE_TIMEOUT_MS
                     )
                     if response is not None:
                         status = response.status
@@ -586,6 +710,10 @@ class ArticleExtractor:
         """Extract using newspaper4k in a thread to avoid blocking."""
         return await asyncio.to_thread(self.extract_newspaper, url)
 
+    async def extract_fundus_async(self, url: str) -> ExtractedArticle:
+        """Extract using Fundus in a thread to avoid blocking."""
+        return await asyncio.to_thread(self.extract_fundus, url)
+
     async def extract_playwright_async(self, url: str) -> ExtractedArticle:
         """Extract using Playwright async API (fallback for dynamic/paywalled sites)."""
         try:
@@ -610,9 +738,7 @@ class ArticleExtractor:
                 try:
                     page = await browser.new_page()
                     response = await page.goto(
-                        url,
-                        wait_until="domcontentloaded",
-                        timeout=PLAYWRIGHT_PAGE_TIMEOUT_MS,
+                        url, wait_until="domcontentloaded", timeout=PLAYWRIGHT_PAGE_TIMEOUT_MS
                     )
                     if response is not None:
                         status = response.status
@@ -683,6 +809,11 @@ class ArticleExtractor:
         if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
 
+        logger.info("Falling back to Fundus for %s", url)
+        result = self.extract_fundus(url)
+        if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
+            return result
+
         logger.info("Falling back to Playwright sync for %s", url)
         result = self.extract_playwright(url)
         if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
@@ -691,16 +822,13 @@ class ArticleExtractor:
         if settings.enable_selenium_fallback:
             logger.info("Falling back to Selenium for %s", url)
             selenium_result = self.extract_selenium(url)
-            if (
-                selenium_result.success
-                and len(selenium_result.text) > MIN_EXTRACTION_TEXT_LENGTH
-            ):
+            if selenium_result.success and len(selenium_result.text) > MIN_EXTRACTION_TEXT_LENGTH:
                 return selenium_result
             return selenium_result
 
         return result
 
-    def _extract_media_metadata(self, html_content: str) -> dict[str, object]:
+    def _extract_media_metadata(self, html_content: str) -> _MediaMetadata:
         parser = _MediaHTMLParser()
         with contextlib.suppress(Exception):
             parser.feed(html_content or "")
@@ -738,6 +866,11 @@ class ArticleExtractor:
         if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
 
+        logger.info("Falling back to Fundus for %s", url)
+        result = await self.extract_fundus_async(url)
+        if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
+            return result
+
         logger.info("Falling back to Playwright async for %s", url)
         result = await self.extract_playwright_async(url)
         if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
@@ -746,10 +879,7 @@ class ArticleExtractor:
         if settings.enable_selenium_fallback:
             logger.info("Falling back to Selenium for %s", url)
             selenium_result = await self.extract_selenium_async(url)
-            if (
-                selenium_result.success
-                and len(selenium_result.text) > MIN_EXTRACTION_TEXT_LENGTH
-            ):
+            if selenium_result.success and len(selenium_result.text) > MIN_EXTRACTION_TEXT_LENGTH:
                 return selenium_result
             return selenium_result
 

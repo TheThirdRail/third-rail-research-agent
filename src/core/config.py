@@ -151,6 +151,23 @@ class Settings(BaseSettings):
     analysis_model: str = Field(default="", description="Model for analysis tasks")
 
     # Extraction and discovery fallbacks
+    firecrawl_api_key: str = Field(default="", description="Optional Firecrawl API key")
+    crawl4ai_headless: bool = Field(
+        default=True,
+        description="Run Crawl4AI browsers in headless mode for server/Docker use",
+    )
+    crawl4ai_progressive_undetected_enabled: bool = Field(
+        default=True,
+        description="Escalate Crawl4AI from regular stealth to undetected browser on blocks",
+    )
+    crawl4ai_page_timeout_ms: int = Field(
+        default=60000,
+        description="Crawl4AI page timeout in milliseconds",
+    )
+    crawl4ai_delay_before_return_html: float = Field(
+        default=2.0,
+        description="Crawl4AI delay after page load before extracting HTML",
+    )
     enable_selenium_fallback: bool = True
     max_selenium_attempts: int = 1
     selenium_headless: bool = True

@@ -51,7 +51,7 @@ def test_prefetch_discovery_enrichment_when_rss_sparse(monkeypatch):
             success=True,
             error=None,
             error_code=None,
-            extractor_method="playwright_async",
+            extractor_method="crawl4ai",
         )
 
     monkeypatch.setattr(
@@ -62,7 +62,7 @@ def test_prefetch_discovery_enrichment_when_rss_sparse(monkeypatch):
 
     assert "One RSS Story" in context
     assert "Extracted Search Story" in context
-    assert "Method: playwright_async" in context
+    assert "Method: crawl4ai" in context
 
 
 def test_discover_passes_prefetched_context_to_crew(monkeypatch):

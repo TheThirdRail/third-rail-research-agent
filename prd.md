@@ -151,7 +151,7 @@ Since the creator is libertarian, special attention to sources that may not fit 
 | **Fallback LLM** | Ollama (local) | Optional - only if offline or rate limited |
 | **News Aggregation** | feedparser + RSS | Free, no API key |
 | **Web Search** | ddgs (DuckDuckGo) | Free, no API key |
-| **Article Extraction** | trafilatura + newspaper4k | Free, robust extraction |
+| **Article Extraction** | Crawl4AI + trafilatura + Firecrawl | Browser-aware local extraction with API fallback |
 | **Keyword Analysis** | YAKE + KeyBERT | Local, no API |
 | **YouTube Research** | yt-dlp | Free metadata extraction |
 | **Database** | SQLite + SQLAlchemy | Simple, local, no server |
@@ -382,7 +382,7 @@ Output: Full analysis report (Markdown + JSON) + video outline
 |------|--------|------------|
 | Rate limiting on DuckDuckGo | Medium | Implement delays, have RSS as fallback |
 | Bias classification inaccuracy | High | Use dataset + LLM hybrid approach, allow manual override |
-| Article extraction failures | Medium | Try multiple extractors (trafilatura → newspaper4k → fallback) |
+| Article extraction failures | Medium | Try multiple extractors (Crawl4AI -> trafilatura -> Firecrawl) |
 | LLM quality variance | Medium | Use LiteLLM for easy model switching |
 | pytrends unreliability | Low | Use keyword extraction from articles instead |
 

@@ -229,10 +229,10 @@ sources:
     source: AllSides
     source_url: https://www.allsides.com/media-bias
     
-  "infowars.com":
+  "alexjoneslive.com":
     bias: 4
     factual: very_low
-    name: InfoWars
+    name: Alex Jones Live
     source: AllSides
     source_url: https://www.allsides.com/media-bias
 

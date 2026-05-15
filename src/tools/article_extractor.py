@@ -2,7 +2,10 @@
 
 import asyncio
 import contextlib
+import inspect
+import ipaddress
 import logging
+import socket
 from collections.abc import Awaitable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -20,15 +23,17 @@ from src.utils.url_utils import extract_domain
 
 logger = logging.getLogger(__name__)
 
-EXTRACTOR_VERSION = "2026-05-14-fundus-fallback-v1"
+EXTRACTOR_VERSION = "2026-05-15-crawl4ai-fundus-firecrawl-v1"
 _VERSION_LOGGED = False
 
 ERROR_BLOCKED_CHALLENGE = "blocked_challenge"
 ERROR_HTTP_403 = "http_403"
 ERROR_EMPTY_CONTENT = "empty_content"
-ERROR_TIMEOUT = "timeout"
-ERROR_PARSE_FAILURE = "parse_failure"
 ERROR_EXCEPTION = "exception"
+ERROR_MISSING_API_KEY = "missing_api_key"
+ERROR_PARSE_FAILURE = "parse_failure"
+ERROR_TIMEOUT = "timeout"
+ERROR_UNSAFE_URL = "unsafe_url"
 
 MIN_EXTRACTION_TEXT_LENGTH = 100
 PLAYWRIGHT_PAGE_TIMEOUT_MS = 25000
@@ -47,6 +52,13 @@ _BLOCKED_SIGNATURES = (
     "geo.captcha-delivery.com",
     "datadome",
 )
+
+
+@dataclass(frozen=True)
+class _Crawl4AIAttempt:
+    label: str
+    use_undetected: bool
+    enable_stealth: bool
 
 
 class _MediaMetadata(TypedDict):
@@ -152,7 +164,264 @@ class ExtractedArticle:
 
 
 class ArticleExtractor:
-    """Extracts article content from URLs using multiple methods."""
+    """Extracts articles with local/browser fallbacks and Firecrawl last."""
+
+    def _crawl4ai_attempts(self) -> tuple[_Crawl4AIAttempt, ...]:
+        attempts = [
+            _Crawl4AIAttempt(
+                label="regular_stealth",
+                use_undetected=False,
+                enable_stealth=True,
+            )
+        ]
+        if settings.crawl4ai_progressive_undetected_enabled:
+            attempts.extend(
+                [
+                    _Crawl4AIAttempt(
+                        label="undetected",
+                        use_undetected=True,
+                        enable_stealth=False,
+                    ),
+                    _Crawl4AIAttempt(
+                        label="undetected_stealth",
+                        use_undetected=True,
+                        enable_stealth=True,
+                    ),
+                ]
+            )
+        return tuple(attempts)
+
+    @staticmethod
+    def _instantiate_supported(factory: Any, **kwargs: Any) -> Any:
+        try:
+            signature = inspect.signature(factory)
+        except (TypeError, ValueError):
+            return factory(**kwargs)
+
+        if not any(
+            param.kind == inspect.Parameter.VAR_KEYWORD
+            for param in signature.parameters.values()
+        ):
+            kwargs = {
+                key: value for key, value in kwargs.items() if key in signature.parameters
+            }
+        return factory(**kwargs)
+
+    def _import_crawl4ai_core(self) -> tuple[Any, Any, Any, Any]:
+        from crawl4ai import (
+            AsyncWebCrawler,
+            BrowserConfig,
+            CacheMode,
+            CrawlerRunConfig,
+        )
+
+        return AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
+
+    def _build_crawl4ai_browser_config(
+        self, BrowserConfig: Any, *, enable_stealth: bool
+    ) -> Any:
+        return self._instantiate_supported(
+            BrowserConfig,
+            browser_type="chromium",
+            headless=settings.crawl4ai_headless,
+            viewport_width=1365,
+            viewport_height=768,
+            user_agent_mode="random",
+            enable_stealth=enable_stealth,
+            verbose=False,
+        )
+
+    def _build_crawl4ai_run_config(self, CrawlerRunConfig: Any, CacheMode: Any) -> Any:
+        kwargs: dict[str, Any] = {
+            "cache_mode": CacheMode.BYPASS,
+            "word_count_threshold": 10,
+            "excluded_tags": [
+                "script",
+                "style",
+                "noscript",
+                "nav",
+                "footer",
+                "header",
+                "form",
+                "aside",
+            ],
+            "exclude_social_media_links": True,
+            "exclude_external_images": True,
+            "remove_overlay_elements": True,
+            "remove_consent_popups": True,
+            "magic": True,
+            "simulate_user": True,
+            "override_navigator": True,
+            "wait_until": "load",
+            "page_timeout": settings.crawl4ai_page_timeout_ms,
+            "delay_before_return_html": settings.crawl4ai_delay_before_return_html,
+            "scan_full_page": True,
+            "scroll_delay": 0.2,
+            "user_agent_mode": "random",
+        }
+
+        with contextlib.suppress(Exception):
+            from crawl4ai.content_filter_strategy import PruningContentFilter
+            from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
+
+            kwargs["markdown_generator"] = DefaultMarkdownGenerator(
+                content_filter=PruningContentFilter(
+                    threshold=0.45,
+                    threshold_type="dynamic",
+                    min_word_threshold=5,
+                ),
+                options={
+                    "ignore_images": True,
+                    "skip_internal_links": True,
+                    "body_width": 0,
+                },
+            )
+
+        return self._instantiate_supported(CrawlerRunConfig, **kwargs)
+
+    async def _article_from_crawl4ai_result(
+        self, result: Any, *, url: str
+    ) -> ExtractedArticle:
+        status = self._coerce_status(
+            self._payload_get_any(result, ("status_code", "statusCode"))
+        )
+        success = self._payload_get(result, "success")
+        error_message = self._payload_get(result, "error_message")
+        html_content = self._payload_get_any(result, ("cleaned_html", "html")) or ""
+        markdown_text = self._markdown_text(self._payload_get(result, "markdown"))
+        metadata = self._payload_get(result, "metadata") or {}
+        title = (
+            self._payload_get(metadata, "title")
+            or self._payload_get(result, "title")
+            or ""
+        )
+
+        if success is False:
+            blocked_error_text = f"{error_message or ''}\n{title}"
+            if status in {403, 429} or self._looks_blocked(
+                html_content,
+                markdown_text,
+                blocked_error_text,
+            ):
+                return self._failure(
+                    url=url,
+                    error=str(error_message or "Blocked while using Crawl4AI"),
+                    error_code=ERROR_BLOCKED_CHALLENGE,
+                    method="crawl4ai",
+                    http_status=status,
+                )
+            return self._failure(
+                url=url,
+                error=str(error_message or "Crawl4AI extraction failed"),
+                error_code=ERROR_PARSE_FAILURE,
+                method="crawl4ai",
+                http_status=status,
+            )
+
+        if self._looks_blocked(html_content, markdown_text, str(title)):
+            return self._failure(
+                url=url,
+                error="Blocked by anti-bot challenge while using Crawl4AI",
+                error_code=ERROR_BLOCKED_CHALLENGE,
+                method="crawl4ai",
+                http_status=status,
+            )
+
+        if not markdown_text and html_content:
+            return await asyncio.to_thread(
+                self._extract_from_html,
+                url=url,
+                html_content=html_content,
+                method="crawl4ai",
+                http_status=status,
+                title_hint=str(title),
+            )
+
+        if not markdown_text:
+            return self._failure(
+                url=url,
+                error="No content extracted via Crawl4AI",
+                error_code=ERROR_EMPTY_CONTENT,
+                method="crawl4ai",
+                http_status=status,
+            )
+
+        media = self._extract_media_metadata(html_content)
+        return ExtractedArticle(
+            title=str(title or ""),
+            text=markdown_text,
+            author=None,
+            date=None,
+            domain=extract_domain(url),
+            url=url,
+            success=True,
+            error=None,
+            error_code=None,
+            http_status=status,
+            extractor_method="crawl4ai",
+            og_image_url=media["og_image_url"],
+            embedded_post_urls=tuple(media["embedded_post_urls"]),
+            image_alt_text=tuple(media["image_alt_text"]),
+            media_captions=tuple(media["media_captions"]),
+        )
+
+    async def _run_crawl4ai_attempt(
+        self,
+        *,
+        url: str,
+        attempt: _Crawl4AIAttempt,
+        AsyncWebCrawler: Any,
+        BrowserConfig: Any,
+        CacheMode: Any,
+        CrawlerRunConfig: Any,
+    ) -> ExtractedArticle:
+        try:
+            browser_config = self._build_crawl4ai_browser_config(
+                BrowserConfig,
+                enable_stealth=attempt.enable_stealth,
+            )
+            run_config = self._build_crawl4ai_run_config(CrawlerRunConfig, CacheMode)
+
+            crawler_kwargs: dict[str, Any] = {"config": browser_config}
+            if attempt.use_undetected:
+                try:
+                    from crawl4ai import UndetectedAdapter
+                    from crawl4ai.async_crawler_strategy import (
+                        AsyncPlaywrightCrawlerStrategy,
+                    )
+                except Exception as exc:
+                    return self._failure(
+                        url=url,
+                        error=f"Crawl4AI undetected browser unavailable: {exc}",
+                        error_code=ERROR_EXCEPTION,
+                        method="crawl4ai",
+                    )
+
+                crawler_kwargs["crawler_strategy"] = AsyncPlaywrightCrawlerStrategy(
+                    browser_config=browser_config,
+                    browser_adapter=UndetectedAdapter(),
+                )
+
+            async with AsyncWebCrawler(**crawler_kwargs) as crawler:
+                result = await crawler.arun(url=url, config=run_config)
+
+            return await self._article_from_crawl4ai_result(result, url=url)
+
+        except TimeoutError:
+            return self._failure(
+                url=url,
+                error="Crawl4AI timed out",
+                error_code=ERROR_TIMEOUT,
+                method="crawl4ai",
+            )
+        except Exception as exc:
+            logger.warning("Crawl4AI %s failed for %s: %s", attempt.label, url, exc)
+            return self._failure(
+                url=url,
+                error=str(exc),
+                error_code=ERROR_EXCEPTION,
+                method="crawl4ai",
+            )
 
     def _failure(
         self,
@@ -185,6 +454,97 @@ class ArticleExtractor:
     ) -> bool:
         haystack = f"{title}\n{body_text}\n{html_content}".lower()
         return any(sig in haystack for sig in _BLOCKED_SIGNATURES)
+
+    def _unsafe_url_failure(
+        self, url: str, *, method: str = "url_guard"
+    ) -> ExtractedArticle | None:
+        reason = self._public_url_error(url)
+        if reason is None:
+            return None
+        return self._failure(
+            url=url,
+            error=f"Blocked unsafe article URL: {reason}",
+            error_code=ERROR_UNSAFE_URL,
+            method=method,
+        )
+
+    @staticmethod
+    def _public_url_error(url: str) -> str | None:
+        parsed = urlparse(url)
+        scheme = parsed.scheme.lower()
+        if scheme not in {"http", "https"}:
+            return "only http and https URLs are allowed"
+
+        host = (parsed.hostname or "").strip().lower().rstrip(".")
+        if not host:
+            return "missing host"
+        if host == "localhost":
+            return "localhost is not allowed"
+
+        addresses: list[str] = []
+        try:
+            addresses.append(str(ipaddress.ip_address(host)))
+        except ValueError:
+            try:
+                resolved = socket.getaddrinfo(host, 80, type=socket.SOCK_STREAM)
+            except OSError:
+                resolved = []
+            addresses.extend(str(item[4][0]) for item in resolved if item[4])
+
+        for address in addresses:
+            try:
+                parsed_ip = ipaddress.ip_address(address)
+            except ValueError:
+                continue
+            if (
+                parsed_ip.is_loopback
+                or parsed_ip.is_private
+                or parsed_ip.is_link_local
+                or parsed_ip.is_multicast
+                or parsed_ip.is_reserved
+                or parsed_ip.is_unspecified
+            ):
+                return f"non-public IP address {parsed_ip} is not allowed"
+        return None
+
+    @staticmethod
+    def _payload_get(payload: Any, key: str) -> Any:
+        if isinstance(payload, dict):
+            return payload.get(key)
+        return getattr(payload, key, None)
+
+    @staticmethod
+    def _coerce_status(value: Any) -> int | None:
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            with contextlib.suppress(ValueError):
+                return int(value)
+        return None
+
+    def _payload_get_any(self, payload: Any, keys: tuple[str, ...]) -> Any:
+        for key in keys:
+            value = self._payload_get(payload, key)
+            if value not in (None, ""):
+                return value
+        return None
+
+    def _markdown_text(self, value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, dict):
+            for key in ("fit_markdown", "raw_markdown", "markdown", "content"):
+                text = self._markdown_text(value.get(key))
+                if text:
+                    return text
+            return ""
+        for attr in ("fit_markdown", "raw_markdown", "markdown", "content"):
+            text = self._markdown_text(getattr(value, attr, None))
+            if text:
+                return text
+        return str(value).strip()
 
     def _extract_from_html(
         self,
@@ -249,8 +609,88 @@ class ArticleExtractor:
             media_captions=tuple(media["media_captions"]),
         )
 
+    async def extract_crawl4ai_async(self, url: str) -> ExtractedArticle:
+        """Extract using Crawl4AI as the primary article-body method."""
+        guard = self._unsafe_url_failure(url, method="url_guard")
+        if guard is not None:
+            return guard
+
+        try:
+            AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig = (
+                self._import_crawl4ai_core()
+            )
+        except Exception as exc:
+            return self._failure(
+                url=url,
+                error=f"Crawl4AI unavailable: {exc}",
+                error_code=ERROR_EXCEPTION,
+                method="crawl4ai",
+            )
+
+        last_blocked: ExtractedArticle | None = None
+        for attempt in self._crawl4ai_attempts():
+            result = await self._run_crawl4ai_attempt(
+                url=url,
+                attempt=attempt,
+                AsyncWebCrawler=AsyncWebCrawler,
+                BrowserConfig=BrowserConfig,
+                CacheMode=CacheMode,
+                CrawlerRunConfig=CrawlerRunConfig,
+            )
+
+            if result.success:
+                return result
+
+            if result.error_code != ERROR_BLOCKED_CHALLENGE:
+                if (
+                    attempt.use_undetected
+                    and last_blocked is not None
+                    and result.error_code == ERROR_EXCEPTION
+                ):
+                    logger.info(
+                        "Skipping Crawl4AI %s for %s after setup failure: %s",
+                        attempt.label,
+                        url,
+                        result.error,
+                    )
+                    continue
+                return result
+
+            last_blocked = result
+            logger.info(
+                "Crawl4AI %s was blocked for %s; trying next enhancement",
+                attempt.label,
+                url,
+            )
+
+        if last_blocked is not None:
+            return last_blocked
+        return self._failure(
+            url=url,
+            error="Crawl4AI extraction failed before any attempt completed",
+            error_code=ERROR_PARSE_FAILURE,
+            method="crawl4ai",
+        )
+
+    def extract_crawl4ai(self, url: str) -> ExtractedArticle:
+        """Run Crawl4AI from a synchronous caller."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.extract_crawl4ai_async(url))
+        return self._failure(
+            url=url,
+            error="Crawl4AI sync extraction cannot run inside an asyncio event loop",
+            error_code=ERROR_EXCEPTION,
+            method="crawl4ai",
+        )
+
     def extract_trafilatura(self, url: str) -> ExtractedArticle:
-        """Extract using trafilatura (primary method)."""
+        """Extract using trafilatura as the first fallback method."""
+        guard = self._unsafe_url_failure(url, method="url_guard")
+        if guard is not None:
+            return guard
+
         try:
             import trafilatura
 
@@ -706,8 +1146,148 @@ class ArticleExtractor:
         )
 
     async def extract_trafilatura_async(self, url: str) -> ExtractedArticle:
-        """Extract using trafilatura in a thread to avoid blocking."""
+        """Extract using trafilatura in a worker thread."""
         return await asyncio.to_thread(self.extract_trafilatura, url)
+
+    def _article_from_firecrawl_payload(
+        self, result: Any, *, url: str
+    ) -> ExtractedArticle:
+        data = self._payload_get(result, "data") or result
+        metadata = (
+            self._payload_get(data, "metadata")
+            or self._payload_get(result, "metadata")
+            or {}
+        )
+        markdown_text = self._markdown_text(
+            self._payload_get_any(data, ("markdown", "content"))
+            or self._payload_get_any(result, ("markdown", "content"))
+        )
+        html_content = (
+            self._payload_get(data, "html")
+            or self._payload_get(result, "html")
+            or ""
+        )
+        status = self._coerce_status(
+            self._payload_get_any(data, ("status_code", "statusCode"))
+            or self._payload_get_any(result, ("status_code", "statusCode"))
+        )
+        title = (
+            self._payload_get(metadata, "title")
+            or self._payload_get(data, "title")
+            or self._payload_get(result, "title")
+            or ""
+        )
+        final_url = (
+            self._payload_get(metadata, "sourceURL")
+            or self._payload_get(metadata, "url")
+            or self._payload_get(data, "url")
+            or url
+        )
+
+        if self._looks_blocked(html_content, markdown_text, str(title)):
+            return self._failure(
+                url=url,
+                error="Blocked by anti-bot challenge while using Firecrawl",
+                error_code=ERROR_BLOCKED_CHALLENGE,
+                method="firecrawl",
+                http_status=status,
+            )
+
+        if not markdown_text and html_content:
+            return self._extract_from_html(
+                url=str(final_url),
+                html_content=html_content,
+                method="firecrawl",
+                http_status=status,
+                title_hint=str(title),
+            )
+
+        if not markdown_text:
+            return self._failure(
+                url=url,
+                error="No content extracted via Firecrawl",
+                error_code=ERROR_EMPTY_CONTENT,
+                method="firecrawl",
+                http_status=status,
+            )
+
+        media = self._extract_media_metadata(html_content)
+        return ExtractedArticle(
+            title=str(title or ""),
+            text=markdown_text,
+            author=None,
+            date=None,
+            domain=extract_domain(str(final_url)),
+            url=str(final_url),
+            success=True,
+            error=None,
+            error_code=None,
+            http_status=status,
+            extractor_method="firecrawl",
+            og_image_url=media["og_image_url"],
+            embedded_post_urls=tuple(media["embedded_post_urls"]),
+            image_alt_text=tuple(media["image_alt_text"]),
+            media_captions=tuple(media["media_captions"]),
+        )
+
+    def extract_firecrawl(self, url: str) -> ExtractedArticle:
+        """Extract using Firecrawl cloud API as the final fallback."""
+        guard = self._unsafe_url_failure(url, method="url_guard")
+        if guard is not None:
+            return guard
+
+        api_key = (settings.firecrawl_api_key or "").strip()
+        if not api_key:
+            return self._failure(
+                url=url,
+                error="Firecrawl fallback skipped because FIRECRAWL_API_KEY is not configured",
+                error_code=ERROR_MISSING_API_KEY,
+                method="firecrawl_skipped",
+            )
+
+        try:
+            try:
+                from firecrawl import Firecrawl
+            except Exception:
+                Firecrawl = None
+            try:
+                from firecrawl import FirecrawlApp
+            except Exception:
+                FirecrawlApp = None
+
+            if Firecrawl is not None:
+                client = Firecrawl(api_key=api_key)
+                result = client.scrape(url=url, formats=["markdown", "html"])
+            elif FirecrawlApp is not None:
+                client = FirecrawlApp(api_key=api_key)
+                try:
+                    result = client.scrape_url(
+                        url, params={"formats": ["markdown", "html"]}
+                    )
+                except TypeError:
+                    result = client.scrape_url(url)
+            else:
+                return self._failure(
+                    url=url,
+                    error="Firecrawl SDK unavailable",
+                    error_code=ERROR_EXCEPTION,
+                    method="firecrawl",
+                )
+
+            return self._article_from_firecrawl_payload(result, url=url)
+
+        except Exception as exc:
+            logger.warning("Firecrawl failed for %s: %s", url, exc)
+            return self._failure(
+                url=url,
+                error=str(exc),
+                error_code=ERROR_EXCEPTION,
+                method="firecrawl",
+            )
+
+    async def extract_firecrawl_async(self, url: str) -> ExtractedArticle:
+        """Extract using Firecrawl in a worker thread."""
+        return await asyncio.to_thread(self.extract_firecrawl, url)
 
     async def extract_newspaper_async(self, url: str) -> ExtractedArticle:
         """Extract using newspaper4k in a thread to avoid blocking."""
@@ -805,6 +1385,15 @@ class ArticleExtractor:
         """Extract article with automatic fallback."""
         _log_extractor_version_once()
 
+        guard = self._unsafe_url_failure(url, method="url_guard")
+        if guard is not None:
+            return guard
+
+        result = self.extract_crawl4ai(url)
+        if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
+            return result
+
+        logger.info("Falling back to trafilatura for %s", url)
         result = self.extract_trafilatura(url)
         if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
@@ -832,9 +1421,9 @@ class ArticleExtractor:
                 and len(selenium_result.text) > MIN_EXTRACTION_TEXT_LENGTH
             ):
                 return selenium_result
-            return selenium_result
 
-        return result
+        logger.info("Falling back to Firecrawl for %s", url)
+        return self.extract_firecrawl(url)
 
     def _extract_media_metadata(self, html_content: str) -> _MediaMetadata:
         parser = _MediaHTMLParser()
@@ -865,6 +1454,15 @@ class ArticleExtractor:
         """Extract article with automatic fallback (async-safe)."""
         _log_extractor_version_once()
 
+        guard = self._unsafe_url_failure(url, method="url_guard")
+        if guard is not None:
+            return guard
+
+        result = await self.extract_crawl4ai_async(url)
+        if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
+            return result
+
+        logger.info("Falling back to trafilatura for %s", url)
         result = await self.extract_trafilatura_async(url)
         if result.success and len(result.text) > MIN_EXTRACTION_TEXT_LENGTH:
             return result
@@ -892,9 +1490,9 @@ class ArticleExtractor:
                 and len(selenium_result.text) > MIN_EXTRACTION_TEXT_LENGTH
             ):
                 return selenium_result
-            return selenium_result
 
-        return result
+        logger.info("Falling back to Firecrawl for %s", url)
+        return await self.extract_firecrawl_async(url)
 
 
 class ArticleExtractorTool(BaseTool):
@@ -906,7 +1504,7 @@ class ArticleExtractorTool(BaseTool):
     Use this to get the complete content of a news article for analysis."""
 
     def run(self, *args, **kwargs):
-        """Return awaitable in async contexts to avoid sync Playwright in event loop."""
+        """Return awaitable in async contexts to avoid blocking extraction."""
         try:
             asyncio.get_running_loop()
         except RuntimeError:
@@ -951,7 +1549,7 @@ Method: {article.extractor_method or "unknown"}
             Formatted string with article content
         """
         # Some CrewAI adapters call _run directly. Return an awaitable in async
-        # contexts so sync extraction paths are never invoked on the event loop.
+        # contexts so blocking extraction paths are never invoked on the event loop.
         try:
             asyncio.get_running_loop()
         except RuntimeError:
@@ -1025,7 +1623,7 @@ class MultiArticleExtractorTool(BaseTool):
             return list(executor.map(extractor.extract, url_list))
 
     def run(self, *args, **kwargs):
-        """Return awaitable in async contexts to avoid sync Playwright in event loop."""
+        """Return awaitable in async contexts to avoid blocking extraction."""
         try:
             asyncio.get_running_loop()
         except RuntimeError:
@@ -1042,7 +1640,7 @@ class MultiArticleExtractorTool(BaseTool):
             Combined extraction results
         """
         # Some CrewAI adapters call _run directly. Return an awaitable in async
-        # contexts so sync extraction paths are never invoked on the event loop.
+        # contexts so blocking extraction paths are never invoked on the event loop.
         try:
             asyncio.get_running_loop()
         except RuntimeError:

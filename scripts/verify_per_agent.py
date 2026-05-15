@@ -40,7 +40,6 @@ mock_crewai.Agent = MockAgent
 MOCKED_DEPS = [
     "duckduckgo_search",
     "trafilatura",
-    "newspaper",
     "feedparser",
     "lancedb",
     "chromadb",

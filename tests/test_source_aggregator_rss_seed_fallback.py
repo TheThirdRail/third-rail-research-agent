@@ -80,9 +80,9 @@ def test_seed_blocked_uses_rss_metadata_for_query_enrichment(monkeypatch):
                 published_date=None,
                 author=None,
                 full_text="",
-                extraction_error="Blocked by anti-bot challenge while using Playwright",
+                extraction_error="Blocked by anti-bot challenge while using Crawl4AI",
                 extraction_error_code="blocked_challenge",
-                extractor_method="playwright_async",
+                extractor_method="crawl4ai",
                 http_status=403,
                 bias_result=None,
             )

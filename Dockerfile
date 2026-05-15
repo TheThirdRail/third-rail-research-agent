@@ -28,12 +28,11 @@ FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# Install runtime dependencies (for newspaper4k, trafilatura)
+# Install runtime dependencies for extraction and health checks
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libxml2 \
     libxslt1.1 \
     chromium \
-    chromium-driver \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -44,7 +43,9 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Install Playwright browsers (Chromium) and dependencies
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN mkdir -p /ms-playwright && \
-    playwright install --with-deps chromium
+    playwright install --with-deps chromium && \
+    crawl4ai-setup && \
+    python -c "import crawl4ai; print('Crawl4AI import ok')"
 
 # Copy application code
 COPY src/ ./src/

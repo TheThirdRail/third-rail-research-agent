@@ -12,6 +12,7 @@ from src.services.source_aggregator_service import (
 )
 from src.services.source_scoring import ScoredCandidate
 from src.services.story_parser_service import StoryParserService
+from src.tools.article_extractor import ExtractedArticle
 from src.tools.bias_classifier import BiasResult
 from src.tools.web_search import SearchResult
 
@@ -22,6 +23,39 @@ class NoopRssRetriever:
 
     def search_story(self, story_packet, bucket_spec, *, max_results: int = 8):
         return []
+
+
+def test_extract_url_records_extraction_diagnostics(monkeypatch):
+    monkeypatch.setattr(SourceAggregatorService, "_init_searcher", lambda self: None)
+    monkeypatch.setattr(
+        "src.services.source_aggregator_service.settings.rss_seed_fallback_enabled",
+        False,
+    )
+
+    service = SourceAggregatorService()
+
+    def fake_extract(url: str) -> ExtractedArticle:
+        return ExtractedArticle(
+            title="",
+            text="",
+            author=None,
+            date=None,
+            domain="example.com",
+            url=url,
+            success=False,
+            error="Firecrawl fallback skipped because FIRECRAWL_API_KEY is not configured",
+            error_code="missing_api_key",
+            http_status=None,
+            extractor_method="firecrawl_skipped",
+        )
+
+    monkeypatch.setattr(service._extractor, "extract", fake_extract)
+
+    candidate = service._extract_url("https://example.com/story")
+
+    assert candidate.extractor_method == "firecrawl_skipped"
+    assert candidate.extraction_error_code == "missing_api_key"
+    assert "FIRECRAWL_API_KEY" in (candidate.extraction_error or "")
 
 
 def test_gather_sources_continues_when_seed_url_unextractable(monkeypatch):
@@ -72,7 +106,7 @@ def test_gather_sources_continues_when_seed_url_unextractable(monkeypatch):
                 published_date=None,
                 author=None,
                 full_text="",
-                extraction_error="No content extracted via Playwright",
+                extraction_error="No content extracted via Crawl4AI",
                 bias_result=None,
             )
         return SourceCandidate(

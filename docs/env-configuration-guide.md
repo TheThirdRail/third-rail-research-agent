@@ -243,6 +243,16 @@ XAI_API_KEY=replace-with-xai-key
 
 ---
 
+### Firecrawl (optional extraction fallback)
+
+```ini
+FIRECRAWL_API_KEY=fc-xxxxxxxx
+```
+
+**How to get:** Create a key from [Firecrawl](https://docs.firecrawl.dev/) if you want the final cloud fallback after local Crawl4AI and trafilatura extraction both fail.
+
+---
+
 ## Section 7: Local LLM (Ollama)
 
 ```ini
@@ -292,6 +302,24 @@ Run full-pipeline benchmark checks explicitly:
 ```powershell
 research-agent benchmark --live --live-limit 1 --format markdown
 ```
+
+---
+
+## Article Extraction
+
+```ini
+CRAWL4AI_HEADLESS=true
+CRAWL4AI_PROGRESSIVE_UNDETECTED_ENABLED=true
+CRAWL4AI_PAGE_TIMEOUT_MS=60000
+CRAWL4AI_DELAY_BEFORE_RETURN_HTML=2.0
+```
+
+| Variable | Purpose |
+| :--- | :--- |
+| `CRAWL4AI_HEADLESS` | Keep `true` for Docker/server runs. Set `false` only for local desktop testing with a display. |
+| `CRAWL4AI_PROGRESSIVE_UNDETECTED_ENABLED` | Enables Crawl4AI's progressive path: regular Chromium with stealth first, then undetected browser, then undetected browser plus stealth when blocking is detected. |
+| `CRAWL4AI_PAGE_TIMEOUT_MS` | Maximum page-load time for each Crawl4AI attempt. |
+| `CRAWL4AI_DELAY_BEFORE_RETURN_HTML` | Extra wait after load before Crawl4AI extracts HTML/markdown. |
 
 ---
 

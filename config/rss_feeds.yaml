@@ -4,20 +4,120 @@
 feeds:
   # Center / Wire Services
   center:
-    - name: Reuters
-      url: https://www.reutersagency.com/feed/?taxonomy=best-topics&post_type=best
+    - name: Reuters Best World
+      url: https://reutersbest.com/region/global/feed/
       bias: 0
-      
-    - name: Associated Press
-      url: https://rsshub.app/apnews/topics/apf-topnews
+
+    - name: Reuters Best United States
+      url: https://reutersbest.com/country/united-states/feed/
       bias: 0
-      
+
+    - name: Reuters News
+      url: https://news.google.com/rss/search?q=site:reuters.com+when:24h&ceid=US:en&hl=en-US&gl=US
+      bias: 0
+
+    - name: Reuters Best News
+      url: https://reutersbest.com/feed/
+      bias: 0
+
+    - name: Thomson Reuters News Releases
+      url: https://ir.thomsonreuters.com/rss/news-releases.xml?items=15
+      bias: 0
+
+    - name: Thomson Reuters Events
+      url: https://ir.thomsonreuters.com/rss/events.xml?items=15
+      bias: 0
+
+    - name: Thomson Reuters SEC Filings
+      url: https://ir.thomsonreuters.com/rss/sec-filings.xml?items=15
+      bias: 0
+
+    - name: Associated Press Top News
+      url: https://feedx.net/rss/ap.xml
+      bias: 0
+
+    - name: Associated Press Politics
+      url: https://rss.noleron.com/apnews/topics/politics
+      bias: 0
+
+    - name: Associated Press World News
+      url: https://rss.noleron.com/apnews/topics/world-news
+      bias: 0
+
+    - name: Associated Press Top Stories
+      url: https://flipboard.com/@associatedpress/top-stories-u7govdf1z.rss
+      bias: 0
+
+    - name: Associated Press U.S. News
+      url: https://flipboard.com/@associatedpress/u.s.-news-lhl4uphvz.rss
+      bias: 0
+
+    - name: Associated Press Politics Flipboard
+      url: https://flipboard.com/@associatedpress/politics-h8vn14lnz.rss
+      bias: 0
+
+    - name: Associated Press International
+      url: https://flipboard.com/@associatedpress/international-news-miluvhmaz.rss
+      bias: 0
+
+    - name: Associated Press Technology
+      url: https://flipboard.com/@associatedpress/technology-uvt65hdqz.rss
+      bias: 0
+
+    - name: Associated Press Business and Finance
+      url: https://flipboard.com/@associatedpress/business-and-finance-pbj3bpclz.rss
+      bias: 0
+
     - name: C-SPAN
-      url: https://www.c-span.org/podcasts/rss
+      url: https://feeds.megaphone.fm/cspanwashingtontoday
+      bias: 0
+
+    - name: Bloomberg Opinion
+      url: https://feeds.bloomberg.com/bview/news.rss
+      bias: 0
+
+    - name: Bloomberg U.S.
+      url: https://feeds.bloomberg.com/news.rss
+      bias: 0
+
+    - name: Bloomberg Markets
+      url: https://feeds.bloomberg.com/markets/news.rss
+      bias: 0
+
+    - name: Bloomberg Technology
+      url: https://feeds.bloomberg.com/technology/news.rss
+      bias: 0
+
+    - name: Bloomberg Politics
+      url: https://feeds.bloomberg.com/politics/news.rss
+      bias: 0
+
+    - name: Bloomberg Crypto
+      url: https://feeds.bloomberg.com/crypto/news.rss
+      bias: 0
+
+    - name: Bloomberg Businessweek
+      url: https://feeds.bloomberg.com/businessweek/news.rss
+      bias: 0
+
+    - name: Bloomberg Explainers
+      url: https://flipboard.com/@bloomberg/explainers-s62mgcgqz.rss
+      bias: 0
+
+    - name: Bloomberg Tech Flipboard
+      url: https://flipboard.com/@bloomberg/tech-5m6pvghdz.rss
+      bias: 0
+
+    - name: Bloomberg Politics Flipboard
+      url: https://flipboard.com/@bloomberg/politics-34sivmjkz.rss
       bias: 0
 
   # Slight Left (-1)
   slight_left:
+    - name: USA Today via Google News
+      url: https://news.google.com/rss/search?hl=en-US&gl=US&q=usa+today&um=1&ie=UTF-8&ceid=US:en
+      bias: -1
+
     - name: NPR
       url: https://feeds.npr.org/1001/rss.xml
       bias: -1
@@ -53,7 +153,7 @@ feeds:
   # Left (-3)
   left:
     - name: MSNBC
-      url: https://www.msnbc.com/feeds/latest
+      url: https://www.msnbc.com/feed
       bias: -3
       
     - name: HuffPost
@@ -88,6 +188,46 @@ feeds:
 
   # Right (+3)
   right:
+    - name: Newsmax Newsfront
+      url: http://www.newsmax.com/rss/Newsfront/16
+      bias: 3
+
+    - name: Newsmax America
+      url: http://www.newsmax.com/rss/US/18
+      bias: 3
+
+    - name: Newsmax Politics
+      url: http://www.newsmax.com/rss/Politics/1
+      bias: 3
+
+    - name: Newsmax The Wire
+      url: http://www.newsmax.com/rss/TheWire/118
+      bias: 3
+
+    - name: Newsmax Science and Technology
+      url: http://www.newsmax.com/rss/SciTech/20
+      bias: 3
+
+    - name: Newsmax Finance
+      url: http://www.newsmax.com/rss/FinanceNews/4
+      bias: 3
+
+    - name: Newsmax Economy
+      url: http://www.newsmax.com/rss/Economy/2
+      bias: 3
+
+    - name: Newsmax Health
+      url: http://www.newsmax.com/rss/Health-News/177
+      bias: 3
+
+    - name: Newsmax Companies
+      url: http://www.newsmax.com/rss/Companies/6
+      bias: 3
+
+    - name: Newsmax Global
+      url: http://www.newsmax.com/rss/GlobalTalk/162
+      bias: 3
+
     - name: Fox News
       url: https://moxie.foxnews.com/google-publisher/politics.xml
       bias: 3
@@ -114,12 +254,12 @@ feeds:
       category: libertarian
       
     - name: Mises Institute
-      url: https://mises.org/feed/wire
+      url: https://mises.org/feed
       bias: 0
       category: libertarian
       
     - name: Antiwar.com
-      url: https://www.antiwar.com/feed/
+      url: https://news.antiwar.com/feed/
       bias: 0
       category: libertarian
 
@@ -142,12 +282,8 @@ feeds:
 
   # Fringe / Conspiracy
   fringe_conspiracy:
-    - name: InfoWars (Alex Jones Show)
-      url: https://rss.infowars.com/Alex.xml
-      bias: 4
-
-    - name: InfoWars (Hourly Audio)
-      url: https://rss.infowars.com/hourly/InfowarsHourlyAudio.xml
+    - name: Alex Jones Live
+      url: https://www.alexjoneslive.com/feed/
       bias: 4
 
     - name: The Corbett Report (Articles)
@@ -183,7 +319,7 @@ feeds:
       bias: 0
 
     - name: Coast to Coast AM (Podcast)
-      url: https://rss.premiereradio.net/podcast/coast.xml
+      url: https://www.coasttocoastam.com/articles.rss
       bias: 0
 
 # Topic-specific feeds

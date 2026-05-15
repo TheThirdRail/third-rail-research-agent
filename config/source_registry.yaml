@@ -38,11 +38,17 @@ sources:
     category: mainstream
     factual_rating: high
     rss_urls:
-      - https://www.reutersagency.com/feed/?taxonomy=best-topics&post_type=best
+      - https://reutersbest.com/region/global/feed/
+      - https://reutersbest.com/country/united-states/feed/
+      - https://news.google.com/rss/search?q=site:reuters.com+when:24h&ceid=US:en&hl=en-US&gl=US
+      - https://reutersbest.com/feed/
+      - https://ir.thomsonreuters.com/rss/news-releases.xml?items=15
+      - https://ir.thomsonreuters.com/rss/events.xml?items=15
+      - https://ir.thomsonreuters.com/rss/sec-filings.xml?items=15
     search_aliases: ["Reuters"]
     syndication_group: reuters_wire
     allow_in_analysis: true
-    notes: ""
+    notes: "Includes ReutersBest, Google News site query, and Thomson Reuters investor feeds. Old Reuters Agency feed returned 404 in 2026-05-15 audit."
 
   - name: Associated Press
     domain: apnews.com
@@ -52,11 +58,19 @@ sources:
     category: mainstream
     factual_rating: high
     rss_urls:
-      - https://rsshub.app/apnews/topics/apf-topnews
+      - https://feedx.net/rss/ap.xml
+      - https://rss.noleron.com/apnews/topics/politics
+      - https://rss.noleron.com/apnews/topics/world-news
+      - https://flipboard.com/@associatedpress/top-stories-u7govdf1z.rss
+      - https://flipboard.com/@associatedpress/u.s.-news-lhl4uphvz.rss
+      - https://flipboard.com/@associatedpress/politics-h8vn14lnz.rss
+      - https://flipboard.com/@associatedpress/international-news-miluvhmaz.rss
+      - https://flipboard.com/@associatedpress/technology-uvt65hdqz.rss
+      - https://flipboard.com/@associatedpress/business-and-finance-pbj3bpclz.rss
     search_aliases: ["AP", "Associated Press"]
     syndication_group: ap_wire
     allow_in_analysis: true
-    notes: ""
+    notes: "AP official RSS requires credentials; configured third-party mirrors parsed successfully in 2026-05-15 audit."
 
   - name: C-SPAN
     domain: c-span.org
@@ -66,9 +80,9 @@ sources:
     category: mainstream
     factual_rating: high
     rss_urls:
-      - https://www.c-span.org/podcasts/rss
+      - https://feeds.megaphone.fm/cspanwashingtontoday
     search_aliases: ["C-SPAN", "CSPAN"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -81,8 +95,9 @@ sources:
     factual_rating: mostly_factual
     rss_urls:
       - https://thehill.com/feed/
+      - https://thehill.com/homenews/feed/
     search_aliases: ["The Hill"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: "AllSides rates as Center; some classify as Slight Right"
 
@@ -96,8 +111,10 @@ sources:
     factual_rating: high
     rss_urls:
       - https://feeds.npr.org/1001/rss.xml
+      - https://feeds.npr.org/1004/rss.xml
+      - https://feeds.npr.org/1014/rss.xml
     search_aliases: ["NPR", "National Public Radio"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -110,8 +127,10 @@ sources:
     factual_rating: high
     rss_urls:
       - http://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml
+      - http://feeds.bbci.co.uk/news/world/rss.xml
+      - http://newsrss.bbc.co.uk/rss/newsonline_uk_edition/front_page/rss.xml
     search_aliases: ["BBC", "BBC News"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: "Also accessible via bbc.co.uk"
 
@@ -122,9 +141,11 @@ sources:
     bias_label: Slight Left
     category: mainstream
     factual_rating: high
-    rss_urls: []
+    rss_urls:
+      - https://www.pbs.org/newshour/feeds/rss/politics
+      - https://www.pbs.org/newshour/feeds/rss/world
     search_aliases: ["PBS", "PBS NewsHour"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -140,8 +161,9 @@ sources:
       - https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
       - https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml
       - https://rss.nytimes.com/services/xml/rss/nyt/US.xml
+      - https://rss.nytimes.com/services/xml/rss/nyt/World.xml
     search_aliases: ["NYT", "New York Times", "NY Times"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -154,8 +176,9 @@ sources:
     factual_rating: high
     rss_urls:
       - https://feeds.washingtonpost.com/rss/politics
+      - https://feeds.washingtonpost.com/rss/national
     search_aliases: ["WaPo", "Washington Post"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -168,8 +191,10 @@ sources:
     factual_rating: mixed
     rss_urls:
       - http://rss.cnn.com/rss/cnn_topstories.rss
+      - http://rss.cnn.com/rss/edition.rss
+      - http://rss.cnn.com/rss/edition_world.rss
     search_aliases: ["CNN"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -180,9 +205,11 @@ sources:
     bias_label: Lean Left
     category: mainstream
     factual_rating: mostly_factual
-    rss_urls: []
+    rss_urls:
+      - https://www.theguardian.com/us-news/rss
+      - https://www.theguardian.com/world/rss
     search_aliases: ["The Guardian", "Guardian"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -195,7 +222,7 @@ sources:
     factual_rating: mostly_factual
     rss_urls: []
     search_aliases: ["Politico"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -208,9 +235,9 @@ sources:
     category: mainstream
     factual_rating: mixed
     rss_urls:
-      - https://www.msnbc.com/feeds/latest
+      - https://www.msnbc.com/feed
     search_aliases: ["MSNBC"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -223,8 +250,9 @@ sources:
     factual_rating: mostly_factual
     rss_urls:
       - https://www.huffpost.com/section/politics/feed
+      - https://chaski.huffpost.com/us/auto/vertical/world-news
     search_aliases: ["HuffPost", "Huffington Post"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -235,9 +263,10 @@ sources:
     bias_label: Left
     category: mainstream
     factual_rating: mostly_factual
-    rss_urls: []
+    rss_urls:
+      - https://www.vox.com/rss/index.xml
     search_aliases: ["Vox"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -248,9 +277,10 @@ sources:
     bias_label: Left
     category: mainstream
     factual_rating: mostly_factual
-    rss_urls: []
+    rss_urls:
+      - https://slate.com/feeds/all.rss
     search_aliases: ["Slate"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -265,7 +295,7 @@ sources:
     rss_urls:
       - https://jacobin.com/feed
     search_aliases: ["Jacobin"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -276,9 +306,10 @@ sources:
     bias_label: Far Left
     category: mainstream
     factual_rating: mostly_factual
-    rss_urls: []
+    rss_urls:
+      - https://truthout.org/feed/
     search_aliases: ["TruthOut", "Truthout"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -291,7 +322,7 @@ sources:
     factual_rating: mostly_factual
     rss_urls: []
     search_aliases: ["Common Dreams"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -306,7 +337,7 @@ sources:
     rss_urls:
       - https://www.realclearpolitics.com/index.xml
     search_aliases: ["RealClearPolitics", "RCP"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -317,9 +348,10 @@ sources:
     bias_label: Slight Right
     category: mainstream
     factual_rating: high
-    rss_urls: []
+    rss_urls:
+      - https://api.axios.com/feed/
     search_aliases: ["Axios"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -333,8 +365,11 @@ sources:
     factual_rating: mostly_factual
     rss_urls:
       - https://feeds.a.dj.com/rss/RSSOpinion.xml
+      - https://feeds.content.dowjones.io/public/rss/RSSMarketsMain
+      - https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness
+      - https://feeds.content.dowjones.io/public/rss/socialeconomyfeed
     search_aliases: ["WSJ", "Wall Street Journal"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -348,7 +383,7 @@ sources:
     rss_urls:
       - https://nypost.com/feed/
     search_aliases: ["NY Post", "New York Post"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -359,9 +394,10 @@ sources:
     bias_label: Lean Right
     category: mainstream
     factual_rating: mostly_factual
-    rss_urls: []
+    rss_urls:
+      - https://www.washingtonexaminer.com/feed/
     search_aliases: ["Washington Examiner"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -375,8 +411,9 @@ sources:
     factual_rating: mixed
     rss_urls:
       - https://moxie.foxnews.com/google-publisher/politics.xml
+      - http://feeds.foxnews.com/foxnews/politics
     search_aliases: ["Fox News", "Fox"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -390,7 +427,7 @@ sources:
     rss_urls:
       - https://www.dailywire.com/feeds/rss.xml
     search_aliases: ["Daily Wire"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -403,8 +440,9 @@ sources:
     factual_rating: mostly_factual
     rss_urls:
       - https://www.nationalreview.com/feed/
+      - https://www.nationalreview.com/rss.xml
     search_aliases: ["National Review"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -415,9 +453,10 @@ sources:
     bias_label: Right
     category: mainstream
     factual_rating: mixed
-    rss_urls: []
+    rss_urls:
+      - https://www.theblaze.com/feeds/feed.rss
     search_aliases: ["The Blaze"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -432,7 +471,7 @@ sources:
     rss_urls:
       - https://feeds.feedburner.com/breitbart
     search_aliases: ["Breitbart"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -443,26 +482,26 @@ sources:
     bias_label: Far Right
     category: mainstream
     factual_rating: low
-    rss_urls: []
+    rss_urls:
+      - https://www.thegatewaypundit.com/feed/
     search_aliases: ["Gateway Pundit"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
-  - name: InfoWars
-    domain: infowars.com
-    homepage_url: https://www.infowars.com
+  - name: Alex Jones Live
+    domain: alexjoneslive.com
+    homepage_url: https://www.alexjoneslive.com
     bias: 4
     bias_label: Far Right
     category: fringe_conspiracy
     factual_rating: very_low
     rss_urls:
-      - https://rss.infowars.com/Alex.xml
-      - https://rss.infowars.com/hourly/InfowarsHourlyAudio.xml
-    search_aliases: ["InfoWars", "Alex Jones"]
-    syndication_group: null
+      - https://www.alexjoneslive.com/feed/
+    search_aliases: ["Alex Jones", "Alex Jones Live"]
+    syndication_group:
     allow_in_analysis: true
-    notes: ""
+    notes: "Replaced prior feed after 2026-05-15 audit; bare alexjoneslive.com/feed returned 403, www feed parsed successfully."
 
   # ──────────────────────── LIBERTARIAN ────────────────────────
   - name: Reason
@@ -475,7 +514,7 @@ sources:
     rss_urls:
       - https://reason.com/feed/
     search_aliases: ["Reason Magazine"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: "Libertarian, not left-right center"
 
@@ -487,9 +526,9 @@ sources:
     category: libertarian
     factual_rating: mostly_factual
     rss_urls:
-      - https://mises.org/feed/wire
+      - https://mises.org/feed
     search_aliases: ["Mises Institute", "Mises"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: "Austrian economics / libertarian"
 
@@ -502,7 +541,7 @@ sources:
     factual_rating: mostly_factual
     rss_urls: []
     search_aliases: ["FEE", "Foundation for Economic Education"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -514,9 +553,9 @@ sources:
     category: libertarian
     factual_rating: mostly_factual
     rss_urls:
-      - https://www.antiwar.com/feed/
+      - https://news.antiwar.com/feed/
     search_aliases: ["Antiwar"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -530,8 +569,9 @@ sources:
     factual_rating: high
     rss_urls:
       - https://theintercept.com/feed/?lang=en
+      - https://theintercept.com/feed/
     search_aliases: ["The Intercept"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -545,7 +585,7 @@ sources:
     rss_urls:
       - https://feeds.feedburner.com/zerohedge/feed
     search_aliases: ["Zero Hedge", "ZeroHedge"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -556,9 +596,10 @@ sources:
     bias_label: Center
     category: independent
     factual_rating: mostly_factual
-    rss_urls: []
+    rss_urls:
+      - https://taibbi.substack.com/feed
     search_aliases: ["Matt Taibbi", "Taibbi"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -572,7 +613,7 @@ sources:
     rss_urls:
       - https://greenwald.substack.com/feed
     search_aliases: ["Glenn Greenwald", "Greenwald"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -586,7 +627,7 @@ sources:
     factual_rating: mixed
     rss_urls: []
     search_aliases: ["Joe Rogan", "JRE"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -599,7 +640,7 @@ sources:
     factual_rating: mixed
     rss_urls: []
     search_aliases: ["Tim Pool", "Timcast"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -612,7 +653,7 @@ sources:
     factual_rating: mostly_factual
     rss_urls: []
     search_aliases: ["Breaking Points"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -627,8 +668,9 @@ sources:
     rss_urls:
       - https://www.corbettreport.com/articlerss.xml
       - https://www.corbettreport.com/newrss.xml
+      - https://www.corbettreport.com/feed/
     search_aliases: ["Corbett Report"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -643,7 +685,7 @@ sources:
     rss_urls:
       - https://www.catholicnewsagency.com/rss/news.xml
     search_aliases: ["CNA", "Catholic News Agency"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -657,7 +699,7 @@ sources:
     rss_urls:
       - https://www.usccb.org/news/rss/index.cfm
     search_aliases: ["USCCB"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -671,7 +713,7 @@ sources:
     rss_urls:
       - https://ncregister.com/feeds/general-news.xml
     search_aliases: ["National Catholic Register"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -685,7 +727,7 @@ sources:
     rss_urls:
       - http://ncronline.org/rss.xml
     search_aliases: ["National Catholic Reporter", "NCR"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -700,7 +742,7 @@ sources:
     rss_urls:
       - https://mysteriousuniverse.org/feed/podcast
     search_aliases: ["Mysterious Universe"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -712,9 +754,9 @@ sources:
     category: supernatural
     factual_rating: mixed
     rss_urls:
-      - https://rss.premiereradio.net/podcast/coast.xml
+      - https://www.coasttocoastam.com/articles.rss
     search_aliases: ["Coast to Coast AM", "Coast to Coast"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -727,13 +769,11 @@ sources:
     bias_label: Center
     category: mainstream
     factual_rating: mostly_factual
-    rss_urls:
-      - https://www.forbes.com/business/feed/
-      - https://www.forbes.com/investing/feed/
+    rss_urls: []
     search_aliases: ["Forbes"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
-    notes: ""
+    notes: "RSS disabled per 2026-05-15 operator note; use search discovery."
 
   - name: Christian Science Monitor
     domain: csmonitor.com
@@ -746,7 +786,7 @@ sources:
       - https://rss.csmonitor.com/feeds/world
       - https://rss.csmonitor.com/feeds/usa
     search_aliases: ["CSM", "Christian Science Monitor"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -760,7 +800,7 @@ sources:
     rss_urls:
       - https://www.newsweek.com/rss
     search_aliases: ["Newsweek"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -772,10 +812,18 @@ sources:
     category: mainstream
     factual_rating: mostly_factual
     rss_urls:
+      - https://feeds.bloomberg.com/bview/news.rss
+      - https://feeds.bloomberg.com/news.rss
       - https://feeds.bloomberg.com/markets/news.rss
       - https://feeds.bloomberg.com/technology/news.rss
+      - https://feeds.bloomberg.com/politics/news.rss
+      - https://feeds.bloomberg.com/crypto/news.rss
+      - https://feeds.bloomberg.com/businessweek/news.rss
+      - https://flipboard.com/@bloomberg/explainers-s62mgcgqz.rss
+      - https://flipboard.com/@bloomberg/tech-5m6pvghdz.rss
+      - https://flipboard.com/@bloomberg/politics-34sivmjkz.rss
     search_aliases: ["Bloomberg"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -789,7 +837,7 @@ sources:
     rss_urls:
       - https://www.marketwatch.com/rss/topstories
     search_aliases: ["MarketWatch"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -802,11 +850,11 @@ sources:
     category: mainstream
     factual_rating: mostly_factual
     rss_urls:
-      - https://rssfeeds.usatoday.com/usatoday-newstopstories
+      - https://news.google.com/rss/search?hl=en-US&gl=US&q=usa+today&um=1&ie=UTF-8&ceid=US:en
     search_aliases: ["USA Today"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
-    notes: ""
+    notes: "Old rssfeeds.usatoday.com feed redirected to the homepage; Google News feed parsed successfully in 2026-05-15 audit."
 
   - name: The Conversation
     domain: theconversation.com
@@ -818,7 +866,7 @@ sources:
     rss_urls:
       - https://theconversation.com/us/articles.atom
     search_aliases: ["The Conversation"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -834,7 +882,7 @@ sources:
       - http://feeds.abcnews.com/abcnews/usheadlines
       - http://feeds.abcnews.com/abcnews/politicsheadlines
     search_aliases: ["ABC News"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -848,7 +896,7 @@ sources:
     rss_urls:
       - https://www.aljazeera.com/xml/rss/all.xml
     search_aliases: ["Al Jazeera"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -862,7 +910,7 @@ sources:
     rss_urls:
       - http://feeds.businessinsider.com/custom/all
     search_aliases: ["Business Insider", "BI"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -877,7 +925,7 @@ sources:
     rss_urls:
       - https://www.theatlantic.com/feed/all/
     search_aliases: ["The Atlantic"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -891,7 +939,7 @@ sources:
     rss_urls:
       - https://www.thenation.com/feed/?post_type=article
     search_aliases: ["The Nation"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -905,7 +953,7 @@ sources:
     rss_urls:
       - https://www.motherjones.com/feed/
     search_aliases: ["Mother Jones"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -920,7 +968,7 @@ sources:
     rss_urls:
       - https://www.democracynow.org/democracynow.rss
     search_aliases: ["Democracy Now"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -934,7 +982,7 @@ sources:
     rss_urls:
       - https://thegrayzone.com/feed/
     search_aliases: ["The Grayzone"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -949,7 +997,7 @@ sources:
     rss_urls:
       - https://www.ft.com/?format=rss
     search_aliases: ["FT", "Financial Times"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -964,7 +1012,7 @@ sources:
     rss_urls:
       - https://www.dailymail.co.uk/ushome/index.rss
     search_aliases: ["Daily Mail"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -978,7 +1026,7 @@ sources:
     rss_urls:
       - https://www.washingtontimes.com/rss/headlines/news/
     search_aliases: ["Washington Times"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -993,7 +1041,7 @@ sources:
     rss_urls:
       - https://www.theamericanconservative.com/feed/
     search_aliases: ["The American Conservative", "TAC"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -1005,11 +1053,20 @@ sources:
     category: mainstream
     factual_rating: mixed
     rss_urls:
-      - https://www.newsmax.com/rss/Newsfront/16/
+      - http://www.newsmax.com/rss/Newsfront/16
+      - http://www.newsmax.com/rss/US/18
+      - http://www.newsmax.com/rss/Politics/1
+      - http://www.newsmax.com/rss/TheWire/118
+      - http://www.newsmax.com/rss/SciTech/20
+      - http://www.newsmax.com/rss/FinanceNews/4
+      - http://www.newsmax.com/rss/Economy/2
+      - http://www.newsmax.com/rss/Health-News/177
+      - http://www.newsmax.com/rss/Companies/6
+      - http://www.newsmax.com/rss/GlobalTalk/162
     search_aliases: ["Newsmax"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
-    notes: ""
+    notes: "HTTP feed URLs parsed successfully and redirect to HTTPS; direct HTTPS attempts timed out in 2026-05-15 audit."
 
   # Far Right additions
   - name: Daily Caller
@@ -1022,7 +1079,7 @@ sources:
     rss_urls:
       - http://dailycaller.com/section/politics/feed/
     search_aliases: ["Daily Caller"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -1036,7 +1093,7 @@ sources:
     rss_urls:
       - https://www.oann.com/feed/
     search_aliases: ["OANN", "One America News"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -1048,12 +1105,11 @@ sources:
     bias_label: Center
     category: fringe_conspiracy
     factual_rating: low
-    rss_urls:
-      - https://www.abovetopsecret.com/rss/news.xml
+    rss_urls: []
     search_aliases: ["Above Top Secret", "ATS"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
-    notes: ""
+    notes: "RSS endpoint returned 522 in 2026-05-15 audit."
 
   - name: Natural News
     domain: naturalnews.com
@@ -1065,7 +1121,7 @@ sources:
     rss_urls:
       - https://www.naturalnews.com/rss.xml
     search_aliases: ["Natural News"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -1078,9 +1134,9 @@ sources:
     category: religion_spiritual
     factual_rating: mostly_factual
     rss_urls:
-      - http://feeds.christianitytoday.com/christianitytoday/ctmag
+      - https://www.christianitytoday.com/feed/
     search_aliases: ["Christianity Today"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -1094,7 +1150,7 @@ sources:
     rss_urls:
       - https://religionnews.com/feed/
     search_aliases: ["RNS", "Religion News Service"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: ""
 
@@ -1109,11 +1165,530 @@ sources:
     rss_urls:
       - https://www.theblackvault.com/documentarchive/feed/
     search_aliases: ["The Black Vault"]
-    syndication_group: null
+    syndication_group:
     allow_in_analysis: true
     notes: "FOIA-focused"
 
 # Topic-specific feeds (not bias-classified, supplementary)
+  - name: David Icke
+    domain: davidicke.com
+    homepage_url: https://www.davidicke.com
+    bias: 4
+    bias_label: Far Right
+    category: fringe_conspiracy
+    factual_rating: very_low
+    rss_urls:
+      - https://www.davidicke.com/feed/
+    search_aliases:
+      - David Icke
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Project Camelot
+    domain: projectcamelotportal.com
+    homepage_url: https://projectcamelotportal.com
+    bias: 0
+    bias_label: Center
+    category: fringe_conspiracy
+    factual_rating: low
+    rss_urls:
+      - https://projectcamelotportal.com/feed/
+    search_aliases:
+      - Project Camelot
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Lion's Roar
+    domain: lionsroar.com
+    homepage_url: https://www.lionsroar.com
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.lionsroar.com/category/buddhadharma/feed/
+      - https://www.lionsroar.com/feed/
+    search_aliases:
+      - Lion's Roar
+      - Buddhadharma
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Tricycle
+    domain: tricycle.org
+    homepage_url: https://tricycle.org
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://tricycle.org/feed/
+    search_aliases:
+      - Tricycle
+      - 'Tricycle: The Buddhist Review'
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Christian Today
+    domain: christiantoday.com
+    homepage_url: https://www.christiantoday.com
+    bias: 1
+    bias_label: Slight Right
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.christiantoday.com/rss/world.xml
+    search_aliases:
+      - Christian Today
+      - Christian Today UK
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Orthodox Christian Network
+    domain: myocn.net
+    homepage_url: https://myocn.net
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://myocn.net/feed/
+    search_aliases:
+      - Orthodox Christian Network
+      - OCN
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Hindu American Foundation
+    domain: hinduamerican.org
+    homepage_url: https://www.hinduamerican.org
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.hinduamerican.org/feed
+    search_aliases:
+      - Hindu American Foundation
+      - HAF
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Hinduism Today
+    domain: hinduismtoday.com
+    homepage_url: https://www.hinduismtoday.com
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.hinduismtoday.com/feed/
+    search_aliases:
+      - Hinduism Today
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Jewish Telegraphic Agency
+    domain: jta.org
+    homepage_url: https://www.jta.org
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.jta.org/feed
+    search_aliases:
+      - Jewish Telegraphic Agency
+      - JTA
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: The Forward
+    domain: forward.com
+    homepage_url: https://forward.com
+    bias: -2
+    bias_label: Lean Left
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://forward.com/feed/
+    search_aliases:
+      - The Forward
+      - Forward
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: The Times of Israel
+    domain: timesofisrael.com
+    homepage_url: https://www.timesofisrael.com
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.timesofisrael.com/feed/
+    search_aliases:
+      - The Times of Israel
+      - Times of Israel
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Islamic Networks Group
+    domain: ing.org
+    homepage_url: https://ing.org
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://ing.org/feed/
+    search_aliases:
+      - Islamic Networks Group
+      - ING
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: MuslimMatters
+    domain: muslimmatters.org
+    homepage_url: https://muslimmatters.org
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - http://feeds.feedburner.com/Muslimmatters
+    search_aliases:
+      - MuslimMatters
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: The Wild Hunt
+    domain: wildhunt.org
+    homepage_url: https://wildhunt.org
+    bias: 0
+    bias_label: Center
+    category: religion_spiritual
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://wildhunt.org/feed
+    search_aliases:
+      - The Wild Hunt
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: MindBodyGreen
+    domain: mindbodygreen.com
+    homepage_url: https://www.mindbodygreen.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.mindbodygreen.com/rss/feed.xml
+    search_aliases:
+      - MindBodyGreen
+      - mindbodygreen
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Spirit Science
+    domain: spiritsciencecentral.com
+    homepage_url: https://spiritsciencecentral.com
+    bias: 0
+    bias_label: Center
+    category: alternative
+    factual_rating: mixed
+    rss_urls:
+      - https://spiritsciencecentral.com/feed/
+    search_aliases:
+      - Spirit Science
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Fortean Times
+    domain: forteantimes.com
+    homepage_url: https://www.forteantimes.com
+    bias: 0
+    bias_label: Center
+    category: supernatural
+    factual_rating: mixed
+    rss_urls:
+      - https://www.forteantimes.com/feed/
+    search_aliases:
+      - Fortean Times
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Paranormal Underground
+    domain: paranormalunderground.net
+    homepage_url: https://paranormalunderground.net
+    bias: 0
+    bias_label: Center
+    category: supernatural
+    factual_rating: mixed
+    rss_urls:
+      - https://feed.podbean.com/paranormalunderground/feed.xml
+    search_aliases:
+      - Paranormal Underground
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Science Magazine
+    domain: science.org
+    homepage_url: https://www.science.org
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://www.sciencemag.org/rss/current.xml
+    search_aliases:
+      - Science Magazine
+      - AAAS Science
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Nature
+    domain: nature.com
+    homepage_url: https://www.nature.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://www.nature.com/nature.rss
+    search_aliases:
+      - Nature
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: ScienceDaily
+    domain: sciencedaily.com
+    homepage_url: https://www.sciencedaily.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.sciencedaily.com/rss/all.xml
+    search_aliases:
+      - ScienceDaily
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Popular Science
+    domain: popsci.com
+    homepage_url: https://www.popsci.com
+    bias: -1
+    bias_label: Slight Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.popsci.com/arcio/rss/
+    search_aliases:
+      - Popular Science
+      - PopSci
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Space.com
+    domain: space.com
+    homepage_url: https://www.space.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.space.com/feeds/all
+    search_aliases:
+      - Space.com
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: NASA
+    domain: nasa.gov
+    homepage_url: https://www.nasa.gov
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://www.nasa.gov/news-release/feed/
+    search_aliases:
+      - NASA
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: New Scientist
+    domain: newscientist.com
+    homepage_url: https://www.newscientist.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - http://feeds.newscientist.com/science-news
+    search_aliases:
+      - New Scientist
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Wellness Mama
+    domain: wellnessmama.com
+    homepage_url: https://wellnessmama.com
+    bias: 0
+    bias_label: Center
+    category: alternative
+    factual_rating: mixed
+    rss_urls:
+      - https://wellnessmama.com/feed
+    search_aliases:
+      - Wellness Mama
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Chris Kresser
+    domain: chriskresser.com
+    homepage_url: https://chriskresser.com
+    bias: 0
+    bias_label: Center
+    category: alternative
+    factual_rating: mixed
+    rss_urls:
+      - https://chriskresser.com/feed
+    search_aliases:
+      - Chris Kresser
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: MyFitnessPal
+    domain: myfitnesspal.com
+    homepage_url: https://www.myfitnesspal.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://blog.myfitnesspal.com/feed
+    search_aliases:
+      - MyFitnessPal
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Men's Health
+    domain: menshealth.com
+    homepage_url: https://www.menshealth.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.menshealth.com/rss/all.xml/
+    search_aliases:
+      - Men's Health
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Lifehacker
+    domain: lifehacker.com
+    homepage_url: https://lifehacker.com
+    bias: -1
+    bias_label: Slight Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - http://vitals.lifehacker.com/rss
+    search_aliases:
+      - Lifehacker
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Ars Technica
+    domain: arstechnica.com
+    homepage_url: https://arstechnica.com
+    bias: -2
+    bias_label: Lean Left
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - http://feeds.arstechnica.com/arstechnica/index
+    search_aliases:
+      - Ars Technica
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Wired
+    domain: wired.com
+    homepage_url: https://www.wired.com
+    bias: -2
+    bias_label: Lean Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.wired.com/feed/rss
+    search_aliases:
+      - Wired
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: The Verge
+    domain: theverge.com
+    homepage_url: https://www.theverge.com
+    bias: -2
+    bias_label: Lean Left
+    category: mainstream
+    factual_rating: mostly_factual
+    rss_urls:
+      - https://www.theverge.com/rss/index.xml
+    search_aliases:
+      - The Verge
+      - Verge
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: MIT Technology Review
+    domain: technologyreview.com
+    homepage_url: https://www.technologyreview.com
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://www.technologyreview.com/feed/
+    search_aliases:
+      - MIT Technology Review
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: Slashdot
+    domain: slashdot.org
+    homepage_url: https://slashdot.org
+    bias: 0
+    bias_label: Center
+    category: mainstream
+    factual_rating: mixed
+    rss_urls:
+      - http://rss.slashdot.org/Slashdot/slashdot
+    search_aliases:
+      - Slashdot
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
+  - name: The Economist
+    domain: economist.com
+    homepage_url: https://www.economist.com
+    bias: -2
+    bias_label: Lean Left
+    category: mainstream
+    factual_rating: high
+    rss_urls:
+      - https://www.economist.com/latest/rss.xml
+    search_aliases:
+      - The Economist
+      - Economist
+    syndication_group:
+    allow_in_analysis: true
+    notes: Verified from Deep-RSS-Research on 2026-05-15.
 topic_feeds:
   geopolitics:
     - name: War on the Rocks

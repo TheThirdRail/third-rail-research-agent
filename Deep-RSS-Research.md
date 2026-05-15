@@ -5,27 +5,43 @@ This is the comprehensive list of sources our research agent searches through, c
 ## **Center**
 
 * **Associated Press** (Bias: 0\)  
-  * [AP Politics](https://apnews.com/politics.rss)  
-  * [AP Top News](https://news.google.com/rss/search?q=when:24h+allinurl:apnews.com)  
-  * [AP Top News (S3 Archive)](http://associated-press.s3-website-us-east-1.amazonaws.com/topnews.xml)  
+  * [AP Top News](https://feedx.net/rss/ap.xml)
+  * [AP Politics](https://rss.noleron.com/apnews/topics/politics)
+  * [AP World News](https://rss.noleron.com/apnews/topics/world-news)
+  * [AP Top Stories](https://flipboard.com/@associatedpress/top-stories-u7govdf1z.rss)
+  * [AP U.S. News](https://flipboard.com/@associatedpress/u.s.-news-lhl4uphvz.rss)
+  * [AP Politics (Flipboard)](https://flipboard.com/@associatedpress/politics-h8vn14lnz.rss)
+  * [AP International](https://flipboard.com/@associatedpress/international-news-miluvhmaz.rss)
+  * [AP Technology](https://flipboard.com/@associatedpress/technology-uvt65hdqz.rss)
+  * [AP Business and Finance](https://flipboard.com/@associatedpress/business-and-finance-pbj3bpclz.rss)
 * **C-SPAN** (Bias: 0\)  
-  * [C-SPAN Recent Programs](https://www.c-span.org/connect/rss/?format=recentPrograms)  
+  * [C-SPAN Washington Today](https://feeds.megaphone.fm/cspanwashingtontoday)
 * **Forbes** (Bias: 0\)  
-  * [Forbes Business](https://www.forbes.com/business/feed/)  
-  * [Forbes Investing](https://www.forbes.com/investing/feed/)  
+  * Search only; no working RSS feed is currently configured.
 * **Reuters** (Bias: 0\)  
-  * [Reuters World News](https://www.reutersagency.com/feed/?best-topics=world-news&post_type=best)  
-  * [Reuters Business](https://www.reutersagency.com/feed/?best-topics=business&post_type=best)  
-  * [Reuters Global News](https://reutersbest.com/region/global/feed/)  
+  * [Reuters Best World](https://reutersbest.com/region/global/feed/)
+  * [Reuters Best United States](https://reutersbest.com/country/united-states/feed/)
+  * [Reuters News via Google News](https://news.google.com/rss/search?q=site:reuters.com+when:24h&ceid=US:en&hl=en-US&gl=US)
+  * [Reuters Best News](https://reutersbest.com/feed/)
+  * [Thomson Reuters News Releases](https://ir.thomsonreuters.com/rss/news-releases.xml?items=15)
+  * [Thomson Reuters Events](https://ir.thomsonreuters.com/rss/events.xml?items=15)
+  * [Thomson Reuters SEC Filings](https://ir.thomsonreuters.com/rss/sec-filings.xml?items=15)
 * **Christian Science Monitor** (Bias: 0\)  
   * [CSM World](https://rss.csmonitor.com/feeds/world)  
   * [CSM USA](https://rss.csmonitor.com/feeds/usa)  
 * **Newsweek** (Bias: 0\)  
   * [Newsweek Latest](https://www.newsweek.com/rss)  
 * **Bloomberg** (Bias: 0 / Center)  
+  * [Bloomberg Opinion](https://feeds.bloomberg.com/bview/news.rss)
+  * [Bloomberg Explainers](https://flipboard.com/@bloomberg/explainers-s62mgcgqz.rss)
+  * [Bloomberg U.S.](https://feeds.bloomberg.com/news.rss)
   * [Bloomberg Markets](https://feeds.bloomberg.com/markets/news.rss)  
-  * [Bloomberg Wealth](https://feeds.bloomberg.com/wealth/news.rss)  
   * [Bloomberg Technology](https://feeds.bloomberg.com/technology/news.rss)  
+  * [Bloomberg Tech (Flipboard)](https://flipboard.com/@bloomberg/tech-5m6pvghdz.rss)
+  * [Bloomberg Politics](https://feeds.bloomberg.com/politics/news.rss)
+  * [Bloomberg Politics (Flipboard)](https://flipboard.com/@bloomberg/politics-34sivmjkz.rss)
+  * [Bloomberg Crypto](https://feeds.bloomberg.com/crypto/news.rss)
+  * [Bloomberg Businessweek](https://feeds.bloomberg.com/businessweek/news.rss)
 * **MarketWatch** (Bias: 0\)  
   * [MarketWatch Top Stories](https://www.marketwatch.com/rss/topstories)
 
@@ -45,7 +61,7 @@ This is the comprehensive list of sources our research agent searches through, c
 * **The Conversation** (Bias: \-1)  
   * [The Conversation US](https://theconversation.com/us/articles.atom)  
 * **USA Today** (Bias: \-1)  
-  * [USA Today Top Stories](https://rssfeeds.usatoday.com/usatoday-newstopstories)
+  * [USA Today via Google News](https://news.google.com/rss/search?hl=en-US&gl=US&q=usa+today&um=1&ie=UTF-8&ceid=US:en)
 
 ## **Lean Left**
 
@@ -56,7 +72,6 @@ This is the comprehensive list of sources our research agent searches through, c
   * [Al Jazeera All News](https://www.aljazeera.com/xml/rss/all.xml)  
 * **CNN** (Bias: \-2)  
   * [CNN Top Stories](http://rss.cnn.com/rss/edition.rss)  
-  * [CNN Politics](http://rss.cnn.com/rss/edition_politics.rss)  
   * [CNN World News](http://rss.cnn.com/rss/edition_world.rss)  
 * **New York Times** (Bias: \-2)  
   * [NYT Home Page](https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml)  
@@ -65,8 +80,6 @@ This is the comprehensive list of sources our research agent searches through, c
 * **The Guardian** (Bias: \-2)  
   * [The Guardian US News](https://www.theguardian.com/us-news/rss)  
   * [The Guardian World News](https://www.theguardian.com/world/rss)  
-* **Politico** (Bias: \-2)  
-  * [Politico Picks](https://www.politico.com/rss/politicopicks.xml)  
 * **Washington Post** (Bias: \-2)  
   * [WP National](https://feeds.washingtonpost.com/rss/national)  
 * **Business Insider** (Bias: \-2)  
@@ -75,10 +88,9 @@ This is the comprehensive list of sources our research agent searches through, c
 ## **Left**
 
 * **HuffPost** (Bias: \-3)  
-  * [HuffPost All News](https://www.huffpost.com/section/front-page/feed)  
   * [HuffPost World News](https://chaski.huffpost.com/us/auto/vertical/world-news)  
 * **MSNBC** (Bias: \-3)  
-  * [MSNBC Top Stories](https://www.msnbc.com/feeds/latest)  
+  * [MSNBC Feed](https://www.msnbc.com/feed)
 * **The Atlantic** (Bias: \-3)  
   * [The Atlantic All News](https://www.theatlantic.com/feed/all/)  
 * **The Nation** (Bias: \-3)  
@@ -94,8 +106,6 @@ This is the comprehensive list of sources our research agent searches through, c
 
 ## **Far Left**
 
-* **Common Dreams** (Bias: \-4)  
-  * [Common Dreams Latest](https://www.commondreams.org/rss)  
 * **Jacobin** (Bias: \-4)  
   * [Jacobin Magazine](https://jacobin.com/feed)  
 * **Democracy Now\!** (Bias: \-4)  
@@ -115,9 +125,6 @@ This is the comprehensive list of sources our research agent searches through, c
   * [The Hill Headlines](https://thehill.com/homenews/feed/)  
 * **Financial Times** (Bias: 1\)  
   * [FT World](https://www.ft.com/?format=rss)  
-* **The News-Herald** (Bias: 1\)  
-  * [News-Herald RSS](https://www.news-herald.com/feed/)
-
 ## **Lean Right**
 
 * **New York Post** (Bias: 2\)  
@@ -135,8 +142,6 @@ This is the comprehensive list of sources our research agent searches through, c
 
 ## **Right**
 
-* **Daily Wire** (Bias: 3\)  
-  * [Daily Wire All](https://www.dailywire.com/rss.xml)  
 * **Fox News** (Bias: 3\)  
   * [Fox News Politics](http://feeds.foxnews.com/foxnews/politics)  
 * **National Review** (Bias: 3\)  
@@ -146,7 +151,16 @@ This is the comprehensive list of sources our research agent searches through, c
 * **The Blaze** (Bias: 3\)  
   * [The Blaze Stories](https://www.theblaze.com/feeds/feed.rss)  
 * **Newsmax** (Bias: 3\)  
-  * [Newsmax News](https://www.newsmax.com/rss/Newsfront/16/)
+  * [Newsmax Newsfront](http://www.newsmax.com/rss/Newsfront/16)
+  * [Newsmax America](http://www.newsmax.com/rss/US/18)
+  * [Newsmax Politics](http://www.newsmax.com/rss/Politics/1)
+  * [Newsmax The Wire](http://www.newsmax.com/rss/TheWire/118)
+  * [Newsmax Science and Technology](http://www.newsmax.com/rss/SciTech/20)
+  * [Newsmax Finance](http://www.newsmax.com/rss/FinanceNews/4)
+  * [Newsmax Economy](http://www.newsmax.com/rss/Economy/2)
+  * [Newsmax Health](http://www.newsmax.com/rss/Health-News/177)
+  * [Newsmax Companies](http://www.newsmax.com/rss/Companies/6)
+  * [Newsmax Global](http://www.newsmax.com/rss/GlobalTalk/162)
 
 ## **Far Right**
 
@@ -155,8 +169,7 @@ This is the comprehensive list of sources our research agent searches through, c
 * **The Gateway Pundit** (Bias: 4\)  
   * [Gateway Pundit Main](https://www.thegatewaypundit.com/feed/)  
 * **The Alex Jones Show** (Bias: 4\)  
-  * [The Alex Jones Show Website RSS](https://www.alexjoneslive.com/feed/)  
-  * [X/Twitter Archive (Nitter)](https://nitter.net/RealAlexJones/rss)  
+  * [Alex Jones Live](https://www.alexjoneslive.com/feed/)
 * **The Daily Caller** (Bias: 4\)  
   * [Daily Caller Politics](http://dailycaller.com/section/politics/feed/)  
 * **OANN** (Bias: 4\)  
@@ -165,37 +178,25 @@ This is the comprehensive list of sources our research agent searches through, c
 ## **Libertarian**
 
 * **Antiwar.com** (Bias: 0\)  
-  * [Antiwar News](https://www.antiwar.com/feed/)  
-* **FEE (Foundation for Economic Education)** (Bias: 1\)  
-  * [FEE Stories](https://fee.org/articles/rss)  
+  * [Antiwar News](https://news.antiwar.com/feed/)
 * **Mises Institute** (Bias: 0\)  
-  * [Mises Wire](https://mises.org/rss/wire)  
+  * [Mises Feed](https://mises.org/feed)
 * **Reason** (Bias: 0\)  
   * [Reason Magazine](https://reason.com/feed/)
 
 ## **Independent / Anti-Establishment / Alternative**
 
-* **Breaking Points** (Bias: 0\)  
-  * [Breaking Points Podcast](https://feeds.megaphone.fm/breakingpoints)  
-* **Glenn Greenwald (Substack)** (Bias: 0\)  
-  * [Glenn Greenwald Substack](https://ggreenwald.substack.com/feed)  
-* **Joe Rogan** (Bias: 0\)  
-  * [JRE Podcast](https://joerogan.libsyn.com/rss)  
 * **Matt Taibbi (Substack)** (Bias: 0\)  
   * [Matt Taibbi Substack](https://taibbi.substack.com/feed)  
 * **The Intercept** (Bias: \-2)  
   * [The Intercept All](https://theintercept.com/feed/?lang=en)  
-* **Tim Pool (Timcast)** (Bias: 2\)  
-  * [Timcast News](https://timcast.com/feed/)  
 * **Zero Hedge** (Bias: 2\)  
   * [Zero Hedge Headlines](http://feeds.feedburner.com/zerohedge/feed)
 
 ## **Fringe / Conspiracy**
 
 * **Above Top Secret** (Bias: 0\)  
-  * [ATS News](https://www.abovetopsecret.com/rss/news.xml)  
-* **Before It's News** (Bias: 4\)  
-  * [BIN All News](https://beforeitsnews.com/rss/0/all.xml)  
+  * Search only; no working RSS feed is currently configured.
 * **David Icke** (Bias: 4\)  
   * [David Icke Headlines](https://www.davidicke.com/feed/)  
 * **Natural News** (Bias: 4\)  
@@ -218,18 +219,8 @@ This is the comprehensive list of sources our research agent searches through, c
 
 ### **Christian (Protestant, Evangelical, Orthodox, Catholic)**
 
-* **Ancient Faith Ministries** (Orthodox) (Bias: 0\)  
-  * [Ancient Faith Podcasts](https://www.ancientfaith.com/podcasts/feed)  
-* **Catholic News Agency** (Bias: 1\)  
-  * [CNA Vatican Feed](https://feeds.feedburner.com/catholicnewsagency/vatican)  
-* **Christianity Today** (Bias: 1\)  
-  * [CT Magazine Feed](http://feeds.christianitytoday.com/christianitytoday/ctmag)  
 * **Christian Today (UK)** (Bias: 1\)  
   * [CT UK World News](https://www.christiantoday.com/rss/world.xml)  
-* **First Things** (Bias: 3\)  
-  * [First Things Articles](https://www.firstthings.com/rss/all-articles)  
-* **National Catholic Register** (Bias: 3 / Right)  
-  * [NCR General News](https://www.ncregister.com/feeds/general.xml)  
 * **National Catholic Reporter** (Bias: \-1 / Slight Left)  
   * [NC Reporter All Content](https://www.ncronline.org/rss.xml)  
 * **Orthodox Christian Network** (Bias: 0\)  
@@ -243,19 +234,10 @@ This is the comprehensive list of sources our research agent searches through, c
   * [HAF Press Releases](https://www.hinduamerican.org/feed)  
 * **Hinduism Today** (Bias: 0\)  
   * [Hinduism Today News](https://www.hinduismtoday.com/feed/)  
-* **Swarajya** (Bias: 3\)  
-  * [Swarajya Culture](https://swarajyamag.com/rss)
-
 ### **Jewish**
 
-* **Chabad.org News** (Bias: 0\)  
-  * [Chabad News Stories](https://www.chabad.org/magazine/rss_cdo/aid/770317/jewish/News.xml)  
-* **Haaretz** (Bias: \-2)  
-  * [Haaretz News](https://www.haaretz.com/cira/afp-rss-1.5284146)  
 * **Jewish Telegraphic Agency (JTA)** (Bias: 0\)  
   * [JTA News](https://www.jta.org/feed)  
-* **Tablet Magazine** (Bias: 0\)  
-  * [Tablet Articles](https://www.tabletmag.com/feed)  
 * **The Forward** (Bias: \-2)  
   * [The Forward News](https://forward.com/feed/)  
 * **The Times of Israel** (Bias: 0\)  
@@ -265,45 +247,29 @@ This is the comprehensive list of sources our research agent searches through, c
 
 * **Islamic Networks Group (ING)** (Bias: 0\)  
   * [ING News](https://ing.org/feed/)  
-* **Muslim Public Affairs Council (MPAC)** (Bias: 0\)  
-  * [MPAC Updates](https://www.mpac.org/feed/)  
 * **MuslimMatters** (Bias: 0\)  
   * [MuslimMatters MM Posts](http://feeds.feedburner.com/Muslimmatters)  
-* **The Muslim Vibe** (Bias: \-1)  
-  * [The Muslim Vibe Podcast](https://anchor.fm/s/1169002587/podcast/rss)
 
 ### **Wiccan / Pagan**
 
-* **Patheos \- Pagan** (Bias: 0\)  
-  * [Patheos Pagan Channel](https://www.patheos.com/pagan/feed)  
 * **The Wild Hunt** (Bias: 0\)  
   * [The Wild Hunt News](https://wildhunt.org/feed)  
-* **Witches & Pagans** (Bias: 0\)  
-  * [Witches & Pagans Articles](https://witchesandpagans.com/pagan-culture-blogs?format=feed&type=rss)
 
 ### **Spiritual (New Age / Crystals / Astrology / Yoga)**
 
 * **Astrology.com** (Bias: 0\)  
   * [Astrology Daily Horoscopes](https://feeds.feedburner.com/dayhoroscope)  
-* **Elephant Journal** (Bias: 0\)  
-  * [Elephant Journal Daily](https://www.elephantjournal.com/feed/)  
-* **Gaia** (Bias: 0\)  
-  * [Gaia Blog Articles](https://gaia-x.eu/rss-feeds/)  
 * **Goop** (Bias: \-1)  
   * [Goop Podcast Feed](https://gooptales.libsyn.com/rss)  
 * **MindBodyGreen** (Bias: 0\)  
   * [MBG Wellness](https://www.mindbodygreen.com/rss/feed.xml)  
-* **Numerology.com** (Bias: 0\)  
-  * [Numerology News](https://www.numerology.com/feed/)  
 * **Spirit Science** (Bias: 0\)  
   * [Spirit Science News](https://spiritsciencecentral.com/feed/)
 
 ## **Supernatural / Paranormal**
 
 * **Coast to Coast AM** (Bias: 0\)  
-  * [C2C Podcast Feed](http://rss.premiereradio.net/coast/podcast.xml)  
-* **Fate Magazine** (Bias: 0\)  
-  * [Fate Mag Feed](https://www.fatemag.com/feed/)  
+  * [Coast to Coast AM Articles](https://www.coasttocoastam.com/articles.rss)
 * **Fortean Times** (Bias: 0\)  
   * [Fortean Times RSS](https://www.forteantimes.com/feed/)  
 * **Mysterious Universe** (Bias: 0\)  
@@ -319,12 +285,8 @@ This is the comprehensive list of sources our research agent searches through, c
 
 * **Science Magazine (AAAS)** (Bias: 0\)  
   * [Science Current Issue](https://www.sciencemag.org/rss/current.xml)  
-  * [Science Politics](https://www.science.org/rss/news_politics.xml)  
 * **Nature** (Bias: 0\)  
   * [Nature Main Feed](https://www.nature.com/nature.rss)  
-* **Scientific American** (Bias: \-1)  
-  * [Scientific American All](https://www.scientificamerican.com/rss/all/)  
-  * [Scientific American Health](https://www.scientificamerican.com/health/rss/)  
 * **ScienceDaily** (Bias: 0\)  
   * [ScienceDaily Main Feed](https://www.sciencedaily.com/rss/all.xml)  
 * **Popular Science** (Bias: \-1)  
@@ -338,21 +300,12 @@ This is the comprehensive list of sources our research agent searches through, c
 
 ## **Health & Wellness**
 
-* **MedlinePlus** (Bias: 0\)  
-  * [All Health Info](https://medlineplus.gov/rss.xml)  
-  * [Blood & Heart](https://medlineplus.gov/rss/bloodheartandcirculation.xml)  
-* **Mayo Clinic** (Bias: 0\)  
-  * [All Health Topics](http://www.mayoclinic.org/rss/all-health-information-topics)  
-* **WebMD** (Bias: 0\)  
-  * [Health News](https://rssfeeds.webmd.com/rss/rss.aspx?RSSSource=RSS_PUBLIC)  
 * **Wellness Mama** (Bias: 0\)  
   * [Healthy Living Feed](https://wellnessmama.com/feed)  
 * **Chris Kresser** (Bias: 0\)  
   * [Healthcare Insights](https://chriskresser.com/feed)  
 * **MyFitnessPal** (Bias: 0\)  
   * [MFP Blog Feed](https://blog.myfitnesspal.com/feed)  
-* **Muscle & Fitness** (Bias: 0\)  
-  * [Main RSS Feed](https://rss.app/rss-feed/muscle-fitness-rss-feed)  
 * **Men's Health** (Bias: 0\)  
   * [Men's Health All](https://www.menshealth.com/rss/all.xml/)  
 * **Lifehacker** (Bias: \-1)  

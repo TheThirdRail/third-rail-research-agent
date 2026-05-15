@@ -380,9 +380,10 @@ class ArticleExtractor:
             with contextlib.suppress(Exception):
                 import lxml.html
 
-                title_hint = lxml.html.document_fromstring(html_content).findtext(
-                    ".//title"
-                ) or ""
+                title_hint = (
+                    lxml.html.document_fromstring(html_content).findtext(".//title")
+                    or ""
+                )
 
             if status == 403 or self._looks_blocked(html_content, title=title_hint):
                 return self._failure(
@@ -489,7 +490,9 @@ class ArticleExtractor:
                 try:
                     page = browser.new_page()
                     response = page.goto(
-                        url, wait_until="domcontentloaded", timeout=PLAYWRIGHT_PAGE_TIMEOUT_MS
+                        url,
+                        wait_until="domcontentloaded",
+                        timeout=PLAYWRIGHT_PAGE_TIMEOUT_MS,
                     )
                     if response is not None:
                         status = response.status
@@ -738,7 +741,9 @@ class ArticleExtractor:
                 try:
                     page = await browser.new_page()
                     response = await page.goto(
-                        url, wait_until="domcontentloaded", timeout=PLAYWRIGHT_PAGE_TIMEOUT_MS
+                        url,
+                        wait_until="domcontentloaded",
+                        timeout=PLAYWRIGHT_PAGE_TIMEOUT_MS,
                     )
                     if response is not None:
                         status = response.status
@@ -822,7 +827,10 @@ class ArticleExtractor:
         if settings.enable_selenium_fallback:
             logger.info("Falling back to Selenium for %s", url)
             selenium_result = self.extract_selenium(url)
-            if selenium_result.success and len(selenium_result.text) > MIN_EXTRACTION_TEXT_LENGTH:
+            if (
+                selenium_result.success
+                and len(selenium_result.text) > MIN_EXTRACTION_TEXT_LENGTH
+            ):
                 return selenium_result
             return selenium_result
 
@@ -879,7 +887,10 @@ class ArticleExtractor:
         if settings.enable_selenium_fallback:
             logger.info("Falling back to Selenium for %s", url)
             selenium_result = await self.extract_selenium_async(url)
-            if selenium_result.success and len(selenium_result.text) > MIN_EXTRACTION_TEXT_LENGTH:
+            if (
+                selenium_result.success
+                and len(selenium_result.text) > MIN_EXTRACTION_TEXT_LENGTH
+            ):
                 return selenium_result
             return selenium_result
 

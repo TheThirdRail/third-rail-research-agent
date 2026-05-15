@@ -285,9 +285,8 @@ class SourceAggregatorService:
         primary = self._extract_url(url, require_success=False)
         rss_hint = None
         if (
-            (not primary.full_text or len(primary.full_text) < self.MIN_TEXT_LENGTH)
-            and self._rss_fallback
-        ):
+            not primary.full_text or len(primary.full_text) < self.MIN_TEXT_LENGTH
+        ) and self._rss_fallback:
             rss_hint = self._rss_fallback.resolve_by_url(url)
             if not rss_hint:
                 rss_hint = self._rss_fallback.resolve_by_slug(url)
@@ -511,7 +510,8 @@ class SourceAggregatorService:
         if (
             seed_context
             and seed_context.primary
-            and self._normalize_url(seed_context.primary.url) == self._normalize_url(url)
+            and self._normalize_url(seed_context.primary.url)
+            == self._normalize_url(url)
         ):
             return seed_context.primary
         return self._extract_url(url, require_success=False)
@@ -1628,7 +1628,6 @@ class SourceAggregatorService:
         if settings.searxng_base_url:
             return SearxngSearch(settings.searxng_base_url, settings.searxng_api_key)
         return DuckDuckGoSearch()
-
 
     def _normalize_url(self, url: str) -> str:
         try:

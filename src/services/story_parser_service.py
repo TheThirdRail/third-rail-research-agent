@@ -76,8 +76,10 @@ class StoryParserService:
             combined_parts.append(seed_excerpt)
         combined = ". ".join(combined_parts) or description
 
-        headline = rss_title or seed_title or self._extract_headline(
-            description or seed_excerpt
+        headline = (
+            rss_title
+            or seed_title
+            or self._extract_headline(description or seed_excerpt)
         )
         actors = self._extract_actors(combined)
         aliases = self._extract_aliases(actors, combined)

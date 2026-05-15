@@ -204,7 +204,7 @@ def test_seed_context_is_parsed_then_reused_for_search(monkeypatch):
             published_date=None,
             author=None,
             full_text=(
-                'Senator Jane Smith vetoed AB123 after calling the formula '
+                "Senator Jane Smith vetoed AB123 after calling the formula "
                 '"unworkable". '
             )
             * 8,

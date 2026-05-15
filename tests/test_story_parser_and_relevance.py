@@ -50,7 +50,7 @@ def test_story_parser_uses_seed_article_context_before_search_queries():
         seed_url="https://example.com/politics/jane-smith-school-funding",
         seed_title="Senator Jane Smith vetoes school funding bill",
         seed_text=(
-            'Senator Jane Smith vetoed the school funding bill after calling '
+            "Senator Jane Smith vetoed the school funding bill after calling "
             'the AB123 formula "unworkable" during a press conference.'
         ),
     )

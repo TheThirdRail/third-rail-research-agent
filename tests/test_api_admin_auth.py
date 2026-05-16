@@ -175,6 +175,12 @@ def test_get_budget_with_key(client, monkeypatch):
 
 def test_analyze_with_key(client, monkeypatch):
     class FakeAnalysisService:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
         def analyze(self, description, url=None, options=None):
             return {
                 "story_id": "story-1",

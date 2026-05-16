@@ -16,7 +16,7 @@ async def test_analyze_route_offloads_sync_service(monkeypatch):
             return self
 
         def __exit__(self, exc_type, exc, tb) -> None:
-            pass
+            return None
 
         def analyze(self, description, url=None, options=None):
             observed["thread"] = threading.get_ident()

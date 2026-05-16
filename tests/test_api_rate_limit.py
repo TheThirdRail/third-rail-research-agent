@@ -1,5 +1,5 @@
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from src.api.main import app
 from src.core.exceptions import RateLimitExceededError

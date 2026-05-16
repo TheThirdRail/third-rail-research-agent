@@ -127,7 +127,7 @@ class SocialPostResolverService:
         return ""
 
     @staticmethod
-    def _metadata_text(payload: dict) -> str:
+    def _metadata_text(payload: dict[str, object]) -> str:
         parts = [
             str(payload.get("title") or ""),
             str(payload.get("author_name") or ""),

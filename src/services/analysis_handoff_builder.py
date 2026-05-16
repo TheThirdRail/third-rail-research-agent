@@ -37,7 +37,7 @@ class AnalysisHandoffBuilder:
         sections: AnalysisReportSections,
         coverage: dict[str, Any],
     ) -> list[dict[str, Any]]:
-        specs = [
+        specs: list[dict[str, Any]] = [
             {
                 "agent_name": "fact_extractor",
                 "document_type": "fact_claims",
@@ -120,7 +120,7 @@ class AnalysisHandoffBuilder:
                 ),
             },
         ]
-        durable_specs = []
+        durable_specs: list[dict[str, Any]] = []
         for spec in specs:
             if not spec["text"].strip():
                 continue

@@ -6,6 +6,7 @@ import html
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 from urllib.parse import urlparse
 
 from src.tools.rss_aggregator import FeedItem, RSSAggregator
@@ -61,7 +62,7 @@ class RssFallbackService:
         }
 
     def _iter_feed_items(
-        self, feeds: list[dict], max_items: int = 80
+        self, feeds: list[dict[str, Any]], max_items: int = 80
     ) -> list[FeedItem]:
         items: list[FeedItem] = []
         for feed in feeds:
@@ -75,14 +76,14 @@ class RssFallbackService:
             )
         return items
 
-    def get_candidate_feeds_for_domain(self, domain: str) -> list[dict]:
+    def get_candidate_feeds_for_domain(self, domain: str) -> list[dict[str, Any]]:
         """Return candidate feeds for a news domain."""
         domain = (domain or "").replace("www.", "").lower()
         if not domain:
             return self._aggregator.feeds
 
         hints = self._DOMAIN_HINTS.get(domain, ())
-        selected: list[dict] = []
+        selected: list[dict[str, Any]] = []
 
         for feed in self._aggregator.feeds:
             feed_url = feed.get("url", "")

@@ -158,9 +158,7 @@ class DiscoveryService:
                         "summary": article.text[:1200],
                         "source": result.source,
                         "method": article.extractor_method or "search_extract",
-                        "published": (
-                            article.date.isoformat() if article.date else ""
-                        ),
+                        "published": (article.date.isoformat() if article.date else ""),
                     }
 
                 return {
@@ -174,9 +172,7 @@ class DiscoveryService:
                 }
 
             if search_candidates:
-                max_workers = min(
-                    DISCOVERY_EXTRACT_MAX_WORKERS, len(search_candidates)
-                )
+                max_workers = min(DISCOVERY_EXTRACT_MAX_WORKERS, len(search_candidates))
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     records.extend(executor.map(build_search_record, search_candidates))
 

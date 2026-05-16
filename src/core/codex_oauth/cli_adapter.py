@@ -224,8 +224,9 @@ def _content_from_jsonl(stdout: str) -> str:
 
 
 def _event_text(event: dict[str, Any]) -> str | None:
-    if isinstance(event.get("message"), str):
-        return event["message"]
+    message = event.get("message")
+    if isinstance(message, str):
+        return message
     item = event.get("item")
     if not isinstance(item, dict):
         return None

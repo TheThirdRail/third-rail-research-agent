@@ -88,8 +88,7 @@ async def test_crawl4ai_progressive_enhancement_escalates_on_block(monkeypatch):
     extractor = ArticleExtractor()
     monkeypatch.setattr(extractor, "_public_url_error", lambda url: None)
     monkeypatch.setattr(
-        "src.tools.article_extractor.settings."
-        "crawl4ai_progressive_undetected_enabled",
+        "src.tools.article_extractor.settings.crawl4ai_progressive_undetected_enabled",
         True,
     )
     monkeypatch.setattr(
@@ -129,8 +128,7 @@ async def test_crawl4ai_progressive_enhancement_combines_undetected_and_stealth(
     extractor = ArticleExtractor()
     monkeypatch.setattr(extractor, "_public_url_error", lambda url: None)
     monkeypatch.setattr(
-        "src.tools.article_extractor.settings."
-        "crawl4ai_progressive_undetected_enabled",
+        "src.tools.article_extractor.settings.crawl4ai_progressive_undetected_enabled",
         True,
     )
     monkeypatch.setattr(
@@ -187,7 +185,9 @@ async def test_crawl4ai_403_failure_counts_as_blocked():
 def test_trafilatura_failure_falls_back_to_firecrawl_when_key_is_set(monkeypatch):
     extractor = ArticleExtractor()
     monkeypatch.setattr(extractor, "_public_url_error", lambda url: None)
-    monkeypatch.setattr("src.tools.article_extractor.settings.firecrawl_api_key", "fc-test")
+    monkeypatch.setattr(
+        "src.tools.article_extractor.settings.firecrawl_api_key", "fc-test"
+    )
     calls = []
 
     def crawl4ai(url: str) -> ExtractedArticle:

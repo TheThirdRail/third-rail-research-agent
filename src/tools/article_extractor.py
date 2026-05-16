@@ -11,7 +11,7 @@ from datetime import datetime
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -66,7 +66,7 @@ class _Crawl4AIAttempt:
     enable_stealth: bool
 
 
-class _MediaMetadata(TypedDict):
+class MediaMetadata(TypedDict):
     og_image_url: str | None
     embedded_post_urls: list[str]
     image_alt_text: list[str]
@@ -208,7 +208,9 @@ class ArticleExtractor:
             for param in signature.parameters.values()
         ):
             kwargs = {
-                key: value for key, value in kwargs.items() if key in signature.parameters
+                key: value
+                for key, value in kwargs.items()
+                if key in signature.parameters
             }
         return factory(**kwargs)
 
@@ -804,14 +806,14 @@ class ArticleExtractor:
                 reason=exc.reason,
             )
         except httpx.HTTPStatusError as exc:
-            status = exc.response.status_code
-            code = ERROR_HTTP_403 if status == 403 else ERROR_EXCEPTION
+            status_code = exc.response.status_code
+            code = ERROR_HTTP_403 if status_code == 403 else ERROR_EXCEPTION
             return self._failure(
                 url=url,
-                error=f"HTTP status {status}",
+                error=f"HTTP status {status_code}",
                 error_code=code,
                 method="newspaper4k",
-                http_status=status,
+                http_status=status_code,
             )
         except Exception as exc:
             logger.warning("Newspaper4k failed for %s: %s", url, exc)
@@ -819,13 +821,13 @@ class ArticleExtractor:
             code = (
                 ERROR_HTTP_403 if "status code 403" in msg.lower() else ERROR_EXCEPTION
             )
-            status = 403 if code == ERROR_HTTP_403 else None
+            fallback_status: int | None = 403 if code == ERROR_HTTP_403 else None
             return self._failure(
                 url=url,
                 error=msg,
                 error_code=code,
                 method="newspaper4k",
-                http_status=status,
+                http_status=fallback_status,
             )
 
     @staticmethod
@@ -1240,9 +1242,7 @@ class ArticleExtractor:
             or self._payload_get_any(result, ("markdown", "content"))
         )
         html_content = (
-            self._payload_get(data, "html")
-            or self._payload_get(result, "html")
-            or ""
+            self._payload_get(data, "html") or self._payload_get(result, "html") or ""
         )
         status = self._coerce_status(
             self._payload_get_any(data, ("status_code", "statusCode"))
@@ -1464,7 +1464,7 @@ class ArticleExtractor:
         return await asyncio.to_thread(self.extract_selenium, url)
 
     @staticmethod
-    def _guarded_playwright_route(route) -> None:
+    def _guarded_playwright_route(route: Any) -> None:
         reason = blocked_public_url_reason(route.request.url)
         if reason:
             route.abort()
@@ -1472,7 +1472,7 @@ class ArticleExtractor:
         route.continue_()
 
     @staticmethod
-    async def _guarded_playwright_route_async(route) -> None:
+    async def _guarded_playwright_route_async(route: Any) -> None:
         reason = blocked_public_url_reason(route.request.url)
         if reason:
             await route.abort()
@@ -1513,7 +1513,7 @@ class ArticleExtractor:
         logger.info("Falling back to Firecrawl for %s", url)
         return self.extract_firecrawl(validated)
 
-    def _extract_media_metadata(self, html_content: str) -> _MediaMetadata:
+    def _extract_media_metadata(self, html_content: str) -> MediaMetadata:
         parser = _MediaHTMLParser()
         with contextlib.suppress(Exception):
             parser.feed(html_content or "")
@@ -1581,12 +1581,12 @@ class ArticleExtractorTool(BaseTool):
     Returns the article title, author, publication date, and full text.
     Use this to get the complete content of a news article for analysis."""
 
-    def run(self, *args, **kwargs):
-        """Return awaitable in async contexts to avoid blocking extraction."""
+    def run(self, *args: Any, **kwargs: Any) -> str | Awaitable[str]:
+        """Return awaitable in async contexts to avoid sync Playwright in event loop."""
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            return super().run(*args, **kwargs)
+            return cast(str, super().run(*args, **kwargs))
         return self._arun(*args, **kwargs)
 
     @staticmethod
@@ -1700,12 +1700,12 @@ class MultiArticleExtractorTool(BaseTool):
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             return list(executor.map(extractor.extract, url_list))
 
-    def run(self, *args, **kwargs):
-        """Return awaitable in async contexts to avoid blocking extraction."""
+    def run(self, *args: Any, **kwargs: Any) -> str | Awaitable[str]:
+        """Return awaitable in async contexts to avoid sync Playwright in event loop."""
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            return super().run(*args, **kwargs)
+            return cast(str, super().run(*args, **kwargs))
         return self._arun(*args, **kwargs)
 
     def _run(self, urls: str) -> str | Awaitable[str]:

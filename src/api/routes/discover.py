@@ -1,9 +1,10 @@
 """Discovery API routes."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
+from src.api.dependencies import require_admin_api_key, require_expensive_endpoint_slot
 from src.services import DiscoveryService
 
 router = APIRouter()
@@ -22,7 +23,14 @@ class DiscoverResponse(BaseModel):
     raw_output: str
 
 
-@router.post("/discover", response_model=DiscoverResponse)
+@router.post(
+    "/discover",
+    response_model=DiscoverResponse,
+    dependencies=[
+        Depends(require_admin_api_key),
+        Depends(require_expensive_endpoint_slot),
+    ],
+)
 async def discover_stories(request: DiscoverRequest) -> DiscoverResponse:
     """Discover relevant stories based on topics.
 

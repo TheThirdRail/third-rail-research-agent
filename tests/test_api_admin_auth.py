@@ -7,8 +7,13 @@ from types import SimpleNamespace
 os.environ.setdefault("APP_ENV", "test")
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from src.api import dependencies as api_dependencies
+from src.api.routes import analyze as analyze_routes
+from src.api.routes import discover as discover_routes
+from src.api.routes import reports as reports_routes
 from src.core.budget_service import get_budget_service
 from src.services.agent_config_service import AgentConfigService
 
@@ -91,6 +96,24 @@ def test_budget_reset_requires_key(client):
     assert resp.status_code == 401
 
 
+def test_analyze_requires_key(client):
+    resp = client.post("/api/analyze", json={"description": "test story"})
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Unauthorized."
+
+
+def test_discover_requires_key(client):
+    resp = client.post("/api/discover", json={"topics": ["politics"]})
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Unauthorized."
+
+
+def test_reports_pdf_requires_key(client):
+    resp = client.post("/api/reports/pdf", json={"report_markdown": "# Test"})
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Unauthorized."
+
+
 # ── Protected routes succeed with a valid key ──────────────────────
 
 
@@ -148,6 +171,81 @@ def test_get_budget_with_key(client, monkeypatch):
     body = resp.json()
     assert "current_spend" in body
     assert "limit" in body
+
+
+def test_analyze_with_key(client, monkeypatch):
+    class FakeAnalysisService:
+        def analyze(self, description, url=None, options=None):
+            return {
+                "story_id": "story-1",
+                "report": f"report for {description}",
+                "status": "completed",
+                "source_count": 1,
+            }
+
+    monkeypatch.setattr(analyze_routes, "AnalysisService", FakeAnalysisService)
+
+    resp = client.post(
+        "/api/analyze",
+        json={"description": "test story"},
+        headers=_admin_headers(),
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["story_id"] == "story-1"
+
+
+def test_discover_with_key(client, monkeypatch):
+    class FakeDiscoveryService:
+        def discover(self, topics=None):
+            return {
+                "topics_searched": topics or ["fallback"],
+                "raw_output": "discovery output",
+            }
+
+    monkeypatch.setattr(discover_routes, "DiscoveryService", FakeDiscoveryService)
+
+    resp = client.post(
+        "/api/discover",
+        json={"topics": ["politics"]},
+        headers=_admin_headers(),
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["topics_searched"] == ["politics"]
+
+
+def test_reports_pdf_with_key(client, monkeypatch):
+    async def fake_render_report_pdf(markdown: str) -> bytes:
+        return b"%PDF-1.4 test"
+
+    monkeypatch.setattr(reports_routes, "render_report_pdf", fake_render_report_pdf)
+
+    resp = client.post(
+        "/api/reports/pdf",
+        json={"report_markdown": "# Test"},
+        headers=_admin_headers(),
+    )
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+
+
+@pytest.mark.asyncio
+async def test_expensive_endpoint_limiter_returns_429_when_saturated(monkeypatch):
+    from src.core import config as _cfg
+
+    monkeypatch.setattr(_cfg.settings, "expensive_endpoint_concurrency_limit", 1)
+    semaphore = api_dependencies._get_expensive_endpoint_semaphore()
+    assert semaphore.acquire(blocking=False)
+    try:
+        dependency = api_dependencies.require_expensive_endpoint_slot()
+        with pytest.raises(HTTPException) as exc_info:
+            await anext(dependency)
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.detail == "Expensive endpoint concurrency limit exceeded."
+    finally:
+        semaphore.release()
 
 
 # ── Wrong key is rejected ──────────────────────────────────────────

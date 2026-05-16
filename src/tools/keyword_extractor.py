@@ -2,10 +2,15 @@
 
 import logging
 from dataclasses import dataclass
+from threading import Lock
 
 from crewai.tools.base_tool import BaseTool
 
 logger = logging.getLogger(__name__)
+
+_YAKE_TOP = 20
+_YAKE_EXTRACTOR_CACHE: dict[tuple[str, int, float, int], object] = {}
+_YAKE_EXTRACTOR_CACHE_LOCK = Lock()
 
 
 @dataclass
@@ -36,17 +41,27 @@ class KeywordExtractor:
         if self._extractor is None:
             try:
                 import yake
-
-                self._extractor = yake.KeywordExtractor(
-                    lan=self.language,
-                    n=self.max_ngram_size,
-                    dedupLim=self.dedup_threshold,
-                    top=20,
-                    features=None,
-                )
             except ImportError:
                 logger.error("YAKE not installed. Install with: pip install yake")
                 raise
+            cache_key = (
+                self.language,
+                self.max_ngram_size,
+                self.dedup_threshold,
+                _YAKE_TOP,
+            )
+            with _YAKE_EXTRACTOR_CACHE_LOCK:
+                extractor = _YAKE_EXTRACTOR_CACHE.get(cache_key)
+                if extractor is None:
+                    extractor = yake.KeywordExtractor(
+                        lan=self.language,
+                        n=self.max_ngram_size,
+                        dedupLim=self.dedup_threshold,
+                        top=_YAKE_TOP,
+                        features=None,
+                    )
+                    _YAKE_EXTRACTOR_CACHE[cache_key] = extractor
+                self._extractor = extractor
         return self._extractor
 
     def extract(self, text: str, top_n: int = 10) -> list[Keyword]:

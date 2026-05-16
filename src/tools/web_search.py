@@ -120,6 +120,8 @@ class DuckDuckGoSearch:
 class SearxngSearch:
     """Wrapper for SearxNG search API."""
 
+    _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "host.docker.internal", "searxng"}
+
     def __init__(self, base_url: str, api_key: str | None = None, timeout: int = 10):
         self.base_url = _docker_safe_searxng_base_url(base_url).rstrip("/")
         self.api_key = api_key
@@ -137,7 +139,18 @@ class SearxngSearch:
         headers: dict[str, str] = {}
         if self.api_key:
             headers["X-API-Key"] = self.api_key
+        if self._is_local_base_url():
+            # Local SearXNG logs bot-detection errors without proxy IP headers.
+            headers["X-Forwarded-For"] = "127.0.0.1"
+            headers["X-Real-IP"] = "127.0.0.1"
         return headers
+
+    def _is_local_base_url(self) -> bool:
+        try:
+            host = urlparse(self.base_url).hostname or ""
+        except Exception:
+            return False
+        return host.lower() in self._LOCAL_HOSTS
 
     def _request(self, params: dict[str, str]) -> list[SearchResult]:
         self._rate_limit()

@@ -10,6 +10,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: research-agent-backend
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     volumes:
@@ -82,7 +84,8 @@ services:
       args:
         # This URL is baked into the client bundle at build time
         # Must be reachable from the USER'S BROWSER
-        - NEXT_PUBLIC_API_URL=http://localhost:8000
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        - NEXT_PUBLIC_ADMIN_API_KEY=${NEXT_PUBLIC_ADMIN_API_KEY:-}
     container_name: research-agent-frontend
     ports:
       - "3000:3000"

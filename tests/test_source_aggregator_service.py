@@ -736,6 +736,125 @@ def test_retained_selection_respects_bucket_result_quota():
     assert not service._candidate_allowed_by_policy(left_two, sources, plan)
 
 
+def test_retained_selection_continues_after_required_coverage_until_max():
+    def candidate(domain: str, bias: int, bucket: str) -> SourceCandidate:
+        return SourceCandidate(
+            url=f"https://{domain}/story",
+            domain=domain,
+            title=f"{domain} story",
+            published_date=None,
+            author=None,
+            full_text="story text" * 50,
+            extraction_error=None,
+            bias_result=BiasResult(
+                domain=domain,
+                bias=bias,
+                bias_label=bucket,
+                confidence=1.0,
+                method="dataset",
+                factual_rating="high",
+                category="mainstream",
+            ),
+            bucket_label=bucket,
+        )
+
+    def score(source: SourceCandidate, total: float) -> ScoredCandidate:
+        return ScoredCandidate(
+            url=source.url,
+            domain=source.domain,
+            title=source.title,
+            bias=source.bias_result.bias if source.bias_result else 0,
+            bucket_label=source.bucket_label or "",
+            total_score=total,
+            event_similarity=1.0,
+            similarity_score=0.25,
+            bucket_need_score=0.30,
+            novelty_score=0.15,
+            factuality_score=0.15,
+            freshness_score=0.10,
+            duplicate_penalty=0.0,
+        )
+
+    left_one = candidate("left-one.example.com", -2, "left_side")
+    right_one = candidate("right-one.example.com", 2, "right_side")
+    center_one = candidate("center-one.example.com", 0, "center")
+    left_two = candidate("left-two.example.com", -3, "left_side")
+    right_two = candidate("right-two.example.com", 3, "right_side")
+    plan = SourcePlan(
+        required_buckets=[
+            BucketSpec(
+                label="left_side",
+                bias_values={-2, -3},
+                required=True,
+                result_quota=2,
+            ),
+            BucketSpec(
+                label="right_side",
+                bias_values={2, 3},
+                required=True,
+                result_quota=2,
+            ),
+        ],
+        optional_buckets=[
+            BucketSpec(
+                label="center",
+                bias_values={0},
+                required=False,
+                result_quota=1,
+            ),
+        ],
+        domain_targets_per_bucket={},
+        search_plan=[],
+        bucket_probe_sequence=["left_side", "right_side", "center"],
+        proceed_minimum_groups=["left_side", "right_side"],
+        target_unique_exact_biases=2,
+        seed_bias=None,
+        seed_domain=None,
+    )
+    service = SourceAggregatorService()
+    service._candidate_decisions = [
+        CandidateDecision(
+            url=source.url,
+            domain=source.domain,
+            title=source.title,
+            stage="site_search",
+            state="extracted",
+            bucket_label=source.bucket_label,
+        )
+        for source in [left_one, right_one, center_one, left_two, right_two]
+    ]
+    sources: list[SourceCandidate] = []
+
+    with patch("src.services.source_aggregator_service.settings") as mock_settings:
+        mock_settings.retained_source_min = 2
+        mock_settings.retained_source_max = 5
+        mock_settings.max_per_exact_bias = 1
+        mock_settings.max_per_bucket_group = 2
+        mock_settings.allow_same_bias_backfill = False
+        service._select_scored_candidates(
+            [
+                (score(left_one, 0.99), left_one),
+                (score(center_one, 0.98), center_one),
+                (score(left_two, 0.97), left_two),
+                (score(right_one, 0.50), right_one),
+                (score(right_two, 0.49), right_two),
+            ],
+            sources,
+            set(),
+            set(),
+            plan,
+        )
+
+    assert [source.domain for source in sources] == [
+        "left-one.example.com",
+        "right-one.example.com",
+        "center-one.example.com",
+        "left-two.example.com",
+        "right-two.example.com",
+    ]
+    assert service._missing_required_labels(sources, plan) == []
+
+
 def test_gather_sources_uses_planner_and_relevance_scorer(monkeypatch):
     class DummySearcher:
         def __init__(self):

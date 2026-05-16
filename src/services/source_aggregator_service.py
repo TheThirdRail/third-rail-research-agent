@@ -1207,8 +1207,6 @@ class SourceAggregatorService:
 
         while remaining and len(sources) < settings.retained_source_max:
             missing = set(self._missing_required_labels(sources, plan))
-            if not missing and len(sources) >= settings.retained_source_min:
-                break
 
             pool = [
                 item

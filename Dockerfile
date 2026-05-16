@@ -51,6 +51,8 @@ RUN mkdir -p /ms-playwright && \
 COPY src/ ./src/
 COPY src/core/llm_provider_docker.py ./src/core/llm_provider.py
 COPY config/ ./config/
+COPY alembic.ini ./
+COPY migrations/ ./migrations/
 COPY pyproject.toml ./
 
 # Create data directory

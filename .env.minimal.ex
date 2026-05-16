@@ -24,6 +24,9 @@ API_PORT=8000
 # Leave empty to disable admin routes entirely.
 # Generate one with: python -c "import secrets; print(secrets.token_urlsafe(32))"
 ADMIN_API_KEY=
+# Server-side secret used by the Next.js frontend to sign admin session cookies.
+# Generate one with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+ADMIN_SESSION_SECRET=
 # Comma-separated allowed CORS origins. Defaults to localhost:3000 when empty.
 CORS_ORIGINS=
 
@@ -31,8 +34,6 @@ CORS_ORIGINS=
 # Web UI Settings (Next.js Frontend)
 # -----------------------------------------
 NEXT_PUBLIC_API_URL=http://localhost:8000
-# Must match ADMIN_API_KEY above for admin UI operations to work.
-NEXT_PUBLIC_ADMIN_API_KEY=
 
 # -----------------------------------------
 # Database
@@ -117,6 +118,6 @@ EMBEDDING_MODEL=text-embedding-qwen3-embedding-8b
 EMBEDDING_BATCH_SIZE=32
 
 # --- Firecrawl (optional article extraction fallback) ---
-# Used only if local Crawl4AI and trafilatura extraction both fail.
+# Used only if local extractors cannot recover enough article content.
 # https://docs.firecrawl.dev/
 FIRECRAWL_API_KEY=

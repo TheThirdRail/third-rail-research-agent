@@ -2,6 +2,7 @@
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 import yaml
 from crewai.tools.base_tool import BaseTool
@@ -48,10 +49,10 @@ class LocalBiasDatabase:
     bias_sources.yaml for single-source-of-truth compliance.
     """
 
-    def __init__(self, config_path: str | None = None):
+    def __init__(self, config_path: str | None = None) -> None:
         """Initialize with source registry or legacy config file."""
         self._registry = None
-        self._legacy_sources: dict[str, dict] = {}
+        self._legacy_sources: dict[str, dict[str, Any]] = {}
         try:
             from src.services.source_registry import get_source_registry
 
@@ -63,12 +64,13 @@ class LocalBiasDatabase:
             )
             self._legacy_sources = self._load_sources()
 
-    def _load_sources(self) -> dict[str, dict]:
+    def _load_sources(self) -> dict[str, dict[str, Any]]:
         """Load sources from legacy configuration."""
         try:
             with open(self.config_path) as f:
-                config = yaml.safe_load(f)
-            return config.get("sources", {})
+                config = yaml.safe_load(f) or {}
+            sources = config.get("sources", {}) if isinstance(config, dict) else {}
+            return sources if isinstance(sources, dict) else {}
         except Exception as e:
             logger.error(f"Failed to load bias sources: {e}")
             return {}
@@ -120,7 +122,7 @@ class LocalBiasDatabase:
 class BiasClassifier:
     """Classifies political bias of news sources."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize classifier."""
         self.local_db = LocalBiasDatabase()
 

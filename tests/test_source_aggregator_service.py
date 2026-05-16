@@ -1,3 +1,6 @@
+import time
+from threading import Lock
+from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import urlparse
 
@@ -368,6 +371,51 @@ def test_search_queries_round_robins_bucket_steps(monkeypatch):
         "right.example.com",
         "left.example.com",
     ]
+
+
+def test_preflight_skips_private_candidate_before_probe(monkeypatch):
+    service = SourceAggregatorService()
+    monkeypatch.setattr(
+        service,
+        "_extract_url",
+        lambda url, require_success=False: (_ for _ in ()).throw(
+            AssertionError("unsafe candidate reached extraction")
+        ),
+    )
+    plan = SourcePlan(
+        required_buckets=[],
+        optional_buckets=[],
+        domain_targets_per_bucket={},
+        search_plan=[],
+        bucket_probe_sequence=[],
+        proceed_minimum_groups=[],
+        target_unique_exact_biases=0,
+        seed_bias=None,
+        seed_domain=None,
+    )
+
+    scored = service._preflight_search_results(
+        results=[
+            SearchResult(
+                title="Internal",
+                url="http://127.0.0.1/private",
+                snippet="snippet",
+                source="internal",
+            )
+        ],
+        description="story",
+        sources=[],
+        seen_urls=set(),
+        seen_domains=set(),
+        story_packet=None,
+        plan=plan,
+    )
+
+    assert scored == []
+    assert service._probed_count == 0
+    assert service.candidate_decisions[-1].rejection_reason == (
+        "blocked_private_or_local_url"
+    )
 
 
 def test_build_query_attempts_prefers_story_packet_query_families():
@@ -1070,6 +1118,97 @@ def test_preflight_adds_candidate_semantic_similarity(monkeypatch):
         ]
         == 0.82
     )
+
+
+def test_preflight_prefetches_candidates_concurrently_preserving_order(monkeypatch):
+    active = 0
+    max_active = 0
+    lock = Lock()
+
+    def fake_extract_url(
+        self, url: str, require_success: bool = False
+    ) -> SourceCandidate:
+        nonlocal active, max_active
+        with lock:
+            active += 1
+            max_active = max(max_active, active)
+        time.sleep(0.05)
+        with lock:
+            active -= 1
+
+        domain = urlparse(url).netloc.replace("www.", "")
+        return SourceCandidate(
+            url=url,
+            domain=domain,
+            title=domain,
+            published_date=None,
+            author=None,
+            full_text="deterministic article text " * 30,
+            extraction_error=None,
+            bias_result=None,
+        )
+
+    monkeypatch.setattr(SourceAggregatorService, "_extract_url", fake_extract_url)
+
+    service = SourceAggregatorService()
+    plan = service._planner.plan(seed_bias=None, seed_domain=None)
+    results = [
+        SearchResult(
+            title=f"Candidate {idx}",
+            url=f"https://source{idx}.example.com/story",
+            snippet="snippet",
+            source=f"source{idx}",
+        )
+        for idx in range(4)
+    ]
+
+    with patch("src.services.source_aggregator_service.settings") as mock_settings:
+        mock_settings.candidate_probe_limit = 4
+        mock_settings.semantic_candidate_scoring_enabled = False
+
+        started_at = time.perf_counter()
+        scored = service._preflight_search_results(
+            results=results,
+            description="story description",
+            sources=[],
+            seen_urls=set(),
+            seen_domains=set(),
+            story_packet=None,
+            plan=plan,
+        )
+        elapsed = time.perf_counter() - started_at
+
+    assert elapsed < 0.16
+    assert max_active > 1
+    assert service._probed_count == 4
+    assert [candidate.domain for _, candidate in scored] == [
+        "source0.example.com",
+        "source1.example.com",
+        "source2.example.com",
+        "source3.example.com",
+    ]
+
+
+def test_extract_keywords_reuses_keyword_extractor(monkeypatch):
+    class FakeKeywordExtractor:
+        instances = 0
+
+        def __init__(self):
+            type(self).instances += 1
+
+        def extract(self, text: str, top_n: int = 10):
+            return [SimpleNamespace(term="shared")]
+
+    monkeypatch.setattr(
+        "src.services.source_aggregator_service.KeywordExtractor",
+        FakeKeywordExtractor,
+    )
+
+    service = SourceAggregatorService()
+
+    assert service._extract_keywords("first story text") == ["shared"]
+    assert service._extract_keywords("second story text") == ["shared"]
+    assert FakeKeywordExtractor.instances == 1
 
 
 def test_rss_plan_step_uses_story_matching_when_packet_available():

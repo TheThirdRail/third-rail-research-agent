@@ -5,6 +5,7 @@ for CLI and API consumers, with proper persistence handling.
 """
 
 import logging
+from types import TracebackType
 from typing import Any
 
 from src.core import analysis_events
@@ -78,6 +79,27 @@ class AnalysisService:
             self._session,
             semantic_memory_cls=SemanticMemoryService,
         )
+        self._closed = False
+
+    def close(self) -> None:
+        """Close the service database session once."""
+        if self._closed:
+            return
+        self._session.close()
+        self._closed = True
+
+    def __enter__(self) -> "AnalysisService":
+        """Return this service for context-managed use."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        """Close the service session without handling transaction state."""
+        self.close()
 
     def analyze(
         self,
@@ -331,7 +353,7 @@ class AnalysisService:
             )
 
             # ── Stage 5: Run CrewAI analysis ────────────────────────
-            analysis_kwargs = {
+            analysis_kwargs: dict[str, Any] = {
                 "prefetched_sources": sources_context,
                 "visual_evidence_context": visual_context,
             }
@@ -365,7 +387,7 @@ class AnalysisService:
                 },
             )
             result = run_analysis(description, url, **analysis_kwargs)
-            crew_report = result.get("report", "")
+            crew_report = str(result.get("report", "") or "")
             structured_sections = AnalysisReportSections.from_crew_payload(
                 result,
                 fallback_summary=description,
@@ -714,7 +736,7 @@ class AnalysisService:
         self,
         *,
         story_id: str,
-        story_packet,
+        story_packet: Any,
         description: str,
         sources: list[tuple[Any, Source]],
         visual_bundle: VisualEvidenceBundle,

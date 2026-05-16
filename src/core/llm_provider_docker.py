@@ -20,6 +20,7 @@ import os
 import re
 import threading
 import time
+from collections.abc import Awaitable, Callable
 from enum import Enum
 from typing import Any
 
@@ -100,7 +101,7 @@ class LLMRouter:
         provider: LLMProvider | str | None = None,
         model: str | None = None,
         agent_name: str | None = None,
-    ):
+    ) -> None:
         """Initialize LLM router.
 
         Args:
@@ -148,7 +149,7 @@ class LLMRouter:
             or os.getenv("LLM_PROVIDER", "openrouter")
         )
         normalized_provider = normalize_provider_name(provider_str) or "openrouter"
-        self.provider = LLMProvider(normalized_provider)
+        self.provider: LLMProvider = LLMProvider(normalized_provider)
 
         # Get model: arg > agent_config > global config > env > fallback
         model_str = model
@@ -161,7 +162,7 @@ class LLMRouter:
             or os.getenv("SELECTED_MODEL")
             or FALLBACK_MODELS.get(self.provider, "")
         )
-        self.model = normalize_model_for_provider(self.provider.value, raw_model)
+        self.model: str = normalize_model_for_provider(self.provider.value, raw_model)
         if raw_model != self.model:
             logger.info(
                 "Normalized model for provider=%s: raw=%s normalized=%s",
@@ -171,9 +172,13 @@ class LLMRouter:
             )
 
         # Temperature (if set in agent config, currently used in completion methods)
-        self.temperature_override = agent_config.temperature if agent_config else None
-        self.free_tier = bool(agent_config.free_tier) if agent_config else False
-        self.reasoning_effort = agent_config.reasoning_effort if agent_config else None
+        self.temperature_override: float | None = (
+            agent_config.temperature if agent_config else None
+        )
+        self.free_tier: bool = bool(agent_config.free_tier) if agent_config else False
+        self.reasoning_effort: str | None = (
+            agent_config.reasoning_effort if agent_config else None
+        )
 
         # Get API key and base URL for provider
         self.api_key = self._get_api_key()
@@ -273,7 +278,7 @@ class LLMRouter:
         base_delay = self._RATE_LIMIT_BASE_DELAY * (2**attempt)
         retry_after = self._extract_retry_after(exc) or 0.0
         delay = max(base_delay, retry_after)
-        return min(delay, self._RATE_LIMIT_MAX_DELAY)
+        return float(min(delay, self._RATE_LIMIT_MAX_DELAY))
 
     def _get_provider_semaphore(self) -> threading.BoundedSemaphore:
         """Get or create a per-provider semaphore for sync calls."""
@@ -443,7 +448,11 @@ class LLMRouter:
             return True
         return False
 
-    def _call_with_backoff(self, call_fn, sleep_fn):
+    def _call_with_backoff(
+        self,
+        call_fn: Callable[[], Any],
+        sleep_fn: Callable[[float], None],
+    ) -> Any:
         if not self.free_tier:
             return call_fn()
         for attempt in range(self._RATE_LIMIT_RETRIES + 1):
@@ -466,7 +475,11 @@ class LLMRouter:
             f"{self.provider.value} rate limit exceeded; please retry later."
         )
 
-    async def _call_with_backoff_async(self, call_fn, sleep_fn):
+    async def _call_with_backoff_async(
+        self,
+        call_fn: Callable[[], Awaitable[Any]],
+        sleep_fn: Callable[[float], Awaitable[Any]],
+    ) -> Any:
         if not self.free_tier:
             return await call_fn()
         for attempt in range(self._RATE_LIMIT_RETRIES + 1):
@@ -507,7 +520,7 @@ class LLMRouter:
             LLMProvider.OLLAMA: None,  # No API key needed
         }
         env_var = key_mapping.get(self.provider)
-        if self.provider == LLMProvider.GEMINI:
+        if self.provider == LLMProvider.GEMINI and env_var:
             return os.getenv(env_var) or os.getenv("GEMINI_API_KEY")
         if self.provider == LLMProvider.LMSTUDIO:
             return resolve_lmstudio_api_key(
@@ -604,7 +617,7 @@ class LLMRouter:
                 f"Limit: ${status['limit']:.2f}"
             )
 
-        def _call_completion():
+        def _call_completion() -> Any:
             completion_kwargs = dict(kwargs)
             reasoning_effort = self._chat_completion_reasoning_effort()
             if reasoning_effort:
@@ -619,7 +632,7 @@ class LLMRouter:
                 **completion_kwargs,
             )
 
-        def _run_once():
+        def _run_once() -> Any:
             if self.free_tier:
                 semaphore = self._get_provider_semaphore()
                 semaphore.acquire()
@@ -644,7 +657,8 @@ class LLMRouter:
         except Exception:
             logger.debug("Cost tracking failed for sync completion", exc_info=True)
 
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        return content if isinstance(content, str) else ""
 
     async def acomplete(
         self,
@@ -680,7 +694,7 @@ class LLMRouter:
                 f"Limit: ${status['limit']:.2f}"
             )
 
-        async def _call_acompletion():
+        async def _call_acompletion() -> Any:
             completion_kwargs = dict(kwargs)
             reasoning_effort = self._chat_completion_reasoning_effort()
             if reasoning_effort:
@@ -695,7 +709,7 @@ class LLMRouter:
                 **completion_kwargs,
             )
 
-        async def _run_once():
+        async def _run_once() -> Any:
             if self.free_tier:
                 semaphore = self._get_provider_async_semaphore()
                 async with semaphore:
@@ -719,7 +733,8 @@ class LLMRouter:
         except Exception:
             logger.debug("Cost tracking failed for async completion", exc_info=True)
 
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        return content if isinstance(content, str) else ""
 
     def get_crewai_config(self) -> dict[str, Any]:
         """Get configuration dict for CrewAI agents.
@@ -739,7 +754,7 @@ class LLMRouter:
         if self.base_url:
             config["base_url"] = self.base_url
             config["api_base"] = self.base_url
-        reasoning_effort = getattr(self, "reasoning_effort", None)
+        reasoning_effort = self.reasoning_effort
         if reasoning_effort:
             config["reasoning_effort"] = reasoning_effort
 
@@ -749,7 +764,7 @@ class LLMRouter:
         """Return a LiteLLM chat-completions-safe reasoning effort value."""
         if self.provider != LLMProvider.OPENAI:
             return None
-        reasoning_effort = getattr(self, "reasoning_effort", None)
+        reasoning_effort = self.reasoning_effort
         if reasoning_effort in {"low", "medium", "high"}:
             return reasoning_effort
         return None

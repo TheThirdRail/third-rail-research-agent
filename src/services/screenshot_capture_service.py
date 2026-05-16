@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import ipaddress
 import re
-import socket
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from src.core.config import settings
 from src.schemas.visual_evidence import ScreenshotArtifact
+from src.utils.url_utils import blocked_public_url_reason
 
 
 class ScreenshotCaptureService:
@@ -119,6 +119,8 @@ class ScreenshotCaptureService:
                             "height": self.viewport_height,
                         }
                     )
+                    if hasattr(page, "route"):
+                        page.route("**/*", self._guarded_playwright_route)
                     response = page.goto(
                         target_url,
                         wait_until="networkidle",
@@ -171,7 +173,7 @@ class ScreenshotCaptureService:
         if not self.ocr_enabled:
             return "", {"ocr_status": "disabled"}
         try:
-            import pytesseract  # type: ignore[import-not-found]
+            import pytesseract
         except Exception as exc:
             return "", {
                 "ocr_status": "unavailable",
@@ -208,20 +210,15 @@ class ScreenshotCaptureService:
 
     @staticmethod
     def _blocked_target_reason(target_url: str) -> str:
-        parsed = urlparse(target_url)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-            return "blocked_non_http_url"
-        hostname = parsed.hostname.strip().lower()
-        if hostname in {"localhost", "127.0.0.1", "::1"}:
-            return "blocked_private_or_local_url"
-        try:
-            for addr in socket.getaddrinfo(hostname, None):
-                ip = ipaddress.ip_address(addr[4][0])
-                if ip.is_private or ip.is_loopback or ip.is_link_local:
-                    return "blocked_private_or_local_url"
-        except Exception:
-            return "hostname_resolution_failed"
-        return ""
+        return blocked_public_url_reason(target_url)
+
+    @staticmethod
+    def _guarded_playwright_route(route: Any) -> None:
+        reason = blocked_public_url_reason(route.request.url)
+        if reason:
+            route.abort()
+            return
+        route.continue_()
 
     def _artifact_path(self, target_url: str, platform: str) -> Path:
         parsed = urlparse(target_url)

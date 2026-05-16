@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -32,10 +32,10 @@ class AgentInfo(BaseModel):
     name: str
     role: str
     goal: str
-    config: dict | None = None
+    config: dict[str, Any] | None = None
 
 
-def _config_dict(name: str, config) -> dict:
+def _config_dict(name: str, config: Any) -> dict[str, Any]:
     return {
         "agent_name": name,
         "provider": config.provider if config else None,
@@ -48,7 +48,7 @@ def _config_dict(name: str, config) -> dict:
 
 
 @router.get("", response_model=list[AgentInfo])
-def list_agents(db: Session = Depends(get_db)):
+def list_agents(db: Session = Depends(get_db)) -> list[AgentInfo]:
     """List all available agents and their configurations."""
     service = AgentConfigService(db)
 
@@ -66,7 +66,7 @@ def list_agents(db: Session = Depends(get_db)):
 
 
 @router.get("/{name}", response_model=AgentInfo)
-def get_agent(name: str, db: Session = Depends(get_db)):
+def get_agent(name: str, db: Session = Depends(get_db)) -> AgentInfo:
     """Get specific agent info."""
     if name not in AGENT_ROLES:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -111,7 +111,7 @@ async def _validate_model(provider: str, model: str) -> str:
 @router.post("/{name}/config", dependencies=[Depends(require_admin_api_key)])
 async def update_agent_config(
     name: str, config: AgentConfigUpdate, db: Session = Depends(get_db)
-):
+) -> dict[str, Any]:
     """Update agent configuration."""
     if name not in AGENT_ROLES:
         raise HTTPException(status_code=404, detail="Agent not found")

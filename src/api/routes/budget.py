@@ -56,7 +56,7 @@ def set_budget_limit(request: SetLimitRequest) -> SetLimitResponse:
 
 
 @router.post("/budget/reset", dependencies=[Depends(require_admin_api_key)])
-def reset_budget() -> dict:
+def reset_budget() -> dict[str, str]:
     """Reset today's spending to zero (admin only)."""
     service = get_budget_service()
     service.reset_daily_spend()

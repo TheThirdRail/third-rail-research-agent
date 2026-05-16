@@ -1,12 +1,14 @@
 """Report export API routes."""
 
 import logging
+from typing import Any
 
 import bleach
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from markdown import markdown as markdown_to_html
 from pydantic import BaseModel, Field
 
+from src.api.dependencies import require_admin_api_key, require_expensive_endpoint_slot
 from src.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -121,7 +123,7 @@ def build_report_html(markdown: str) -> str:
     raw_body = markdown_to_html(
         markdown,
         extensions=["tables", "footnotes", "fenced_code"],
-        output_format="html5",
+        output_format="html",
     )
     body = bleach.clean(
         raw_body,
@@ -159,7 +161,7 @@ async def render_report_pdf(markdown: str) -> bytes:
             browser = await playwright.chromium.launch(args=["--no-sandbox"])
             context = await browser.new_context(java_script_enabled=False)
 
-            async def _abort_route(route):
+            async def _abort_route(route: Any) -> None:
                 await route.abort()
 
             await context.route("**/*", _abort_route)
@@ -185,7 +187,13 @@ async def render_report_pdf(markdown: str) -> bytes:
     return pdf_bytes
 
 
-@router.post("/reports/pdf")
+@router.post(
+    "/reports/pdf",
+    dependencies=[
+        Depends(require_admin_api_key),
+        Depends(require_expensive_endpoint_slot),
+    ],
+)
 async def create_report_pdf(request: ReportPdfRequest) -> Response:
     """Generate a PDF report from markdown."""
     if not request.report_markdown.strip():

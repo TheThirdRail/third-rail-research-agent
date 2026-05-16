@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from urllib.parse import urlparse
 
 from src.core.exceptions import SourceExtractionError
@@ -20,6 +20,7 @@ _CORE_SECTION_PATTERNS: dict[str, re.Pattern[str]] = {
         re.IGNORECASE,
     ),
 }
+_GENERIC_FILLER = {"n/a", "none", "no framing", "see report", "tbd", ""}
 
 
 def validate_report_sources(report_markdown: str, allowed_urls: Iterable[str]) -> None:
@@ -198,7 +199,7 @@ def validate_orphaned_citations(report_markdown: str) -> list[str]:
 
 
 def validate_source_findings(
-    source_findings: list[object],
+    source_findings: Sequence[object],
     retained_source_count: int,
 ) -> list[str]:
     """Validate source findings completeness and correctness.
@@ -223,7 +224,7 @@ def validate_source_findings(
     findings: list[dict[str, str]] = []
     for f in source_findings:
         if hasattr(f, "model_dump"):
-            findings.append(f.model_dump())  # type: ignore[union-attr]
+            findings.append(f.model_dump())
         elif isinstance(f, dict):
             findings.append(f)
 
@@ -254,7 +255,6 @@ def validate_source_findings(
         warnings.append(f"Duplicate source findings: {', '.join(duplicates)}")
 
     # Check for empty key framing
-    _GENERIC_FILLER = {"n/a", "none", "no framing", "see report", "tbd", ""}
     empty_framing: list[str] = []
     for finding in findings:
         sid = str(finding.get("source_id", "")).strip().upper()

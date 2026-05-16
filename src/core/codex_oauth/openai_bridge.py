@@ -295,6 +295,36 @@ def _metadata_urls(extra: dict[str, Any]) -> list[str]:
     return values
 
 
+def _metadata_string(extra: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        value = extra.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _metadata_run_id(extra: dict[str, Any]) -> str | None:
+    return _metadata_string(
+        extra,
+        (
+            "token_usage_run_id",
+            "llm_run_id",
+            "run_id",
+        ),
+    )
+
+
+def _metadata_agent_name(extra: dict[str, Any]) -> str | None:
+    return _metadata_string(
+        extra,
+        (
+            "agent_name",
+            "agent",
+            "agent_role",
+        ),
+    )
+
+
 def _usage_for_success(
     *,
     provider_usage: NormalizedUsage | None,
@@ -329,6 +359,8 @@ def create_app(settings: Settings) -> FastAPI:
         started_timestamp: dict[str, str],
         query_text: str | None,
         metadata_urls: list[str],
+        run_id: str | None,
+        agent_name: str | None,
         usage: NormalizedUsage,
         request_id: str | None = None,
     ) -> None:
@@ -342,12 +374,13 @@ def create_app(settings: Settings) -> FastAPI:
         sites = normalize_sites_from_urls([*metadata_urls, *links_provided])
         record: TokenUsageRecord = {
             "event": "llm_token_usage",
-            "run_id": new_run_id(),
+            "run_id": run_id or new_run_id(),
             "request_id": request_id,
             "timestamp": started_timestamp["timestamp"],
             "date": started_timestamp.get("date", ""),
             "time": started_timestamp.get("time", ""),
             "timezone": started_timestamp.get("timezone", ""),
+            "agent_name": agent_name,
             "provider": "openai-oauth-bridge",
             "endpoint": endpoint,
             "model": model,
@@ -405,6 +438,8 @@ def create_app(settings: Settings) -> FastAPI:
             extra
         ) or extract_user_query_from_chat_messages(request.messages)
         metadata_urls = _metadata_urls(extra)
+        run_id = _metadata_run_id(extra)
+        agent_name = _metadata_agent_name(extra)
         try:
             result = cli_adapter.run_prompt_with_model_result(
                 prompt,
@@ -421,6 +456,8 @@ def create_app(settings: Settings) -> FastAPI:
                 started_timestamp=started_timestamp,
                 query_text=query_text,
                 metadata_urls=metadata_urls,
+                run_id=run_id,
+                agent_name=agent_name,
                 usage=missing_usage(),
             )
             raise HTTPException(status_code=503, detail=redact_secrets(exc)) from exc
@@ -463,6 +500,8 @@ def create_app(settings: Settings) -> FastAPI:
             started_timestamp=started_timestamp,
             query_text=query_text,
             metadata_urls=metadata_urls,
+            run_id=run_id,
+            agent_name=agent_name,
             usage=usage,
             request_id=response_id,
         )
@@ -485,6 +524,8 @@ def create_app(settings: Settings) -> FastAPI:
             extra
         ) or extract_user_query_from_responses_input(request.input)
         metadata_urls = _metadata_urls(extra)
+        run_id = _metadata_run_id(extra)
+        agent_name = _metadata_agent_name(extra)
         reasoning_effort = (
             request.reasoning.get("effort")
             if isinstance(request.reasoning, dict)
@@ -506,6 +547,8 @@ def create_app(settings: Settings) -> FastAPI:
                 started_timestamp=started_timestamp,
                 query_text=query_text,
                 metadata_urls=metadata_urls,
+                run_id=run_id,
+                agent_name=agent_name,
                 usage=missing_usage(),
             )
             raise HTTPException(status_code=503, detail=redact_secrets(exc)) from exc
@@ -531,6 +574,8 @@ def create_app(settings: Settings) -> FastAPI:
             started_timestamp=started_timestamp,
             query_text=query_text,
             metadata_urls=metadata_urls,
+            run_id=run_id,
+            agent_name=agent_name,
             usage=usage,
             request_id=response_body.get("id"),
         )

@@ -71,6 +71,8 @@ docker compose up --build
 
 See [Deployment Guide](deployment-guide.md) for detailed setup, [Docker Setup Guide](docs/docker-setup-guide.md) for container troubleshooting, and [Docker Restart Instructions](docs/docker-restart-instructions.md) when you want to rebuild and try the app locally.
 
+When using the optional local Codex OAuth bridge, run it as a separate host-side process; Docker restarts do not start it, so restart the bridge after a Windows reboot, logoff, terminal close, or bridge process exit.
+
 ## Usage
 
 ### Discovery Mode — Find Stories
@@ -232,6 +234,8 @@ docker compose --profile local-llm up  # Include Ollama service
 ```
 
 For a clean local restart after code or config changes, follow [Docker Restart Instructions](docs/docker-restart-instructions.md).
+
+If your `.env` points OpenAI traffic at `http://host.docker.internal:8787/v1`, confirm the host-side Codex OAuth bridge is still running before testing analysis: `Get-NetTCPConnection -LocalPort 8787`.
 
 ## Support & Debugging
 

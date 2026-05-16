@@ -4,6 +4,7 @@ from pathlib import Path
 
 from src.core.token_usage_tracker import (
     TokenUsageTracker,
+    build_token_usage_report,
     estimate_text_tokens,
     estimate_usage_from_texts,
     extract_chat_completions_usage,
@@ -16,8 +17,8 @@ from src.core.token_usage_tracker import (
 )
 
 
-def _record(query_text: str = "Analyze https://example.com/article"):
-    return {
+def _record(query_text: str = "Analyze https://example.com/article", **overrides):
+    record = {
         "event": "llm_token_usage",
         "run_id": "run_test",
         "timestamp": "2026-05-06T10:30:00.000-04:00",
@@ -30,6 +31,8 @@ def _record(query_text: str = "Analyze https://example.com/article"):
         "usage_source": "missing",
         "is_estimate": False,
     }
+    record.update(overrides)
+    return record
 
 
 def test_tracker_creates_log_dir_and_appends_jsonl(tmp_path):
@@ -56,6 +59,101 @@ def test_tracker_record_many_appends_jsonl_batch(tmp_path):
     assert len(lines) == 2
     assert json.loads(lines[0])["query_text"] == "Analyze https://example.com/article"
     assert json.loads(lines[1])["query_text"] == "Second query"
+
+
+def test_tracker_writes_readable_report_grouped_by_run_and_model(tmp_path):
+    log_dir = tmp_path / "token-usage"
+    tracker = TokenUsageTracker(log_dir=log_dir)
+
+    tracker.record_many(
+        [
+            _record(
+                "Analyze https://example.com/article",
+                agent_name="source_analyzer",
+                cached_input_tokens=20,
+                date="2026-05-06",
+                links_provided=["https://example.com/article"],
+                model="gpt-5.4",
+                run_id="run_shared",
+                status="success",
+                time="10:30:00",
+                total_input_tokens=100,
+                total_output_tokens=10,
+            ),
+            _record(
+                "Second query",
+                agent_name="bias_reviewer",
+                cached_input_tokens=30,
+                date="2026-05-06",
+                model="gpt-5.5",
+                run_id="run_shared",
+                status="success",
+                time="10:31:00",
+                total_input_tokens=200,
+                total_output_tokens=25,
+            ),
+            _record(
+                "Separate run",
+                cached_input_tokens=4,
+                date="2026-05-06",
+                model="gpt-5.4",
+                run_id="run_later",
+                time="10:32:00",
+                total_input_tokens=40,
+                total_output_tokens=5,
+            ),
+        ]
+    )
+
+    report = json.loads(
+        (log_dir / "token-usage-report.json").read_text(encoding="utf-8")
+    )
+
+    assert report["total_runs"] == 2
+    assert report["total_calls"] == 3
+    assert report["invalid_lines_skipped"] == 0
+    shared_run = report["runs"][0]
+    assert shared_run["run_id"] == "run_shared"
+    assert shared_run["date_started"] == "2026-05-06"
+    assert shared_run["time_started"] == "10:30:00"
+    assert shared_run["entered_description"] == "Analyze https://example.com/article"
+    assert shared_run["links_provided"] == ["https://example.com/article"]
+    assert [agent["agent_name"] for agent in shared_run["agents"]] == [
+        "source_analyzer",
+        "bias_reviewer",
+    ]
+    assert shared_run["model_totals"] == [
+        {
+            "model": "gpt-5.4",
+            "total_input_tokens": 100,
+            "total_cached_tokens": 20,
+            "total_output_tokens": 10,
+        },
+        {
+            "model": "gpt-5.5",
+            "total_input_tokens": 200,
+            "total_cached_tokens": 30,
+            "total_output_tokens": 25,
+        },
+    ]
+    assert shared_run["date_ended"] == "2026-05-06"
+    assert shared_run["time_ended"] == "10:31:00"
+
+
+def test_build_token_usage_report_uses_unknown_agent_until_callers_provide_one():
+    report = build_token_usage_report(
+        [
+            _record(
+                model="gpt-5.4",
+                status="success",
+                total_input_tokens=10,
+                total_output_tokens=3,
+            )
+        ]
+    )
+
+    assert report["runs"][0]["agents"][0]["agent_name"] == "unknown"
+    assert report["runs"][0]["agents"][0]["provider"] == "openai-oauth-bridge"
 
 
 def test_chat_completions_usage_maps_provider_fields():

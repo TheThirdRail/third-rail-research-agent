@@ -90,6 +90,32 @@ def test_crawl4ai_failure_falls_back_to_trafilatura(monkeypatch):
     assert calls == ["crawl4ai", "trafilatura"]
 
 
+def test_crawl4ai_unavailable_falls_back_to_trafilatura(monkeypatch):
+    extractor = ArticleExtractor()
+    _allow_public_urls(monkeypatch)
+    calls = []
+
+    def import_missing():
+        raise ModuleNotFoundError("No module named 'crawl4ai'")
+
+    def trafilatura(url: str) -> ExtractedArticle:
+        calls.append("trafilatura")
+        return _success(url, "trafilatura")
+
+    def fail_if_called(url: str) -> ExtractedArticle:
+        raise AssertionError(f"unexpected firecrawl call for {url}")
+
+    monkeypatch.setattr(extractor, "_import_crawl4ai_core", import_missing)
+    monkeypatch.setattr(extractor, "extract_trafilatura", trafilatura)
+    monkeypatch.setattr(extractor, "extract_firecrawl", fail_if_called)
+
+    result = extractor.extract("https://example.com/story")
+
+    assert result.success is True
+    assert result.extractor_method == "trafilatura"
+    assert calls == ["trafilatura"]
+
+
 @pytest.mark.asyncio
 async def test_crawl4ai_progressive_enhancement_escalates_on_block(monkeypatch):
     extractor = ArticleExtractor()

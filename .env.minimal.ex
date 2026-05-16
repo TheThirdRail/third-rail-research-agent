@@ -118,6 +118,6 @@ EMBEDDING_MODEL=text-embedding-qwen3-embedding-8b
 EMBEDDING_BATCH_SIZE=32
 
 # --- Firecrawl (optional article extraction fallback) ---
-# Used only if local Crawl4AI and trafilatura extraction both fail.
+# Used only if local extractors cannot recover enough article content.
 # https://docs.firecrawl.dev/
 FIRECRAWL_API_KEY=

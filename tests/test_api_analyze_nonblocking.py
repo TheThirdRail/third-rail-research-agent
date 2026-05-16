@@ -12,6 +12,12 @@ async def test_analyze_route_offloads_sync_service(monkeypatch):
     observed: dict[str, int] = {}
 
     class FakeAnalysisService:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            pass
+
         def analyze(self, description, url=None, options=None):
             observed["thread"] = threading.get_ident()
             with pytest.raises(RuntimeError):

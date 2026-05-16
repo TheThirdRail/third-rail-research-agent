@@ -263,8 +263,18 @@ export function ConfigModal({ agent, isOpen, onClose, onSaved }: ConfigModalProp
                                     <input
                                         type="number"
                                         step="0.01"
-                                        value={formData.budget_limit || ""}
-                                        onChange={(e) => setFormData({ ...formData, budget_limit: parseFloat(e.target.value) || null })}
+                                        value={formData.budget_limit ?? ""}
+                                        onChange={(e) => {
+                                            const parsedBudget = e.target.value === ""
+                                                ? null
+                                                : Number.parseFloat(e.target.value);
+                                            setFormData({
+                                                ...formData,
+                                                budget_limit: parsedBudget === null || Number.isNaN(parsedBudget)
+                                                    ? null
+                                                    : parsedBudget,
+                                            });
+                                        }}
                                         placeholder="Unlimited"
                                         className="w-full bg-void border border-white/20 text-white p-2 focus:border-neon-cyan focus:outline-none focus:shadow-[0_0_10px_rgba(0,243,255,0.2)]"
                                     />

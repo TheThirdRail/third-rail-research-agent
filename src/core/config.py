@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     @field_validator("debug", mode="before")
     @classmethod
-    def _normalize_debug(cls, value: object) -> object:
+    def _normalize_debug(cls, value):
         if isinstance(value, str):
             normalized = value.strip().lower()
             if normalized in {"release", "prod", "production"}:
@@ -320,11 +320,6 @@ class Settings(BaseSettings):
     admin_api_key: str = Field(
         default="",
         description="Shared secret for admin/mutation API routes. Leave empty to disable admin routes.",
-    )
-    expensive_endpoint_concurrency_limit: int = Field(
-        default=2,
-        ge=1,
-        description="Maximum concurrent requests allowed for expensive API endpoints.",
     )
     max_report_markdown_chars: int = Field(
         default=200000,

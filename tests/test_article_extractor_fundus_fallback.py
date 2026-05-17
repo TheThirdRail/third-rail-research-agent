@@ -46,28 +46,16 @@ class _FakePublisher:
     parser = _FakeParserProxy()
 
 
-def _allow_public_urls(monkeypatch):
-    monkeypatch.setattr(
-        "src.tools.article_extractor.validate_public_http_url",
-        lambda url, **kwargs: url.strip(),
-    )
-
-
 def test_fundus_extractor_uses_supported_publisher(monkeypatch):
-    _allow_public_urls(monkeypatch)
     monkeypatch.setitem(
         sys.modules,
         "fundus",
         types.SimpleNamespace(PublisherCollection=[_FakePublisher()]),
     )
-    monkeypatch.setattr(
-        ArticleExtractor,
-        "_safe_prefetch_html",
-        lambda self, url, **kwargs: (
-            _FakeResponse.text,
-            _FakeResponse.status_code,
-            _FakeResponse.url,
-        ),
+    monkeypatch.setitem(
+        sys.modules,
+        "httpx",
+        types.SimpleNamespace(get=lambda *args, **kwargs: _FakeResponse()),
     )
 
     article = ArticleExtractor().extract_fundus("https://example.com/story")
@@ -81,7 +69,6 @@ def test_fundus_extractor_uses_supported_publisher(monkeypatch):
 
 
 def test_fundus_extractor_reports_unsupported_publisher(monkeypatch):
-    _allow_public_urls(monkeypatch)
     monkeypatch.setitem(
         sys.modules,
         "fundus",
@@ -125,18 +112,11 @@ def test_automatic_fallback_tries_fundus_before_browser(monkeypatch):
 
     monkeypatch.setattr(extractor, "extract_fundus", fundus_success)
     monkeypatch.setattr(extractor, "extract_playwright", failure("playwright_sync"))
-    monkeypatch.setattr(extractor, "extract_firecrawl", failure("firecrawl"))
     monkeypatch.setattr(
         "src.tools.article_extractor.settings.enable_selenium_fallback", False
     )
 
     result = extractor.extract("https://example.com/story")
 
-    assert result.extractor_method == "firecrawl"
-    assert calls == [
-        "trafilatura",
-        "newspaper4k",
-        "fundus",
-        "playwright_sync",
-        "firecrawl",
-    ]
+    assert result.extractor_method == "playwright_sync"
+    assert calls == ["trafilatura", "newspaper4k", "fundus", "playwright_sync"]

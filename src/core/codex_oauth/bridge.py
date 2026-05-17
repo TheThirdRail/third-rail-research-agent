@@ -17,9 +17,7 @@ BRIDGE_MODE = "openai_compatible_bridge"
 
 def configured_openai_base_url(settings: Any) -> str:
     """Resolve the OpenAI-compatible base URL from env or settings."""
-    return str(
-        os.getenv("OPENAI_BASE_URL") or getattr(settings, "openai_base_url", "") or ""
-    )
+    return os.getenv("OPENAI_BASE_URL") or getattr(settings, "openai_base_url", "")
 
 
 def validate_bridge_mode(
@@ -35,9 +33,7 @@ def validate_bridge_mode(
             "CODEX_OAUTH_MODE must be openai_compatible_bridge for bridge mode."
         )
 
-    provider_name = (
-        str(provider or getattr(settings, "llm_provider", "") or "").strip().lower()
-    )
+    provider_name = (provider or getattr(settings, "llm_provider", "")).strip().lower()
     if require_settings_provider and provider_name != "openai":
         raise CodexOAuthConfigError(
             "Bridge mode requires LLM_PROVIDER=openai to reuse the OpenAI-compatible path."

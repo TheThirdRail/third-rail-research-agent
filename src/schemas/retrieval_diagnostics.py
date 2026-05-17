@@ -116,8 +116,8 @@ class CandidateCensus(BaseModel):
         )
         return cls(
             total=len(decisions),
-            by_state={str(state): count for state, count in state_counts.items()},
-            by_stage={str(stage): count for stage, count in stage_counts.items()},
+            by_state=dict(state_counts),
+            by_stage=dict(stage_counts),
             by_bucket=dict(bucket_counts),
             missing_buckets=list(missing_buckets or []),
             missing_bucket_explanations=list(missing_bucket_explanations or []),

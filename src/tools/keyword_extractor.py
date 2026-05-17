@@ -2,16 +2,10 @@
 
 import logging
 from dataclasses import dataclass
-from threading import Lock
-from typing import Any
 
 from crewai.tools.base_tool import BaseTool
 
 logger = logging.getLogger(__name__)
-
-_YAKE_TOP = 20
-_YAKE_EXTRACTOR_CACHE: dict[tuple[str, int, float, int], Any] = {}
-_YAKE_EXTRACTOR_CACHE_LOCK = Lock()
 
 
 @dataclass
@@ -30,39 +24,29 @@ class KeywordExtractor:
         language: str = "en",
         max_ngram_size: int = 2,
         deduplication_threshold: float = 0.9,
-    ) -> None:
+    ):
         """Initialize extractor."""
         self.language = language
         self.max_ngram_size = max_ngram_size
         self.dedup_threshold = deduplication_threshold
-        self._extractor: Any | None = None
+        self._extractor = None
 
-    def _get_extractor(self) -> Any:
+    def _get_extractor(self):
         """Lazy load YAKE extractor."""
         if self._extractor is None:
             try:
                 import yake
+
+                self._extractor = yake.KeywordExtractor(
+                    lan=self.language,
+                    n=self.max_ngram_size,
+                    dedupLim=self.dedup_threshold,
+                    top=20,
+                    features=None,
+                )
             except ImportError:
                 logger.error("YAKE not installed. Install with: pip install yake")
                 raise
-            cache_key = (
-                self.language,
-                self.max_ngram_size,
-                self.dedup_threshold,
-                _YAKE_TOP,
-            )
-            with _YAKE_EXTRACTOR_CACHE_LOCK:
-                extractor = _YAKE_EXTRACTOR_CACHE.get(cache_key)
-                if extractor is None:
-                    extractor = yake.KeywordExtractor(
-                        lan=self.language,
-                        n=self.max_ngram_size,
-                        dedupLim=self.dedup_threshold,
-                        top=_YAKE_TOP,
-                        features=None,
-                    )
-                    _YAKE_EXTRACTOR_CACHE[cache_key] = extractor
-                self._extractor = extractor
         return self._extractor
 
     def extract(self, text: str, top_n: int = 10) -> list[Keyword]:

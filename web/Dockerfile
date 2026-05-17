@@ -8,9 +8,11 @@ FROM node:24-alpine AS builder
 WORKDIR /app
 
 # Build-time environment variables
-# NEXT_PUBLIC_* vars are baked into the browser bundle.
+# NEXT_PUBLIC_* vars must be set at BUILD time, not runtime
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ARG NEXT_PUBLIC_ADMIN_API_KEY=
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_ADMIN_API_KEY=$NEXT_PUBLIC_ADMIN_API_KEY
 
 # Install dependencies
 COPY package*.json ./

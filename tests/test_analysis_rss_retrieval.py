@@ -1,4 +1,3 @@
-import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -48,10 +47,6 @@ def test_fetch_feed_uses_bounded_http_request(monkeypatch):
 
     monkeypatch.setattr("src.tools.rss_aggregator.httpx.get", fake_get)
     monkeypatch.setattr("src.tools.rss_aggregator.feedparser.parse", fake_parse)
-    monkeypatch.setattr(
-        "src.tools.rss_aggregator.blocked_public_url_reason",
-        lambda url: "",
-    )
 
     aggregator = RSSAggregator(feeds_config_path="missing.yaml")
     items = aggregator.fetch_feed(
@@ -70,35 +65,6 @@ def test_fetch_feed_uses_bounded_http_request(monkeypatch):
     assert items[0].source_name == "Example"
 
 
-def test_fetch_feed_skips_private_item_links(monkeypatch):
-    class Response:
-        content = b"<rss><channel><item /></channel></rss>"
-
-        def raise_for_status(self):
-            pass
-
-    def fake_parse(content):
-        return SimpleNamespace(
-            entries=[
-                Entry(
-                    title="Internal link",
-                    link="http://127.0.0.1/private",
-                    summary="RSS summary",
-                )
-            ]
-        )
-
-    monkeypatch.setattr(
-        "src.tools.rss_aggregator.httpx.get",
-        lambda *args, **kwargs: Response(),
-    )
-    monkeypatch.setattr("src.tools.rss_aggregator.feedparser.parse", fake_parse)
-
-    aggregator = RSSAggregator(feeds_config_path="missing.yaml")
-
-    assert aggregator.fetch_feed("https://feeds.example.com/rss") == []
-
-
 def test_fetch_feed_returns_empty_on_timeout(monkeypatch):
     def fake_get(*args, **kwargs):
         raise httpx.TimeoutException("timed out")
@@ -110,38 +76,6 @@ def test_fetch_feed_returns_empty_on_timeout(monkeypatch):
     assert (
         aggregator.fetch_feed("https://feeds.example.com/rss", timeout_seconds=1) == []
     )
-
-
-def test_fetch_all_fetches_feeds_concurrently_and_preserves_order():
-    class SlowAggregator(RSSAggregator):
-        def __init__(self):
-            self.feeds = [
-                {"url": f"https://feeds{i}.example.com/rss", "name": f"Feed {i}"}
-                for i in range(4)
-            ]
-
-        def fetch_feed(self, **kwargs):
-            time.sleep(0.05)
-            return [
-                FeedItem(
-                    title=kwargs["source_name"],
-                    url=kwargs["feed_url"],
-                    domain=kwargs["feed_url"].split("/")[2],
-                    published=None,
-                    summary="summary",
-                    bias=0,
-                    source_name=kwargs["source_name"],
-                )
-            ]
-
-    aggregator = SlowAggregator()
-
-    started_at = time.perf_counter()
-    items = aggregator.fetch_all(max_age_hours=24, max_per_feed=1)
-    elapsed = time.perf_counter() - started_at
-
-    assert elapsed < 0.16
-    assert [item.title for item in items] == ["Feed 0", "Feed 1", "Feed 2", "Feed 3"]
 
 
 def test_rss_retrieval_caps_feed_attempts_and_passes_timeout():

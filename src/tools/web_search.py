@@ -4,7 +4,6 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -30,23 +29,18 @@ class DuckDuckGoSearch:
 
     def __init__(self, timeout: int = 10):
         """Initialize search client."""
-        ddgs_cls: Any
         try:
-            from ddgs import DDGS as DdgsClient
-
-            ddgs_cls = DdgsClient
+            from ddgs import DDGS
         except Exception:
             try:
-                from duckduckgo_search import DDGS as LegacyDdgsClient
-
-                ddgs_cls = LegacyDdgsClient
+                from duckduckgo_search import DDGS
             except Exception as e:
                 raise ImportError(
                     "ddgs is not installed. Install it or configure SEARXNG_BASE_URL."
                 ) from e
-        self._ddgs_cls: Any = ddgs_cls
+        self._ddgs_cls = DDGS
         self.timeout = timeout
-        self._last_request = 0.0
+        self._last_request = 0
         self._min_delay = 1.0  # Minimum seconds between requests
 
     def _rate_limit(self) -> None:
@@ -132,7 +126,7 @@ class SearxngSearch:
         self.base_url = _docker_safe_searxng_base_url(base_url).rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
-        self._last_request = 0.0
+        self._last_request = 0
         self._min_delay = 0.5
 
     def _rate_limit(self) -> None:
@@ -198,9 +192,7 @@ class SearxngSearch:
 
         return results
 
-    def news_search(
-        self, query: str, max_results: int = 10, time_range: str = "w"
-    ) -> list[SearchResult]:
+    def news_search(self, query: str, max_results: int = 10, time_range: str = "w"):
         time_map = {"d": "day", "w": "week", "m": "month"}
         params = {
             "q": query,
@@ -213,7 +205,7 @@ class SearxngSearch:
         results = self._request(params)
         return results[:max_results]
 
-    def web_search(self, query: str, max_results: int = 10) -> list[SearchResult]:
+    def web_search(self, query: str, max_results: int = 10):
         params = {
             "q": query,
             "format": "json",

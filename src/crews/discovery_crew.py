@@ -71,7 +71,7 @@ def run_discovery(
     channel_topics: list[str],
     count: int = 10,
     prefetched_context: str | None = None,
-) -> dict[str, object]:
+) -> dict:
     """Run the discovery workflow.
 
     Args:

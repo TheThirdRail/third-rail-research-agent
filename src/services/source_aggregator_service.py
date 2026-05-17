@@ -5,10 +5,8 @@ from __future__ import annotations
 import logging
 import re
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, cast
 from urllib.parse import urlparse
 
 from src.core.config import settings
@@ -18,8 +16,6 @@ from src.schemas.retrieval_diagnostics import (
     BucketLaneAttempt,
     CandidateCensus,
     CandidateDecision,
-    CandidateStage,
-    CandidateState,
     MissingBucketExplanation,
 )
 from src.schemas.story_packet import StoryPacket
@@ -41,9 +37,8 @@ from src.services.rss_retrieval_service import RssRetrievalService
 from src.services.source_scoring import ScoredCandidate, score_candidate
 from src.tools.article_extractor import ArticleExtractor
 from src.tools.bias_classifier import BiasResult
-from src.tools.keyword_extractor import KeywordExtractor
 from src.tools.web_search import DuckDuckGoSearch, SearchResult, SearxngSearch
-from src.utils.url_utils import blocked_public_url_reason, extract_domain, normalize_url
+from src.utils.url_utils import extract_domain
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +57,6 @@ MAX_QUERIES_PER_FAMILY: dict[str, int] = {
     "rss_summary": 2,
     "url_slug": 2,
 }
-
-SOURCE_PREFLIGHT_MAX_WORKERS = 4
 
 
 @dataclass(frozen=True)
@@ -153,7 +146,6 @@ class SourceAggregatorService:
         self._result_stage_by_url: dict[str, str] = {}
         self._result_bucket_by_url: dict[str, str] = {}
         self._rss_story_diagnostics_by_url: dict[str, dict[str, object]] = {}
-        self._keyword_extractor: KeywordExtractor | None = None
 
     def gather_sources(
         self,
@@ -195,19 +187,14 @@ class SourceAggregatorService:
             else:
                 primary_error = primary.extraction_error or "No content extracted"
                 primary_error_code = primary.extraction_error_code
-                rejection_reason = (
-                    primary_error
-                    if primary_error_code == "unsafe_url"
-                    else (
-                        "extracted_text_too_short"
-                        if primary.full_text
-                        else "no_extracted_text"
-                    )
-                )
                 self._record_primary_decision(
                     primary,
                     state="extraction_failed",
-                    rejection_reason=rejection_reason,
+                    rejection_reason=(
+                        "extracted_text_too_short"
+                        if primary.full_text
+                        else "no_extracted_text"
+                    ),
                 )
                 logger.warning(
                     "Primary URL extraction failed for %s: %s (%s); continuing with discovery.",
@@ -393,7 +380,7 @@ class SourceAggregatorService:
             "bias_spread_met": left > 0 and right > 0,
         }
 
-    def summarize_coverage(self, sources: list[SourceCandidate]) -> dict[str, Any]:
+    def summarize_coverage(self, sources: list[SourceCandidate]) -> dict:
         """Summarize coverage status including bucket details.
 
         Returns structured status: coverage_satisfied, missing_buckets,
@@ -501,9 +488,7 @@ class SourceAggregatorService:
                     bucket_label=bucket,
                     reason=reason,
                     probed_count=len(decisions),
-                    by_state={
-                        str(state): count for state, count in state_counts.items()
-                    },
+                    by_state=dict(state_counts),
                     rejection_reasons=dict(rejection_counts),
                     probe_limit_reached=(
                         self._probed_count >= settings.candidate_probe_limit
@@ -522,9 +507,6 @@ class SourceAggregatorService:
         seed_context: SeedExtractionContext | None,
         url: str,
     ) -> SourceCandidate:
-        blocked_reason = blocked_public_url_reason(url, resolve_dns=False)
-        if blocked_reason:
-            return self._blocked_source_candidate(url, blocked_reason)
         if (
             seed_context
             and seed_context.primary
@@ -761,7 +743,7 @@ class SourceAggregatorService:
         query_attempts: list[QueryAttempt],
         plan: SourcePlan,
         story_packet: StoryPacket | None,
-        add_results: Any,
+        add_results,
         results: list[SearchResult],
     ) -> list[SearchResult]:
         steps_by_bucket: dict[str, list[dict[str, object]]] = {}
@@ -838,7 +820,7 @@ class SourceAggregatorService:
         step: dict[str, object],
         story_packet: StoryPacket | None,
         plan: SourcePlan | None,
-        add_results: Any,
+        add_results,
     ) -> int:
         found_count = 0
 
@@ -851,12 +833,7 @@ class SourceAggregatorService:
                 add_results(found)
 
         phase = step.get("phase")
-        domains_value = step.get("domains")
-        domains = (
-            [str(domain) for domain in domains_value]
-            if isinstance(domains_value, list | tuple | set)
-            else []
-        )
+        domains = step.get("domains") or []
         if phase == "rss":
             if not self._setting_bool("analysis_rss_first_enabled", True):
                 return 0
@@ -872,7 +849,7 @@ class SourceAggregatorService:
                 else:
                     found = self._rss_retriever.search(
                         query,
-                        domains=domains,
+                        domains=list(domains),
                         max_results=8,
                     )
                 add_found(found, "rss")
@@ -928,27 +905,20 @@ class SourceAggregatorService:
         exhausted_reason: str | None = None,
         query_family: str | None = None,
     ) -> None:
-        phase_text = str(step.get("phase") or "unknown")
-        phase: CandidateStage = (
-            cast(CandidateStage, phase_text)
-            if phase_text in {"rss", "site_search", "open_web"}
-            else "unknown"
-        )
-        domains_value = step.get("domains")
-        domains = (
-            [str(domain) for domain in domains_value]
-            if isinstance(domains_value, list | tuple | set)
-            else []
-        )
-        exact_bias = step.get("exact_bias")
+        phase = str(step.get("phase") or "unknown")
+        if phase not in {"rss", "site_search", "open_web"}:
+            phase = "unknown"
+        domains = step.get("domains") or []
         self._bucket_lane_attempts.append(
             BucketLaneAttempt(
                 bucket_label=str(step.get("bucket") or ""),
                 stage=phase,
                 query=query,
                 query_family=query_family,
-                exact_bias=exact_bias if isinstance(exact_bias, int) else None,
-                domains=domains,
+                exact_bias=step.get("exact_bias")
+                if isinstance(step.get("exact_bias"), int)
+                else None,
+                domains=[str(domain) for domain in domains],
                 result_count=result_count,
                 new_result_count=new_result_count,
                 exhausted_reason=exhausted_reason
@@ -982,13 +952,8 @@ class SourceAggregatorService:
         semantic_scorer = self._build_candidate_semantic_scorer(
             story_packet, description
         )
-        prefetched_candidates = self._prefetch_preflight_candidates(
-            results=results,
-            seen_urls=seen_urls,
-            seen_domains=seen_domains,
-        )
 
-        for result_index, result in enumerate(results):
+        for result in results:
             if self._probed_count >= settings.candidate_probe_limit:
                 break
 
@@ -999,29 +964,11 @@ class SourceAggregatorService:
             domain = extract_domain(candidate_url)
             stage = self._result_stage_by_url.get(normalized_url, "open_web")
             planned_bucket = self._result_bucket_by_url.get(normalized_url)
-            blocked_reason = blocked_public_url_reason(
-                candidate_url,
-                resolve_dns=False,
-            )
-            if blocked_reason:
-                self._record_candidate_decision(
-                    candidate=None,
-                    result=result,
-                    stage=stage,
-                    state="extraction_failed",
-                    rejection_reason=blocked_reason,
-                    fallback_domain=domain,
-                    fallback_bucket_label=planned_bucket,
-                )
-                continue
             if normalized_url in candidate_urls or domain in candidate_domains:
                 continue
 
             self._probed_count += 1
-            if result_index in prefetched_candidates:
-                candidate = prefetched_candidates[result_index]
-            else:
-                candidate = self._extract_url(candidate_url, require_success=False)
+            candidate = self._extract_url(candidate_url, require_success=False)
             if not candidate or not candidate.full_text:
                 self._record_candidate_decision(
                     candidate=candidate,
@@ -1181,57 +1128,6 @@ class SourceAggregatorService:
             candidate_domains.add(domain)
 
         return scored_candidates
-
-    def _prefetch_preflight_candidates(
-        self,
-        *,
-        results: list[SearchResult],
-        seen_urls: set[str],
-        seen_domains: set[str],
-    ) -> dict[int, SourceCandidate | None]:
-        """Extract likely probe candidates ahead of ordered scoring.
-
-        Probe counters and diagnostics stay in the ordered caller so prefetch
-        does not change observable candidate accounting.
-        """
-        remaining_probe_count = max(
-            0, settings.candidate_probe_limit - self._probed_count
-        )
-        if remaining_probe_count <= 1:
-            return {}
-
-        candidate_urls = set(seen_urls)
-        candidate_domains = set(seen_domains)
-        pending: list[tuple[int, SearchResult]] = []
-        for result_index, result in enumerate(results):
-            if len(pending) >= remaining_probe_count:
-                break
-
-            candidate_url = result.url
-            if not candidate_url.startswith("http"):
-                continue
-            if blocked_public_url_reason(candidate_url, resolve_dns=False):
-                continue
-            normalized_url = self._normalize_url(candidate_url)
-            domain = extract_domain(candidate_url)
-            if normalized_url in candidate_urls or domain in candidate_domains:
-                continue
-
-            pending.append((result_index, result))
-
-        if len(pending) <= 1:
-            return {}
-
-        def extract_pending(
-            pending_result: tuple[int, SearchResult],
-        ) -> tuple[int, SourceCandidate | None]:
-            result_index, result = pending_result
-            candidate = self._extract_url(result.url, require_success=False)
-            return result_index, candidate
-
-        max_workers = min(SOURCE_PREFLIGHT_MAX_WORKERS, len(pending))
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            return dict(executor.map(extract_pending, pending))
 
     def _build_candidate_semantic_scorer(
         self,
@@ -1413,26 +1309,11 @@ class SourceAggregatorService:
             media_captions=article.media_captions,
         )
 
-    def _blocked_source_candidate(self, url: str, reason: str) -> SourceCandidate:
-        return SourceCandidate(
-            url=url,
-            domain=extract_domain(url),
-            title="",
-            published_date=None,
-            author=None,
-            full_text="",
-            extraction_error=reason,
-            extraction_error_code="unsafe_url",
-            extractor_method="url_safety",
-            http_status=None,
-            bias_result=None,
-        )
-
     def _record_primary_decision(
         self,
         candidate: SourceCandidate,
         *,
-        state: CandidateState,
+        state: str,
         rejection_reason: str | None = None,
     ) -> None:
         self._record_candidate_decision(
@@ -1454,9 +1335,9 @@ class SourceAggregatorService:
         candidate: SourceCandidate | None,
         result: SearchResult,
         stage: str,
-        state: CandidateState,
+        state: str,
         rejection_reason: str | None = None,
-        relevance_diagnostics: dict[str, Any] | None = None,
+        relevance_diagnostics: dict[str, object] | None = None,
         fallback_domain: str = "",
         fallback_bucket_label: str | None = None,
     ) -> None:
@@ -1485,17 +1366,14 @@ class SourceAggregatorService:
         )
         if stage == "rss" and rss_diagnostics:
             relevance_payload["rss_story_match"] = rss_diagnostics
-        stage_value: CandidateStage = (
-            cast(CandidateStage, stage)
-            if stage in {"primary", "rss", "site_search", "open_web"}
-            else "unknown"
-        )
         self._candidate_decisions.append(
             CandidateDecision(
                 url=url,
                 domain=domain,
                 title=title,
-                stage=stage_value,
+                stage=stage
+                if stage in {"primary", "rss", "site_search", "open_web"}
+                else "unknown",
                 state=state,
                 bucket_label=bucket_label,
                 exact_bias=exact_bias,
@@ -1527,7 +1405,7 @@ class SourceAggregatorService:
         self,
         url: str,
         *,
-        state: CandidateState,
+        state: str,
         rejection_reason: str | None = None,
     ) -> None:
         normalized = self._normalize_url(url)
@@ -1546,7 +1424,7 @@ class SourceAggregatorService:
             self._candidate_decisions[index] = updated
             return
 
-    def _resolve_bias(self, domain: str, url: str, text: str) -> BiasResult | None:
+    def _resolve_bias(self, domain: str, url: str, text: str):
         if not domain:
             return None
 
@@ -1557,7 +1435,7 @@ class SourceAggregatorService:
             extra_texts=(),
         )
 
-        def _extra_provider() -> list[str]:
+        def _extra_provider():
             extra_article = self._find_additional_article(domain, url, text)
             return [extra_article] if extra_article else []
 
@@ -1689,14 +1567,6 @@ class SourceAggregatorService:
                 continue
             if self._normalize_url(result.url) == self._normalize_url(url):
                 continue
-            blocked_reason = blocked_public_url_reason(result.url, resolve_dns=False)
-            if blocked_reason:
-                logger.info(
-                    "Skipping unsafe additional-article URL %s: %s",
-                    result.url,
-                    blocked_reason,
-                )
-                continue
             article = self._extractor.extract(result.url)
             if article.success and len(article.text) >= self.MIN_TEXT_LENGTH:
                 return article.text
@@ -1738,9 +1608,10 @@ class SourceAggregatorService:
     def _extract_keywords(self, text: str) -> list[str]:
         # Best-effort keyword extraction without hard dependency on YAKE
         try:
-            if self._keyword_extractor is None:
-                self._keyword_extractor = KeywordExtractor()
-            keywords = self._keyword_extractor.extract(text, top_n=5)
+            from src.tools.keyword_extractor import KeywordExtractor
+
+            extractor = KeywordExtractor()
+            keywords = extractor.extract(text, top_n=5)
             return [kw.term for kw in keywords if kw.term]
         except Exception:
             # Fallback: simple word frequency
@@ -1751,13 +1622,18 @@ class SourceAggregatorService:
             ranked = sorted(freq.items(), key=lambda x: x[1], reverse=True)
             return [term for term, _ in ranked[:5]]
 
-    def _init_searcher(self) -> SearxngSearch | DuckDuckGoSearch:
+    def _init_searcher(self):
         if settings.searxng_base_url:
             return SearxngSearch(settings.searxng_base_url, settings.searxng_api_key)
         return DuckDuckGoSearch()
 
     def _normalize_url(self, url: str) -> str:
-        return normalize_url(url)
+        try:
+            parsed = urlparse(url)
+            path = parsed.path.rstrip("/")
+            return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{path}"
+        except Exception:
+            return url.lower().rstrip("/")
 
     def _compact_text(self, text: str, max_chars: int) -> str:
         compacted = re.sub(r"\s+", " ", text or "").strip()

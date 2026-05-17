@@ -5,7 +5,6 @@ from collections.abc import Generator
 from pathlib import Path
 
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.core.config import settings
@@ -179,7 +178,7 @@ def _default_fallback_model(provider: str) -> str:
         return ""
 
 
-def _agent_config_schema_ready(target_engine: Engine) -> bool:
+def _agent_config_schema_ready(target_engine) -> bool:
     """Return whether agent_configurations can be safely queried by the ORM."""
     try:
         inspector = inspect(target_engine)
@@ -197,7 +196,7 @@ def _agent_config_schema_ready(target_engine: Engine) -> bool:
     return required_columns <= columns
 
 
-def ensure_agent_config_rows(target_engine: Engine) -> None:
+def ensure_agent_config_rows(target_engine) -> None:
     """Ensure a config row exists for each known agent role.
 
     Missing rows are created idempotently and existing rows are preserved.
@@ -251,7 +250,7 @@ def ensure_agent_config_rows(target_engine: Engine) -> None:
         session.close()
 
 
-def ensure_agent_config_schema(target_engine: Engine) -> None:
+def ensure_agent_config_schema(target_engine) -> None:
     """Ensure agent_configurations has required columns."""
     try:
         inspector = inspect(target_engine)
@@ -281,7 +280,7 @@ def ensure_agent_config_schema(target_engine: Engine) -> None:
         return
 
 
-def ensure_hardening_schema(target_engine: Engine) -> None:
+def ensure_hardening_schema(target_engine) -> None:
     """Ensure existing SQLite databases have hardening-era columns.
 
     SQLAlchemy ``create_all`` creates missing tables but does not alter tables
@@ -325,7 +324,7 @@ def _safe_model_for_provider(provider: str) -> str:
     return normalized or default
 
 
-def backfill_agent_config_models(target_engine: Engine) -> None:
+def backfill_agent_config_models(target_engine) -> None:
     """Normalize provider/model identifiers in agent_configurations.
 
     Idempotent and safe to run at startup.
@@ -361,7 +360,7 @@ def backfill_agent_config_models(target_engine: Engine) -> None:
         session.close()
 
 
-def backfill_known_bad_agent_models(target_engine: Engine) -> None:
+def backfill_known_bad_agent_models(target_engine) -> None:
     """Replace known-bad agent model IDs with safe fallbacks.
 
     Idempotent. Safe to run at startup.
@@ -375,9 +374,7 @@ def backfill_known_bad_agent_models(target_engine: Engine) -> None:
             if model_key in KNOWN_BAD_AGENT_MODELS:
                 old_model = config.model
                 config.provider = (
-                    normalize_provider_name(config.provider)
-                    or config.provider
-                    or settings.llm_provider
+                    normalize_provider_name(config.provider) or config.provider
                 )
                 config.model = _safe_model_for_provider(config.provider)
                 logger.warning(

@@ -11,15 +11,9 @@ interface ReportModalProps {
     report: string | null;
     isOpen: boolean;
     onClose: () => void;
-    canExportPdf?: boolean;
 }
 
-export function ReportModal({
-    report,
-    isOpen,
-    onClose,
-    canExportPdf = true,
-}: ReportModalProps) {
+export function ReportModal({ report, isOpen, onClose }: ReportModalProps) {
     const contentRef = useRef<HTMLDivElement | null>(null);
     const overlayRef = useRef<HTMLDivElement | null>(null);
     const dragControls = useDragControls();
@@ -130,7 +124,7 @@ export function ReportModal({
     };
 
     const handleExportPdf = async () => {
-        if (!report || isExportingPdf || !canExportPdf) return;
+        if (!report || isExportingPdf) return;
         setIsExportingPdf(true);
         try {
             const blob = await exportReportPdf(report);
@@ -262,15 +256,11 @@ export function ReportModal({
                                 </button>
                                 <button
                                     onClick={handleExportPdf}
-                                    disabled={isExportingPdf || !canExportPdf}
+                                    disabled={isExportingPdf}
                                     className="flex items-center gap-2 text-[10px] text-neon-purple hover:text-white transition-colors uppercase tracking-widest font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <FileText className="w-3 h-3" />
-                                    {isExportingPdf
-                                        ? "Exporting..."
-                                        : canExportPdf
-                                          ? "Export PDF"
-                                          : "Login Required"}
+                                    {isExportingPdf ? "Exporting…" : "Export PDF"}
                                 </button>
                             </div>
                         </div>

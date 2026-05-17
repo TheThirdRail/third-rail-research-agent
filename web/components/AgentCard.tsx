@@ -8,15 +8,13 @@ import { cn } from "@/lib/utils";
 interface AgentCardProps {
     agent: AgentInfo;
     onConfigure: (agent: AgentInfo) => void;
-    disabled?: boolean;
 }
 
-export function AgentCard({ agent, onConfigure, disabled = false }: AgentCardProps) {
+export function AgentCard({ agent, onConfigure }: AgentCardProps) {
     // Format budget currency
-    const budgetLimit = agent.config.budget_limit;
-    const limit = budgetLimit === null || budgetLimit === undefined
-        ? "∞"
-        : `$${budgetLimit.toFixed(2)}`;
+    const limit = agent.config.budget_limit
+        ? `$${agent.config.budget_limit.toFixed(2)}`
+        : "∞";
 
     return (
         <motion.div
@@ -66,16 +64,10 @@ export function AgentCard({ agent, onConfigure, disabled = false }: AgentCardPro
             {/* Action */}
             <button
                 onClick={() => onConfigure(agent)}
-                disabled={disabled}
-                className={cn(
-                    "mt-5 w-full py-2 bg-neon-cyan/10 border border-neon-cyan text-neon-cyan font-bold uppercase tracking-wider text-xs transition-all flex items-center justify-center gap-2",
-                    disabled
-                        ? "opacity-50 cursor-not-allowed"
-                        : "hover:bg-neon-cyan/20 hover:text-white hover:shadow-[0_0_15px_rgba(0,243,255,0.4)]",
-                )}
+                className="mt-5 w-full py-2 bg-neon-cyan/10 hover:bg-neon-cyan/20 border border-neon-cyan text-neon-cyan font-bold uppercase tracking-wider text-xs transition-all hover:text-white hover:shadow-[0_0_15px_rgba(0,243,255,0.4)] flex items-center justify-center gap-2"
             >
                 <Settings className="w-4 h-4" />
-                {disabled ? "Login Required" : "Configure"}
+                Configure
             </button>
 
             {/* Decorative corner accents */}

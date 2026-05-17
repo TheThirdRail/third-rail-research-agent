@@ -1,7 +1,6 @@
 """RSS News Aggregator Tool for CrewAI."""
 
 import logging
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -13,12 +12,11 @@ from crewai.tools.base_tool import BaseTool
 
 from src.core.config import settings
 from src.core.time_utils import utc_now_naive
-from src.utils.url_utils import blocked_public_url_reason, extract_domain
+from src.utils.url_utils import extract_domain
 
 logger = logging.getLogger(__name__)
 
 MAX_SUMMARY_CHARS = 500
-RSS_FETCH_MAX_WORKERS = 8
 
 
 @dataclass
@@ -79,7 +77,7 @@ class RSSAggregator:
             logger.error(f"Failed to load feeds config: {e}")
             return []
 
-    def _parse_date(self, entry: dict[str, Any]) -> datetime | None:
+    def _parse_date(self, entry: dict) -> datetime | None:
         """Parse date from feed entry."""
         if hasattr(entry, "published_parsed") and entry.published_parsed:
             published_at = None
@@ -128,14 +126,6 @@ class RSSAggregator:
                 title = entry.get("title", "")
                 link = entry.get("link", "")
                 summary = entry.get("summary", entry.get("description", ""))
-                blocked_reason = blocked_public_url_reason(link)
-                if blocked_reason:
-                    logger.info(
-                        "Skipping unsafe RSS item URL from %s: %s",
-                        source_name,
-                        blocked_reason,
-                    )
-                    continue
 
                 # Clean summary (remove HTML)
                 if summary:
@@ -165,34 +155,24 @@ class RSSAggregator:
         categories: list[str] | None = None,
     ) -> list[FeedItem]:
         """Fetch items from all configured feeds."""
-        all_items: list[FeedItem] = []
+        all_items = []
         cutoff = utc_now_naive() - timedelta(hours=max_age_hours)
 
-        feeds = [
-            feed
-            for feed in self.feeds
-            if not categories or feed.get("category") in categories
-        ]
-        if not feeds:
-            return []
+        for feed in self.feeds:
+            if categories and feed.get("category") not in categories:
+                continue
 
-        def fetch_configured_feed(feed: dict[str, Any]) -> list[FeedItem]:
-            return self.fetch_feed(
+            items = self.fetch_feed(
                 feed_url=feed["url"],
                 max_items=max_per_feed,
                 bias=feed.get("bias", 0),
                 source_name=feed.get("name", "Unknown"),
             )
 
-        max_workers = min(RSS_FETCH_MAX_WORKERS, len(feeds))
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            feed_results = executor.map(fetch_configured_feed, feeds)
-
-            for items in feed_results:
-                # Filter by age
-                for item in items:
-                    if item.published is None or item.published > cutoff:
-                        all_items.append(item)
+            # Filter by age
+            for item in items:
+                if item.published is None or item.published > cutoff:
+                    all_items.append(item)
 
         return all_items
 

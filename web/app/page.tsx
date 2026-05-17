@@ -2,19 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import {
-  getAgents,
-  AgentInfo,
-  analyzeStory,
-  getAdminSession,
-  loginAdmin,
-  logoutAdmin,
-} from "@/lib/api";
+import { getAgents, AgentInfo, analyzeStory } from "@/lib/api";
 import { AgentCard } from "@/components/AgentCard";
 import { ConfigModal } from "@/components/ConfigModal";
 import { ResearchInput } from "@/components/ResearchInput";
 import { ReportModal } from "@/components/ReportModal";
-import { KeyRound, Loader2, LogOut, ShieldCheck, Zap } from "lucide-react";
+import { Loader2, Zap } from "lucide-react";
 
 export default function Dashboard() {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -26,10 +19,6 @@ export default function Dashboard() {
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sourceHint, setSourceHint] = useState<string | null>(null);
-  const [adminAuthenticated, setAdminAuthenticated] = useState(false);
-  const [checkingAdminSession, setCheckingAdminSession] = useState(true);
-  const [adminKey, setAdminKey] = useState("");
-  const [adminAuthBusy, setAdminAuthBusy] = useState(false);
 
   const fetchAgents = async () => {
     try {
@@ -46,17 +35,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchAgents();
-    getAdminSession()
-      .then((session) => setAdminAuthenticated(session.authenticated))
-      .catch(() => setAdminAuthenticated(false))
-      .finally(() => setCheckingAdminSession(false));
   }, []);
 
   const handleAnalyze = async (description: string, url: string | null) => {
-    if (!adminAuthenticated) {
-      setError("Admin login required.");
-      return;
-    }
     setAnalyzing(true);
     setError(null);
     setSourceHint(null);
@@ -78,37 +59,6 @@ export default function Dashboard() {
       setError(err instanceof Error ? err.message : "Failed to initiate research");
     } finally {
       setAnalyzing(false);
-    }
-  };
-
-  const handleAdminLogin = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!adminKey.trim()) return;
-    setAdminAuthBusy(true);
-    setError(null);
-    try {
-      const session = await loginAdmin(adminKey);
-      setAdminAuthenticated(session.authenticated);
-      setAdminKey("");
-    } catch (err) {
-      setAdminAuthenticated(false);
-      setError(err instanceof Error ? err.message : "Admin login failed");
-    } finally {
-      setAdminAuthBusy(false);
-    }
-  };
-
-  const handleAdminLogout = async () => {
-    setAdminAuthBusy(true);
-    setError(null);
-    try {
-      await logoutAdmin();
-      setAdminAuthenticated(false);
-      setSelectedAgent(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Admin logout failed");
-    } finally {
-      setAdminAuthBusy(false);
     }
   };
 
@@ -150,51 +100,14 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="mt-6 md:mt-0 w-full md:w-auto font-mono text-xs">
-            {adminAuthenticated ? (
-              <div className="flex flex-col items-start md:items-end gap-2">
-                <div className="flex items-center gap-2 text-terminal-green">
-                  <ShieldCheck className="w-4 h-4" />
-                  ADMIN SESSION ACTIVE
-                </div>
-                <button
-                  onClick={handleAdminLogout}
-                  disabled={adminAuthBusy}
-                  className="flex items-center gap-2 text-neon-purple hover:text-white uppercase tracking-widest disabled:opacity-50"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Logout
-                </button>
-              </div>
-            ) : (
-              <form
-                onSubmit={handleAdminLogin}
-                className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center"
-              >
-                <div className="relative">
-                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neon-cyan" />
-                  <input
-                    type="password"
-                    value={adminKey}
-                    onChange={(event) => setAdminKey(event.target.value)}
-                    placeholder={
-                      checkingAdminSession ? "Checking session..." : "Admin key"
-                    }
-                    disabled={checkingAdminSession || adminAuthBusy}
-                    className="w-full sm:w-56 bg-void/80 border border-neon-cyan/30 text-white pl-10 pr-3 py-2 focus:border-neon-cyan focus:outline-none"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={
-                    checkingAdminSession || adminAuthBusy || !adminKey.trim()
-                  }
-                  className="px-4 py-2 bg-neon-cyan/10 border border-neon-cyan text-neon-cyan hover:bg-neon-cyan/20 hover:text-white uppercase tracking-widest disabled:opacity-50"
-                >
-                  Login
-                </button>
-              </form>
-            )}
+          <div className="mt-6 md:mt-0 text-right font-mono text-xs space-y-1">
+            <div className="flex items-center gap-2 justify-end text-terminal-green">
+              <div className="w-2 h-2 bg-terminal-green rounded-full animate-pulse" />
+              SYSTEM ONLINE
+            </div>
+            <div className="text-neon-purple tracking-widest">
+              GRID STATUS: STABLE
+            </div>
           </div>
         </header>
 
@@ -211,11 +124,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        <ResearchInput
-          onAnalyze={handleAnalyze}
-          isLoading={analyzing}
-          disabled={!adminAuthenticated}
-        />
+        <ResearchInput onAnalyze={handleAnalyze} isLoading={analyzing} />
 
         {/* Grid */}
         {loading ? (
@@ -230,7 +139,6 @@ export default function Dashboard() {
                 key={agent.name}
                 agent={agent}
                 onConfigure={setSelectedAgent}
-                disabled={!adminAuthenticated}
               />
             ))}
           </div>
@@ -258,7 +166,6 @@ export default function Dashboard() {
         report={report}
         isOpen={isReportOpen}
         onClose={() => setIsReportOpen(false)}
-        canExportPdf={adminAuthenticated}
       />
     </main>
   );

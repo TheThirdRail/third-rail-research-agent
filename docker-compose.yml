@@ -63,7 +63,6 @@ services:
       - APP_ENV=${APP_ENV:-production}
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
       - CREWAI_TRACING_ENABLED=false
       # Encoding
       - PYTHONIOENCODING=utf-8
@@ -86,15 +85,12 @@ services:
         # This URL is baked into the client bundle at build time
         # Must be reachable from the USER'S BROWSER
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        - NEXT_PUBLIC_ADMIN_API_KEY=${NEXT_PUBLIC_ADMIN_API_KEY:-}
     container_name: research-agent-frontend
     ports:
       - "3000:3000"
     depends_on:
       - backend
-    environment:
-      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
-      - ADMIN_SESSION_SECRET=${ADMIN_SESSION_SECRET:-}
-      - INTERNAL_API_URL=http://backend:8000
     restart: unless-stopped
 
   # Ollama (Optional local LLM; LM Studio can be used from host via LM_STUDIO_API_BASE)

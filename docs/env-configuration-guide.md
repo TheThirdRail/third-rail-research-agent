@@ -249,7 +249,7 @@ XAI_API_KEY=replace-with-xai-key
 FIRECRAWL_API_KEY=fc-xxxxxxxx
 ```
 
-**How to get:** Create a key from [Firecrawl](https://docs.firecrawl.dev/) if you want the final cloud fallback after local extractors cannot recover enough article content.
+**How to get:** Create a key from [Firecrawl](https://docs.firecrawl.dev/) if you want the final cloud fallback after local Crawl4AI and trafilatura extraction both fail.
 
 ---
 
@@ -306,8 +306,6 @@ research-agent benchmark --live --live-limit 1 --format markdown
 ---
 
 ## Article Extraction
-
-The code still supports Crawl4AI when it is available, but Crawl4AI is not part of the default install while current 0.8.x releases require the vulnerable `lxml` 5.x line. The settings below only apply in environments that intentionally provide a Crawl4AI build compatible with the supported `lxml` 6.1+ dependency line.
 
 ```ini
 CRAWL4AI_HEADLESS=true

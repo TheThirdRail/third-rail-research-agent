@@ -3,11 +3,10 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from src.api.dependencies import require_admin_api_key, require_expensive_endpoint_slot
 from src.core.exceptions import (
     BudgetExceededError,
     RateLimitExceededError,
@@ -42,14 +41,7 @@ class AnalyzeResponse(BaseModel):
     right_source_count: int | None = None
 
 
-@router.post(
-    "/analyze",
-    response_model=AnalyzeResponse,
-    dependencies=[
-        Depends(require_admin_api_key),
-        Depends(require_expensive_endpoint_slot),
-    ],
-)
+@router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_story(request: AnalyzeRequest) -> AnalyzeResponse:
     """Analyze a story and generate a multi-source report.
 
@@ -80,39 +72,37 @@ async def analyze_story(request: AnalyzeRequest) -> AnalyzeResponse:
 
 
 def _run_analysis_sync(request: AnalyzeRequest) -> dict[str, Any]:
-    with AnalysisService() as service:
-        if request.options is None:
-            return service.analyze(request.description, request.url)
-        return service.analyze(
-            request.description, request.url, options=request.options
-        )
+    service = AnalysisService()
+    if request.options is None:
+        return service.analyze(request.description, request.url)
+    return service.analyze(request.description, request.url, options=request.options)
 
 
 @router.get("/analysis/{story_id}")
-def get_analysis(story_id: str) -> dict[str, Any]:
+def get_analysis(story_id: str) -> dict:
     """Retrieve existing analysis for a story."""
-    with AnalysisService() as service:
-        result = service.get_analysis(story_id)
+    service = AnalysisService()
+    result = service.get_analysis(story_id)
     if not result:
         raise HTTPException(status_code=404, detail="Analysis not found")
     return result
 
 
 @router.get("/analysis/{story_id}/diagnostics")
-def get_analysis_diagnostics(story_id: str) -> dict[str, Any]:
+def get_analysis_diagnostics(story_id: str) -> dict:
     """Retrieve persisted retrieval and analysis diagnostics for a story."""
-    with AnalysisService() as service:
-        result = service.get_diagnostics(story_id)
+    service = AnalysisService()
+    result = service.get_diagnostics(story_id)
     if not result:
         raise HTTPException(status_code=404, detail="Analysis diagnostics not found")
     return result
 
 
 @router.get("/analysis/{story_id}/handoff/{stage}")
-def get_analysis_handoff(story_id: str, stage: str) -> dict[str, Any]:
+def get_analysis_handoff(story_id: str, stage: str) -> dict:
     """Retrieve a persisted handoff bundle for a story and stage."""
-    with AnalysisService() as service:
-        result = service.get_handoff(story_id, stage)
+    service = AnalysisService()
+    result = service.get_handoff(story_id, stage)
     if not result:
         raise HTTPException(status_code=404, detail="Analysis handoff not found")
     return result

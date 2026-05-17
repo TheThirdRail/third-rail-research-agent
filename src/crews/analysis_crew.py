@@ -298,7 +298,7 @@ def run_analysis(
     prefetched_sources: str | None = None,
     visual_evidence_context: str | None = None,
     agent_contexts: dict[str, str] | None = None,
-) -> dict[str, object]:
+) -> dict:
     """Run the full analysis workflow.
 
     Args:

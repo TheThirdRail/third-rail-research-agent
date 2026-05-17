@@ -13,10 +13,6 @@ def _install_fake_playwright(monkeypatch, *, screenshot_error: Exception | None 
         status = 200
 
     class FakePage:
-        def route(self, pattern, handler):
-            self.route_pattern = pattern
-            self.route_handler = handler
-
         def goto(self, url, wait_until=None, timeout=None):
             return FakeResponse()
 

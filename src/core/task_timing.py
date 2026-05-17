@@ -2,14 +2,13 @@
 
 import logging
 import time
-from typing import Any
 
 logger = logging.getLogger(__name__)
 _registered = False
 _task_start_times: dict[str, float] = {}
 
 
-def _get_task_key(task: Any) -> str:
+def _get_task_key(task) -> str:
     if task is None:
         return "unknown"
     task_id = getattr(task, "id", None)
@@ -21,14 +20,14 @@ def _get_task_key(task: Any) -> str:
     return str(id(task))
 
 
-def _get_agent_info(task: Any) -> tuple[str, Any]:
+def _get_agent_info(task):
     agent = getattr(task, "agent", None)
     role = getattr(agent, "role", "unknown") if agent else "unknown"
     llm = getattr(agent, "llm", None) if agent else None
     return role, llm
 
 
-def _get_provider_model(llm: Any) -> tuple[str, str]:
+def _get_provider_model(llm) -> tuple[str, str]:
     if isinstance(llm, str) and "/" in llm:
         provider, model = llm.split("/", 1)
         return provider or "unknown", model or "unknown"
@@ -37,7 +36,7 @@ def _get_provider_model(llm: Any) -> tuple[str, str]:
     return "unknown", str(llm)
 
 
-def _extract_event(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any | None:
+def _extract_event(args, kwargs):
     """Extract CrewAI event from variable callback signatures."""
     if "event" in kwargs and kwargs["event"] is not None:
         return kwargs["event"]
@@ -68,7 +67,7 @@ def register_task_timing() -> None:
         return
 
     @crewai_event_bus.on(TaskStartedEvent)
-    def _on_task_started(*args: Any, **kwargs: Any) -> None:
+    def _on_task_started(*args, **kwargs):
         event = _extract_event(args, kwargs)
         task = getattr(event, "task", None)
         key = _get_task_key(task)
@@ -85,7 +84,7 @@ def register_task_timing() -> None:
         )
 
     @crewai_event_bus.on(TaskCompletedEvent)
-    def _on_task_completed(*args: Any, **kwargs: Any) -> None:
+    def _on_task_completed(*args, **kwargs):
         event = _extract_event(args, kwargs)
         task = getattr(event, "task", None)
         key = _get_task_key(task)
@@ -113,7 +112,7 @@ def register_task_timing() -> None:
             )
 
     @crewai_event_bus.on(TaskFailedEvent)
-    def _on_task_failed(*args: Any, **kwargs: Any) -> None:
+    def _on_task_failed(*args, **kwargs):
         event = _extract_event(args, kwargs)
         task = getattr(event, "task", None)
         key = _get_task_key(task)

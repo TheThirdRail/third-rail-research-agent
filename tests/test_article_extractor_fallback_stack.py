@@ -33,16 +33,9 @@ def _failure(extractor: ArticleExtractor, url: str, method: str) -> ExtractedArt
     )
 
 
-def _allow_public_urls(monkeypatch):
-    monkeypatch.setattr(
-        "src.tools.article_extractor.validate_public_http_url",
-        lambda url, **kwargs: url.strip(),
-    )
-
-
 def test_crawl4ai_success_returns_immediately(monkeypatch):
     extractor = ArticleExtractor()
-    _allow_public_urls(monkeypatch)
+    monkeypatch.setattr(extractor, "_public_url_error", lambda url: None)
     calls = []
 
     def crawl4ai(url: str) -> ExtractedArticle:
@@ -65,7 +58,7 @@ def test_crawl4ai_success_returns_immediately(monkeypatch):
 
 def test_crawl4ai_failure_falls_back_to_trafilatura(monkeypatch):
     extractor = ArticleExtractor()
-    _allow_public_urls(monkeypatch)
+    monkeypatch.setattr(extractor, "_public_url_error", lambda url: None)
     calls = []
 
     def crawl4ai(url: str) -> ExtractedArticle:
@@ -90,38 +83,13 @@ def test_crawl4ai_failure_falls_back_to_trafilatura(monkeypatch):
     assert calls == ["crawl4ai", "trafilatura"]
 
 
-def test_crawl4ai_unavailable_falls_back_to_trafilatura(monkeypatch):
-    extractor = ArticleExtractor()
-    _allow_public_urls(monkeypatch)
-    calls = []
-
-    def import_missing():
-        raise ModuleNotFoundError("No module named 'crawl4ai'")
-
-    def trafilatura(url: str) -> ExtractedArticle:
-        calls.append("trafilatura")
-        return _success(url, "trafilatura")
-
-    def fail_if_called(url: str) -> ExtractedArticle:
-        raise AssertionError(f"unexpected firecrawl call for {url}")
-
-    monkeypatch.setattr(extractor, "_import_crawl4ai_core", import_missing)
-    monkeypatch.setattr(extractor, "extract_trafilatura", trafilatura)
-    monkeypatch.setattr(extractor, "extract_firecrawl", fail_if_called)
-
-    result = extractor.extract("https://example.com/story")
-
-    assert result.success is True
-    assert result.extractor_method == "trafilatura"
-    assert calls == ["trafilatura"]
-
-
 @pytest.mark.asyncio
 async def test_crawl4ai_progressive_enhancement_escalates_on_block(monkeypatch):
     extractor = ArticleExtractor()
-    _allow_public_urls(monkeypatch)
+    monkeypatch.setattr(extractor, "_public_url_error", lambda url: None)
     monkeypatch.setattr(
-        "src.tools.article_extractor.settings.crawl4ai_progressive_undetected_enabled",
+        "src.tools.article_extractor.settings."
+        "crawl4ai_progressive_undetected_enabled",
         True,
     )
     monkeypatch.setattr(
@@ -159,9 +127,10 @@ async def test_crawl4ai_progressive_enhancement_combines_undetected_and_stealth(
     monkeypatch,
 ):
     extractor = ArticleExtractor()
-    _allow_public_urls(monkeypatch)
+    monkeypatch.setattr(extractor, "_public_url_error", lambda url: None)
     monkeypatch.setattr(
-        "src.tools.article_extractor.settings.crawl4ai_progressive_undetected_enabled",
+        "src.tools.article_extractor.settings."
+        "crawl4ai_progressive_undetected_enabled",
         True,
     )
     monkeypatch.setattr(
@@ -217,10 +186,8 @@ async def test_crawl4ai_403_failure_counts_as_blocked():
 
 def test_trafilatura_failure_falls_back_to_firecrawl_when_key_is_set(monkeypatch):
     extractor = ArticleExtractor()
-    _allow_public_urls(monkeypatch)
-    monkeypatch.setattr(
-        "src.tools.article_extractor.settings.firecrawl_api_key", "fc-test"
-    )
+    monkeypatch.setattr(extractor, "_public_url_error", lambda url: None)
+    monkeypatch.setattr("src.tools.article_extractor.settings.firecrawl_api_key", "fc-test")
     calls = []
 
     def crawl4ai(url: str) -> ExtractedArticle:
@@ -250,11 +217,7 @@ def test_trafilatura_failure_falls_back_to_firecrawl_when_key_is_set(monkeypatch
     monkeypatch.setattr(extractor, "extract_newspaper", fail_local("newspaper4k"))
     monkeypatch.setattr(extractor, "extract_fundus", fail_local("fundus"))
     monkeypatch.setattr(extractor, "extract_playwright", fail_local("playwright_sync"))
-    monkeypatch.setattr(
-        extractor,
-        "extract_selenium",
-        lambda url: pytest.fail("selenium should not run automatically"),
-    )
+    monkeypatch.setattr(extractor, "extract_selenium", fail_local("selenium"))
     monkeypatch.setattr(extractor, "extract_firecrawl", firecrawl)
 
     result = extractor.extract("https://example.com/story")
@@ -267,13 +230,14 @@ def test_trafilatura_failure_falls_back_to_firecrawl_when_key_is_set(monkeypatch
         "newspaper4k",
         "fundus",
         "playwright_sync",
+        "selenium",
         "firecrawl",
     ]
 
 
 def test_firecrawl_is_skipped_cleanly_without_api_key(monkeypatch):
     extractor = ArticleExtractor()
-    _allow_public_urls(monkeypatch)
+    monkeypatch.setattr(extractor, "_public_url_error", lambda url: None)
     monkeypatch.setattr("src.tools.article_extractor.settings.firecrawl_api_key", "")
 
     result = extractor.extract_firecrawl("https://example.com/story")
@@ -309,14 +273,14 @@ def test_unsafe_urls_are_blocked_before_extractors(monkeypatch, url):
     result = extractor.extract(url)
 
     assert result.success is False
-    assert result.extractor_method == "url_validation"
+    assert result.extractor_method == "url_guard"
     assert result.error_code == ERROR_UNSAFE_URL
 
 
 @pytest.mark.asyncio
 async def test_async_chain_uses_same_order(monkeypatch):
     extractor = ArticleExtractor()
-    _allow_public_urls(monkeypatch)
+    monkeypatch.setattr(extractor, "_public_url_error", lambda url: None)
     calls = []
 
     async def crawl4ai(url: str) -> ExtractedArticle:
@@ -351,9 +315,7 @@ async def test_async_chain_uses_same_order(monkeypatch):
         extractor, "extract_playwright_async", async_fail_local("playwright_async")
     )
     monkeypatch.setattr(
-        extractor,
-        "extract_selenium_async",
-        lambda url: pytest.fail("selenium should not run automatically"),
+        extractor, "extract_selenium_async", async_fail_local("selenium")
     )
     monkeypatch.setattr(extractor, "extract_firecrawl_async", firecrawl)
 
@@ -367,6 +329,7 @@ async def test_async_chain_uses_same_order(monkeypatch):
         "newspaper4k",
         "fundus",
         "playwright_async",
+        "selenium",
         "firecrawl",
     ]
 

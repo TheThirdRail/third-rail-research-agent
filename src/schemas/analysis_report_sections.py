@@ -8,12 +8,9 @@ from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
-
-if TYPE_CHECKING:
-    from src.services.report_renderer import ReportSections
 
 
 class SourceFinding(BaseModel):
@@ -85,7 +82,7 @@ class AnalysisReportSections(BaseModel):
 
         return cls(executive_summary=str(raw or fallback_summary).strip())
 
-    def to_renderer_sections(self) -> ReportSections:
+    def to_renderer_sections(self):
         """Convert to the dataclass used by the deterministic renderer."""
         from src.services.report_renderer import ReportSections
 

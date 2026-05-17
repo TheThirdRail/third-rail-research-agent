@@ -44,7 +44,6 @@ class TokenUsageRecord(TypedDict):
     time: NotRequired[str]
     timezone: NotRequired[str]
     endpoint: NotRequired[str | None]
-    agent_name: NotRequired[str | None]
     model: NotRequired[str | None]
     links_provided: NotRequired[list[str]]
     total_tokens: NotRequired[int | None]
@@ -340,147 +339,6 @@ def new_run_id() -> str:
     return f"run_{uuid4().hex}"
 
 
-def _safe_token_count(value: Any) -> int:
-    count = _integer_or_none(value)
-    return count if count is not None else 0
-
-
-def _record_sort_key(record: dict[str, Any]) -> tuple[str, str]:
-    return (
-        str(record.get("timestamp") or ""),
-        str(record.get("request_id") or ""),
-    )
-
-
-def _string_or_none(value: Any) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value
-    return None
-
-
-def _links_from_record(record: dict[str, Any]) -> list[str]:
-    links: list[str] = []
-    raw_links = record.get("links_provided")
-    if isinstance(raw_links, list):
-        links.extend(str(link) for link in raw_links if isinstance(link, str) and link)
-    query_links = extract_links(_string_or_none(record.get("query_text")))
-    links.extend(query_links)
-    return links
-
-
-def _unique_in_order(values: Iterable[str]) -> list[str]:
-    seen: set[str] = set()
-    unique: list[str] = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        unique.append(value)
-    return unique
-
-
-def _first_non_empty_query(records: list[dict[str, Any]]) -> str | None:
-    for record in records:
-        query_text = _string_or_none(record.get("query_text"))
-        if query_text:
-            return query_text
-    return None
-
-
-def _model_name(record: dict[str, Any]) -> str:
-    return _string_or_none(record.get("model")) or "unknown"
-
-
-def _agent_name(record: dict[str, Any]) -> str:
-    return _string_or_none(record.get("agent_name")) or "unknown"
-
-
-def _build_run_report(run_id: str, records: list[dict[str, Any]]) -> dict[str, Any]:
-    ordered_records = sorted(records, key=_record_sort_key)
-    started = ordered_records[0]
-    ended = ordered_records[-1]
-    model_totals: dict[str, dict[str, Any]] = {}
-    agents: list[dict[str, Any]] = []
-
-    for record in ordered_records:
-        model = _model_name(record)
-        input_tokens = _safe_token_count(record.get("total_input_tokens"))
-        cached_tokens = _safe_token_count(record.get("cached_input_tokens"))
-        output_tokens = _safe_token_count(record.get("total_output_tokens"))
-
-        agents.append(
-            {
-                "agent_name": _agent_name(record),
-                "provider": _string_or_none(record.get("provider")),
-                "endpoint": _string_or_none(record.get("endpoint")),
-                "model": model,
-                "status": _string_or_none(record.get("status")),
-                "input_tokens": input_tokens,
-                "cached_tokens": cached_tokens,
-                "output_tokens": output_tokens,
-                "reasoning_tokens": _safe_token_count(record.get("reasoning_tokens")),
-                "usage_source": _string_or_none(record.get("usage_source")),
-                "is_estimate": bool(record.get("is_estimate")),
-                "request_id": _string_or_none(record.get("request_id")),
-                "timestamp": _string_or_none(record.get("timestamp")),
-            }
-        )
-
-        totals = model_totals.setdefault(
-            model,
-            {
-                "model": model,
-                "total_input_tokens": 0,
-                "total_cached_tokens": 0,
-                "total_output_tokens": 0,
-            },
-        )
-        totals["total_input_tokens"] += input_tokens
-        totals["total_cached_tokens"] += cached_tokens
-        totals["total_output_tokens"] += output_tokens
-
-    return {
-        "run_id": run_id,
-        "date_started": _string_or_none(started.get("date")),
-        "time_started": _string_or_none(started.get("time")),
-        "entered_description": _first_non_empty_query(ordered_records),
-        "links_provided": _unique_in_order(
-            link for record in ordered_records for link in _links_from_record(record)
-        ),
-        "agents": agents,
-        "model_totals": list(model_totals.values()),
-        "date_ended": _string_or_none(ended.get("date")),
-        "time_ended": _string_or_none(ended.get("time")),
-    }
-
-
-def build_token_usage_report(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
-    """Build a readable run-oriented report from raw token usage JSONL rows."""
-    valid_records = sorted(
-        (
-            record
-            for record in records
-            if isinstance(record, dict) and record.get("event") == "llm_token_usage"
-        ),
-        key=_record_sort_key,
-    )
-    records_by_run: dict[str, list[dict[str, Any]]] = {}
-    for record in valid_records:
-        run_id = _string_or_none(record.get("run_id")) or "run_unknown"
-        records_by_run.setdefault(run_id, []).append(record)
-
-    runs = [
-        _build_run_report(run_id, run_records)
-        for run_id, run_records in records_by_run.items()
-    ]
-    return {
-        "schema_version": 1,
-        "total_runs": len(runs),
-        "total_calls": len(valid_records),
-        "runs": runs,
-    }
-
-
 class TokenUsageTracker:
     """Append local token usage records without affecting main LLM flow."""
 
@@ -490,7 +348,6 @@ class TokenUsageTracker:
         *,
         log_dir: str | Path | None = None,
         log_file: str | Path | None = None,
-        report_file: str | Path | None = None,
         timezone: str | None = None,
     ) -> None:
         options = options or {}
@@ -503,21 +360,11 @@ class TokenUsageTracker:
             or options.get("log_file")
             or "token-usage.jsonl"
         )
-        self.report_file = str(
-            report_file
-            or options.get("reportFile")
-            or options.get("report_file")
-            or "token-usage-report.json"
-        )
         self.timezone = str(timezone or options.get("timezone") or "America/New_York")
 
     @property
     def log_path(self) -> Path:
         return self.log_dir / self.log_file
-
-    @property
-    def report_path(self) -> Path:
-        return self.log_dir / self.report_file
 
     def record(self, record: TokenUsageRecord) -> None:
         """Append one JSON object per line, logging failures as warnings."""
@@ -538,47 +385,9 @@ class TokenUsageTracker:
                     handle.write("\n")
         except Exception:
             logger.warning("Failed to write token usage record", exc_info=True)
-            return
-
-        self._write_report()
 
     def _enrich_record(self, record: TokenUsageRecord) -> dict[str, Any]:
         enriched = dict(record)
         if not enriched.get("date") or not enriched.get("time"):
             enriched.update(timestamp_parts(self.timezone))
         return enriched
-
-    def _read_jsonl_records(self) -> tuple[list[dict[str, Any]], int]:
-        records: list[dict[str, Any]] = []
-        invalid_lines = 0
-        if not self.log_path.exists():
-            return records, invalid_lines
-
-        with self.log_path.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                try:
-                    record = json.loads(stripped)
-                except json.JSONDecodeError:
-                    invalid_lines += 1
-                    continue
-                if isinstance(record, dict):
-                    records.append(record)
-                else:
-                    invalid_lines += 1
-        return records, invalid_lines
-
-    def _write_report(self) -> None:
-        try:
-            records, invalid_lines = self._read_jsonl_records()
-            report = build_token_usage_report(records)
-            report["invalid_lines_skipped"] = invalid_lines
-            temp_path = self.report_path.with_name(f"{self.report_path.name}.tmp")
-            with temp_path.open("w", encoding="utf-8") as handle:
-                json.dump(report, handle, ensure_ascii=False, indent=2)
-                handle.write("\n")
-            temp_path.replace(self.report_path)
-        except Exception:
-            logger.warning("Failed to write token usage report", exc_info=True)

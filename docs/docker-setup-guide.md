@@ -20,8 +20,6 @@ Before you begin, ensure you have:
 
 3. **Your `.env` file configured** with at least one LLM provider API key
 
-   If you use the optional local Codex OAuth bridge, it runs outside Docker. Docker restarts do not start it; restart the bridge after a Windows reboot, logoff, terminal close, or bridge process exit.
-
 ---
 
 ## Step-by-Step Setup
@@ -121,13 +119,6 @@ docker compose build --no-cache
 docker compose up -d
 docker compose exec backend research-agent init
 docker compose exec backend research-agent health --strict
-```
-
-If `.env` points OpenAI traffic at `http://host.docker.internal:8787/v1`, confirm the host-side bridge is listening before testing analysis:
-
-```powershell
-Get-NetTCPConnection -LocalPort 8787
-python -m src.cli.main codex-oauth bridge --host 127.0.0.1 --port 8787
 ```
 
 ### Include Local Ollama (Optional)

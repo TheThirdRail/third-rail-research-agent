@@ -17,8 +17,6 @@ docker compose version
 
 If either command fails, start Docker Desktop and run the commands again.
 
-If `.env` uses the local Codex OAuth bridge at `http://host.docker.internal:8787/v1`, make sure the host-side bridge process is still running. Docker restarts do not start it; restart the bridge after a Windows reboot, logoff, terminal close, or bridge process exit.
-
 ## 3. Check your local `.env`
 
 ```powershell
@@ -55,12 +53,6 @@ docker compose up -d
 ```
 
 First rebuilds can take several minutes.
-
-If needed, start the local Codex OAuth bridge in a separate PowerShell window before testing LLM-backed analysis:
-
-```powershell
-python -m src.cli.main codex-oauth bridge --host 127.0.0.1 --port 8787
-```
 
 ## 6. Initialize or migrate the database
 

@@ -231,51 +231,6 @@ def test_bridge_chat_completion_writes_estimated_token_usage(monkeypatch, tmp_pa
     assert body["metadata"]["usage_is_estimate"] is True
 
 
-def test_bridge_token_usage_metadata_groups_report_agents(monkeypatch, tmp_path):
-    settings = Settings(
-        _env_file=None,
-        token_usage_log_enabled=True,
-        token_usage_log_dir=str(tmp_path),
-    )
-    app = openai_bridge.create_app(settings)
-
-    monkeypatch.setattr(
-        openai_bridge.cli_adapter,
-        "run_prompt_with_model_result",
-        lambda *_args, **_kwargs: CodexCliRunResult(content="bridge response"),
-    )
-    client = TestClient(app)
-
-    for agent_name in ("source_analyzer", "bias_reviewer"):
-        response = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": "openai/gpt-5.3-codex",
-                "metadata": {
-                    "run_id": "run_shared",
-                    "agent_name": agent_name,
-                    "description": "Analyze https://example.com/article",
-                },
-                "messages": [{"role": "user", "content": "Analyze this."}],
-            },
-        )
-        assert response.status_code == 200
-
-    records = _read_jsonl(tmp_path / "token-usage.jsonl")
-    assert [record["run_id"] for record in records] == ["run_shared", "run_shared"]
-    assert [record["agent_name"] for record in records] == [
-        "source_analyzer",
-        "bias_reviewer",
-    ]
-
-    report = json.loads((tmp_path / "token-usage-report.json").read_text("utf-8"))
-    assert report["total_runs"] == 1
-    assert [agent["agent_name"] for agent in report["runs"][0]["agents"]] == [
-        "source_analyzer",
-        "bias_reviewer",
-    ]
-
-
 def test_bridge_responses_writes_estimated_token_usage(monkeypatch, tmp_path):
     settings = Settings(
         _env_file=None,

@@ -34,19 +34,10 @@ def test_ensure_agent_config_rows_creates_missing_agents_from_template(tmp_path)
             .filter(AgentConfiguration.agent_name == "rhetorical_analyst")
             .first()
         )
-        semantic_query_expander = (
-            session.query(AgentConfiguration)
-            .filter(AgentConfiguration.agent_name == "semantic_query_expander")
-            .first()
-        )
         assert rhetorical is not None
         assert rhetorical.provider == "groq"
         assert rhetorical.model == "llama-3.3-70b-versatile"
         assert rhetorical.free_tier is True
-        assert semantic_query_expander is not None
-        assert semantic_query_expander.provider == "groq"
-        assert semantic_query_expander.model == "llama-3.3-70b-versatile"
-        assert semantic_query_expander.free_tier is True
         count_after_first = session.query(AgentConfiguration).count()
 
     ensure_agent_config_rows(engine)

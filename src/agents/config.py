@@ -143,13 +143,6 @@ AGENT_ROLES = {
         noise to find the essential facts. You can take a vague story description
         and turn it into clear, searchable terms.""",
     },
-    "semantic_query_expander": {
-        "role": "Semantic Query Expander",
-        "goal": "Generate alternate search phrases that preserve the current story identity",
-        "backstory": """You are a search strategist who rewrites a news story into
-        precise alternate phrases. You preserve the same actors, event, and time
-        context while accounting for different outlet framing and terminology.""",
-    },
     "source_aggregator": {
         "role": "Multi-Source Researcher",
         "goal": "Find all available sources covering a story across the political spectrum",

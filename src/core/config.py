@@ -168,15 +168,25 @@ class Settings(BaseSettings):
         default=2.0,
         description="Crawl4AI delay after page load before extracting HTML",
     )
-    enable_selenium_fallback: bool = True
-    max_selenium_attempts: int = 1
-    selenium_headless: bool = True
-    selenium_timeout_seconds: int = 25
-    selenium_user_agents: str = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36||"
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
-        "(KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+    crawl4ai_proxy_url: str = Field(
+        default="",
+        description="Optional Crawl4AI proxy URL for protected-news escalation",
+    )
+    crawl4ai_article_wait_min_chars: int = Field(
+        default=800,
+        description="Minimum visible article/body characters for Crawl4AI wait_for",
+    )
+    firecrawl_wait_for_ms: int = Field(
+        default=2000,
+        description="Firecrawl waitFor delay in milliseconds before scraping",
+    )
+    firecrawl_timeout_ms: int = Field(
+        default=90000,
+        description="Firecrawl timeout in milliseconds",
+    )
+    firecrawl_proxy_auto_enabled: bool = Field(
+        default=True,
+        description="Allow Firecrawl proxy=auto retry after blocked_challenge",
     )
     rss_seed_fallback_enabled: bool = True
     discovery_enrichment_enabled: bool = True
@@ -184,6 +194,10 @@ class Settings(BaseSettings):
     # Source gathering policy
     candidate_probe_limit: int = Field(
         default=15, description="Max candidate URLs to search/extract before stopping"
+    )
+    source_extraction_concurrency_limit: int = Field(
+        default=4,
+        description="Max source candidate article extractions to run concurrently",
     )
     retained_source_min: int = Field(
         default=3, description="Minimum final retained sources"
@@ -253,6 +267,22 @@ class Settings(BaseSettings):
         default=False,
         description="Use embedding similarity during pre-retention candidate scoring",
     )
+    semantic_candidate_timeout_seconds: float = Field(
+        default=15.0,
+        description="Timeout for pre-retention semantic candidate embedding calls",
+    )
+    semantic_candidate_embedding_batch_size: int = Field(
+        default=4,
+        description="Maximum text inputs per pre-retention candidate embedding request",
+    )
+    semantic_candidate_text_chars: int = Field(
+        default=2000,
+        description="Maximum candidate article characters used for semantic scoring",
+    )
+    semantic_candidate_max_chunks: int = Field(
+        default=3,
+        description="Maximum candidate text chunks used for semantic scoring",
+    )
     semantic_fail_open: bool = Field(
         default=True,
         description="Continue deterministic relevance if semantic scoring/indexing fails",
@@ -308,6 +338,18 @@ class Settings(BaseSettings):
     embedding_batch_size: int = Field(
         default=32,
         description="Maximum text inputs per embedding request",
+    )
+    embedding_timeout_seconds: float = Field(
+        default=60.0,
+        description="Default timeout for LM Studio embedding requests",
+    )
+    embedding_max_input_chars: int = Field(
+        default=4000,
+        description="Maximum characters per embedding input; 0 disables truncation",
+    )
+    embedding_slow_request_warning_seconds: float = Field(
+        default=10.0,
+        description="Log LM Studio embedding requests slower than this threshold",
     )
 
     # Database

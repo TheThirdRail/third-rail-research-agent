@@ -36,6 +36,7 @@ from src.database.session import (
     get_db,
     get_session,
     init_db,
+    mark_interrupted_analysis_runs,
     run_alembic_upgrade,
 )
 
@@ -74,5 +75,6 @@ __all__ = [
     "get_session",
     "get_alembic_revision_status",
     "init_db",
+    "mark_interrupted_analysis_runs",
     "run_alembic_upgrade",
 ]

@@ -11,6 +11,8 @@ from src.core import analysis_events
 from src.core.config import settings
 from src.core.embedding_provider import get_embedding_provider
 from src.core.exceptions import SourceExtractionError
+from src.core.token_usage_context import token_usage_run
+from src.core.token_usage_tracker import next_token_usage_run_id
 from src.crews import run_analysis
 from src.database import (
     AgentFindingCRUD,
@@ -85,6 +87,24 @@ class AnalysisService:
         url: str | None = None,
         options: AnalysisOptions | None = None,
     ) -> dict[str, Any]:
+        """Run analysis workflow with token-usage run metadata attached."""
+        if not settings.token_usage_log_enabled:
+            return self._analyze_impl(description, url, options)
+
+        token_usage_run_id = next_token_usage_run_id(
+            description,
+            settings.project_root / settings.token_usage_log_dir,
+            log_file=settings.token_usage_log_file,
+        )
+        with token_usage_run(token_usage_run_id, description):
+            return self._analyze_impl(description, url, options)
+
+    def _analyze_impl(
+        self,
+        description: str,
+        url: str | None = None,
+        options: AnalysisOptions | None = None,
+    ) -> dict[str, Any]:
         """Run analysis workflow and persist results.
 
         Pipeline stages:
@@ -114,6 +134,21 @@ class AnalysisService:
             embedding_provider=get_embedding_provider(
                 options_snapshot["embedding_provider"],
                 options_snapshot["embedding_model"],
+                timeout_seconds=getattr(
+                    settings,
+                    "semantic_candidate_timeout_seconds",
+                    15.0,
+                ),
+                max_batch_size=getattr(
+                    settings,
+                    "semantic_candidate_embedding_batch_size",
+                    4,
+                ),
+                max_input_chars=getattr(
+                    settings,
+                    "semantic_candidate_text_chars",
+                    2000,
+                ),
             ),
         )
         story_parser = StoryParserService(

@@ -5,9 +5,12 @@ from __future__ import annotations
 import logging
 import re
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import urlparse
+
+import httpx
 
 from src.core.config import settings
 from src.core.embedding_provider import EmbeddingProvider
@@ -35,7 +38,7 @@ from src.services.relevance_scorer_service import RelevanceScorerService
 from src.services.rss_fallback_service import RssFallbackResult, RssFallbackService
 from src.services.rss_retrieval_service import RssRetrievalService
 from src.services.source_scoring import ScoredCandidate, score_candidate
-from src.tools.article_extractor import ArticleExtractor
+from src.tools.article_extractor import ArticleExtractor, ExtractedArticle
 from src.tools.bias_classifier import BiasResult
 from src.tools.web_search import DuckDuckGoSearch, SearchResult, SearxngSearch
 from src.utils.url_utils import extract_domain
@@ -142,6 +145,7 @@ class SourceAggregatorService:
         self._duplicate_count: int = 0
         self._last_plan: SourcePlan | None = None
         self._candidate_decisions: list[CandidateDecision] = []
+        self._semantic_candidate_disabled_reason: str | None = None
         self._bucket_lane_attempts: list[BucketLaneAttempt] = []
         self._result_stage_by_url: dict[str, str] = {}
         self._result_bucket_by_url: dict[str, str] = {}
@@ -952,180 +956,237 @@ class SourceAggregatorService:
         semantic_scorer = self._build_candidate_semantic_scorer(
             story_packet, description
         )
+        concurrency_limit = max(
+            1, self._setting_int("source_extraction_concurrency_limit", 4)
+        )
+        pending_results = list(results)
 
-        for result in results:
-            if self._probed_count >= settings.candidate_probe_limit:
+        while pending_results and self._probed_count < settings.candidate_probe_limit:
+            batch = []
+            deferred_results: list[SearchResult] = []
+            batch_urls: set[str] = set()
+            batch_domains: set[str] = set()
+
+            for result in pending_results:
+                if (
+                    len(batch) >= concurrency_limit
+                    or self._probed_count >= settings.candidate_probe_limit
+                ):
+                    deferred_results.append(result)
+                    continue
+
+                candidate_url = result.url
+                if not candidate_url.startswith("http"):
+                    continue
+                normalized_url = self._normalize_url(candidate_url)
+                domain = extract_domain(candidate_url)
+                stage = self._result_stage_by_url.get(normalized_url, "open_web")
+                planned_bucket = self._result_bucket_by_url.get(normalized_url)
+                if normalized_url in candidate_urls or domain in candidate_domains:
+                    continue
+                if normalized_url in batch_urls or domain in batch_domains:
+                    deferred_results.append(result)
+                    continue
+
+                self._probed_count += 1
+                batch.append(
+                    (
+                        result,
+                        candidate_url,
+                        normalized_url,
+                        domain,
+                        stage,
+                        planned_bucket,
+                    )
+                )
+                batch_urls.add(normalized_url)
+                batch_domains.add(domain)
+
+            if not batch:
                 break
 
-            candidate_url = result.url
-            if not candidate_url.startswith("http"):
-                continue
-            normalized_url = self._normalize_url(candidate_url)
-            domain = extract_domain(candidate_url)
-            stage = self._result_stage_by_url.get(normalized_url, "open_web")
-            planned_bucket = self._result_bucket_by_url.get(normalized_url)
-            if normalized_url in candidate_urls or domain in candidate_domains:
-                continue
+            if len(batch) == 1:
+                candidates = [self._extract_url(batch[0][1], require_success=False)]
+            else:
+                max_workers = min(concurrency_limit, len(batch))
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    candidates = list(
+                        executor.map(
+                            lambda job: self._extract_url(
+                                job[1],
+                                require_success=False,
+                            ),
+                            batch,
+                        )
+                    )
 
-            self._probed_count += 1
-            candidate = self._extract_url(candidate_url, require_success=False)
-            if not candidate or not candidate.full_text:
-                self._record_candidate_decision(
-                    candidate=candidate,
-                    result=result,
-                    stage=stage,
-                    state="extraction_failed",
-                    rejection_reason="no_extracted_text",
-                    fallback_domain=domain,
-                    fallback_bucket_label=planned_bucket,
-                )
-                continue
-            if len(candidate.full_text) < self.MIN_TEXT_LENGTH:
-                self._record_candidate_decision(
-                    candidate=candidate,
-                    result=result,
-                    stage=stage,
-                    state="extraction_failed",
-                    rejection_reason="extracted_text_too_short",
-                    fallback_domain=domain,
-                    fallback_bucket_label=planned_bucket,
-                )
-                continue
+            for job, candidate in zip(batch, candidates, strict=True):
+                result, candidate_url, normalized_url, domain, stage, planned_bucket = job
+                if not candidate or not candidate.full_text:
+                    self._record_candidate_decision(
+                        candidate=candidate,
+                        result=result,
+                        stage=stage,
+                        state="extraction_failed",
+                        rejection_reason="no_extracted_text",
+                        fallback_domain=domain,
+                        fallback_bucket_label=planned_bucket,
+                    )
+                    continue
+                if len(candidate.full_text) < self.MIN_TEXT_LENGTH:
+                    self._record_candidate_decision(
+                        candidate=candidate,
+                        result=result,
+                        stage=stage,
+                        state="extraction_failed",
+                        rejection_reason="extracted_text_too_short",
+                        fallback_domain=domain,
+                        fallback_bucket_label=planned_bucket,
+                    )
+                    continue
 
-            relevance_total = 0.5
-            relevance_diag: dict[str, object] = {}
-            if story_packet:
-                semantic_scores = self._score_semantic_candidate(
-                    semantic_scorer,
-                    candidate,
-                )
-                semantic_similarity = (
-                    semantic_scores.get("aggregate_similarity")
-                    if semantic_scores
-                    else None
-                )
-                semantic_chunk_similarity = (
-                    semantic_scores.get("chunk_similarity") if semantic_scores else None
-                )
-                relevance = self._relevance_scorer.score(
-                    candidate_title=candidate.title,
-                    candidate_text=candidate.full_text,
-                    candidate_date=candidate.published_date,
-                    story_packet=story_packet,
-                    seen_domains=candidate_domains,
-                    candidate_domain=candidate.domain,
-                    semantic_similarity=semantic_similarity,
-                    semantic_chunk_similarity=semantic_chunk_similarity,
-                )
-                relevance_total = relevance.total
-                candidate.relevance_score = relevance.total
-                candidate.semantic_similarity = relevance.semantic_similarity
-                candidate.semantic_title_similarity = (
-                    semantic_scores.get("title_similarity") if semantic_scores else None
-                )
-                candidate.semantic_lede_similarity = (
-                    semantic_scores.get("lede_similarity") if semantic_scores else None
-                )
-                candidate.semantic_chunk_similarity = semantic_chunk_similarity
-                candidate.distinctive_term_overlap = relevance.distinctive_term_overlap
-                candidate.direct_evidence_score = relevance.direct_evidence_score
-                candidate.coverage_type = relevance.coverage_type
-                relevance_diag = relevance.to_diagnostics().model_dump(mode="json")
-                if candidate.semantic_title_similarity is not None:
-                    relevance_diag["semantic_title_similarity"] = (
-                        candidate.semantic_title_similarity
+                relevance_total = 0.5
+                relevance_diag: dict[str, object] = {}
+                if story_packet:
+                    semantic_scores = self._score_semantic_candidate(
+                        semantic_scorer,
+                        candidate,
                     )
-                if candidate.semantic_lede_similarity is not None:
-                    relevance_diag["semantic_lede_similarity"] = (
-                        candidate.semantic_lede_similarity
+                    semantic_similarity = (
+                        semantic_scores.get("aggregate_similarity")
+                        if semantic_scores
+                        else None
                     )
-                if candidate.semantic_chunk_similarity is not None:
-                    relevance_diag["semantic_chunk_similarity"] = (
-                        candidate.semantic_chunk_similarity
+                    semantic_chunk_similarity = (
+                        semantic_scores.get("chunk_similarity")
+                        if semantic_scores
+                        else None
                     )
-                if relevance.rejection_reason:
+                    relevance = self._relevance_scorer.score(
+                        candidate_title=candidate.title,
+                        candidate_text=candidate.full_text,
+                        candidate_date=candidate.published_date,
+                        story_packet=story_packet,
+                        seen_domains=candidate_domains,
+                        candidate_domain=candidate.domain,
+                        semantic_similarity=semantic_similarity,
+                        semantic_chunk_similarity=semantic_chunk_similarity,
+                    )
+                    relevance_total = relevance.total
+                    candidate.relevance_score = relevance.total
+                    candidate.semantic_similarity = relevance.semantic_similarity
+                    candidate.semantic_title_similarity = (
+                        semantic_scores.get("title_similarity")
+                        if semantic_scores
+                        else None
+                    )
+                    candidate.semantic_lede_similarity = (
+                        semantic_scores.get("lede_similarity") if semantic_scores else None
+                    )
+                    candidate.semantic_chunk_similarity = semantic_chunk_similarity
+                    candidate.distinctive_term_overlap = (
+                        relevance.distinctive_term_overlap
+                    )
+                    candidate.direct_evidence_score = relevance.direct_evidence_score
+                    candidate.coverage_type = relevance.coverage_type
+                    relevance_diag = relevance.to_diagnostics().model_dump(mode="json")
+                    if candidate.semantic_title_similarity is not None:
+                        relevance_diag["semantic_title_similarity"] = (
+                            candidate.semantic_title_similarity
+                        )
+                    if candidate.semantic_lede_similarity is not None:
+                        relevance_diag["semantic_lede_similarity"] = (
+                            candidate.semantic_lede_similarity
+                        )
+                    if candidate.semantic_chunk_similarity is not None:
+                        relevance_diag["semantic_chunk_similarity"] = (
+                            candidate.semantic_chunk_similarity
+                        )
+                    if relevance.rejection_reason:
+                        logger.debug(
+                            "Skipping low-relevance source %s: %s",
+                            candidate.url,
+                            relevance.rejection_reason,
+                        )
+                        self._record_candidate_decision(
+                            candidate=candidate,
+                            result=result,
+                            stage=stage,
+                            state="relevance_rejected",
+                            rejection_reason=relevance.rejection_reason,
+                            relevance_diagnostics=relevance_diag,
+                            fallback_bucket_label=planned_bucket,
+                        )
+                        continue
+
+                existing_for_dedup = [
+                    {
+                        "url": s.url,
+                        "title": s.title,
+                        "body_text": s.full_text[:500],
+                        "domain": s.domain,
+                    }
+                    for s in sources
+                ]
+                dup_result = check_duplicate(
+                    candidate.url,
+                    candidate.title,
+                    candidate.full_text[:500],
+                    candidate.domain,
+                    existing_for_dedup,
+                )
+                if dup_result.is_duplicate:
+                    self._duplicate_count += 1
                     logger.debug(
-                        "Skipping low-relevance source %s: %s",
-                        candidate.url,
-                        relevance.rejection_reason,
+                        "Skipping duplicate %s: %s", candidate.url, dup_result.reason
                     )
                     self._record_candidate_decision(
                         candidate=candidate,
                         result=result,
                         stage=stage,
-                        state="relevance_rejected",
-                        rejection_reason=relevance.rejection_reason,
+                        state="duplicate_rejected",
+                        rejection_reason=dup_result.reason,
                         relevance_diagnostics=relevance_diag,
                         fallback_bucket_label=planned_bucket,
                     )
                     continue
 
-            existing_for_dedup = [
-                {
-                    "url": s.url,
-                    "title": s.title,
-                    "body_text": s.full_text[:500],
-                    "domain": s.domain,
-                }
-                for s in sources
-            ]
-            dup_result = check_duplicate(
-                candidate.url,
-                candidate.title,
-                candidate.full_text[:500],
-                candidate.domain,
-                existing_for_dedup,
-            )
-            if dup_result.is_duplicate:
-                self._duplicate_count += 1
-                logger.debug(
-                    "Skipping duplicate %s: %s", candidate.url, dup_result.reason
+                bucket_label = self._bucket_label(candidate)
+                candidate.bucket_label = bucket_label
+                score = score_candidate(
+                    url=candidate.url,
+                    domain=candidate.domain,
+                    title=candidate.title,
+                    bias=getattr(candidate.bias_result, "bias", 0)
+                    if candidate.bias_result
+                    else 0,
+                    bucket_label=bucket_label,
+                    similarity=relevance_total,
+                    semantic_similarity=candidate.semantic_similarity,
+                    bucket_is_empty=self._bucket_is_empty(bucket_label, sources, plan),
+                    domain_already_present=candidate.domain in seen_domains,
+                    is_duplicate=False,
+                    published_date=candidate.published_date,
+                    reference_date=(
+                        story_packet.time_window_start
+                        if story_packet and story_packet.time_window_start
+                        else None
+                    ),
                 )
+                candidate.source_score = score.total_score
+                scored_candidates.append((score, candidate))
                 self._record_candidate_decision(
                     candidate=candidate,
                     result=result,
                     stage=stage,
-                    state="duplicate_rejected",
-                    rejection_reason=dup_result.reason,
+                    state="extracted",
                     relevance_diagnostics=relevance_diag,
                     fallback_bucket_label=planned_bucket,
                 )
-                continue
+                candidate_urls.add(normalized_url)
+                candidate_domains.add(domain)
 
-            bucket_label = self._bucket_label(candidate)
-            candidate.bucket_label = bucket_label
-            score = score_candidate(
-                url=candidate.url,
-                domain=candidate.domain,
-                title=candidate.title,
-                bias=getattr(candidate.bias_result, "bias", 0)
-                if candidate.bias_result
-                else 0,
-                bucket_label=bucket_label,
-                similarity=relevance_total,
-                semantic_similarity=candidate.semantic_similarity,
-                bucket_is_empty=self._bucket_is_empty(bucket_label, sources, plan),
-                domain_already_present=candidate.domain in seen_domains,
-                is_duplicate=False,
-                published_date=candidate.published_date,
-                reference_date=(
-                    story_packet.time_window_start
-                    if story_packet and story_packet.time_window_start
-                    else None
-                ),
-            )
-            candidate.source_score = score.total_score
-            scored_candidates.append((score, candidate))
-            self._record_candidate_decision(
-                candidate=candidate,
-                result=result,
-                stage=stage,
-                state="extracted",
-                relevance_diagnostics=relevance_diag,
-                fallback_bucket_label=planned_bucket,
-            )
-            candidate_urls.add(normalized_url)
-            candidate_domains.add(domain)
+            pending_results = deferred_results
 
         return scored_candidates
 
@@ -1136,17 +1197,32 @@ class SourceAggregatorService:
     ) -> CandidateSemanticScorer | None:
         if not story_packet or not self._semantic_candidate_scoring_enabled():
             return None
+        if self._semantic_candidate_disabled_reason:
+            return None
         try:
+            scorer_kwargs = {
+                "max_candidate_text_chars": self._setting_int(
+                    "semantic_candidate_text_chars", 2000
+                ),
+                "max_chunks": self._setting_int("semantic_candidate_max_chunks", 3),
+            }
             if self._embedding_provider is None:
-                return CandidateSemanticScorer(story_packet, description)
+                return CandidateSemanticScorer(
+                    story_packet,
+                    description,
+                    **scorer_kwargs,
+                )
             return CandidateSemanticScorer(
                 story_packet,
                 description,
                 embedding_provider=self._embedding_provider,
+                **scorer_kwargs,
             )
         except Exception as exc:
             if not self._semantic_fail_open():
                 raise
+            if self._is_semantic_timeout(exc):
+                self._disable_semantic_candidate_scoring(exc)
             logger.warning(
                 "Candidate semantic scoring unavailable; continuing deterministic relevance: %s",
                 exc,
@@ -1158,7 +1234,7 @@ class SourceAggregatorService:
         semantic_scorer: CandidateSemanticScorer | None,
         candidate: SourceCandidate,
     ) -> dict[str, float | None] | None:
-        if semantic_scorer is None:
+        if semantic_scorer is None or self._semantic_candidate_disabled_reason:
             return None
         try:
             if hasattr(semantic_scorer, "score_candidate_diagnostics"):
@@ -1184,6 +1260,8 @@ class SourceAggregatorService:
         except Exception as exc:
             if not self._semantic_fail_open():
                 raise
+            if self._is_semantic_timeout(exc):
+                self._disable_semantic_candidate_scoring(exc)
             logger.warning(
                 "Candidate semantic similarity failed for %s; continuing: %s",
                 candidate.url,
@@ -1264,13 +1342,14 @@ class SourceAggregatorService:
             seen_urls.add(normalized_url)
             seen_domains.add(selected.domain)
 
-    def _extract_url(self, url: str, require_success: bool = False) -> SourceCandidate:
-        article = self._extractor.extract(url)
+    def _candidate_from_article(
+        self,
+        url: str,
+        article: ExtractedArticle,
+        *,
+        resolve_bias: bool = True,
+    ) -> SourceCandidate:
         if not article.success or len(article.text) < self.MIN_TEXT_LENGTH:
-            if require_success:
-                raise SourceExtractionError(
-                    f"Failed to extract article from {url}: {article.error or 'No content'}"
-                )
             return SourceCandidate(
                 url=url,
                 domain=extract_domain(url),
@@ -1289,7 +1368,9 @@ class SourceAggregatorService:
                 media_captions=article.media_captions,
             )
 
-        bias_result = self._resolve_bias(article.domain, url, article.text)
+        bias_result = (
+            self._resolve_bias(article.domain, url, article.text) if resolve_bias else None
+        )
 
         return SourceCandidate(
             url=url,
@@ -1308,6 +1389,15 @@ class SourceAggregatorService:
             image_alt_text=article.image_alt_text,
             media_captions=article.media_captions,
         )
+
+    def _extract_url(self, url: str, require_success: bool = False) -> SourceCandidate:
+        article = self._extractor.extract(url)
+        candidate = self._candidate_from_article(url, article)
+        if candidate.extraction_error and require_success:
+            raise SourceExtractionError(
+                f"Failed to extract article from {url}: {candidate.extraction_error}"
+            )
+        return candidate
 
     def _record_primary_decision(
         self,
@@ -1537,10 +1627,30 @@ class SourceAggregatorService:
     def _semantic_fail_open(self) -> bool:
         return self._setting_bool("semantic_fail_open", True)
 
+    def _setting_int(self, name: str, default: int) -> int:
+        value = self._settings_overrides.get(name, getattr(settings, name, default))
+        if isinstance(value, bool):
+            return default
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
     @staticmethod
-    def _setting_int(name: str, default: int) -> int:
-        value = getattr(settings, name, default)
-        return value if isinstance(value, int) else default
+    def _is_semantic_timeout(exc: Exception) -> bool:
+        if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
+            return True
+        message = str(exc).lower()
+        return "timed out" in message or "timeout" in message
+
+    def _disable_semantic_candidate_scoring(self, exc: Exception) -> None:
+        if self._semantic_candidate_disabled_reason:
+            return
+        self._semantic_candidate_disabled_reason = str(exc) or exc.__class__.__name__
+        logger.warning(
+            "Semantic candidate scoring disabled for this analysis after timeout: %s",
+            self._semantic_candidate_disabled_reason,
+        )
 
     def _search_time_range(self) -> str:
         days = getattr(settings, "search_time_window_days", 7)

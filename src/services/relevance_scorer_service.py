@@ -10,6 +10,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 
+from src.core.time_utils import to_utc_naive
 from src.schemas.retrieval_diagnostics import RelevanceDiagnostics
 from src.schemas.story_packet import StoryPacket
 
@@ -177,15 +178,19 @@ class RelevanceScorerService:
     def _time_overlap(self, date: datetime | None, packet: StoryPacket) -> float:
         if not date or not packet.time_window_start or not packet.time_window_end:
             return 0.5
-        if packet.time_window_start <= date <= packet.time_window_end:
+        candidate_date = to_utc_naive(date)
+        window_start = to_utc_naive(packet.time_window_start)
+        window_end = to_utc_naive(packet.time_window_end)
+
+        if window_start <= candidate_date <= window_end:
             return 1.0
         # Penalize by distance from window
 
-        window_size = (packet.time_window_end - packet.time_window_start).days or 7
-        if date < packet.time_window_start:
-            gap = (packet.time_window_start - date).days
+        window_size = (window_end - window_start).days or 7
+        if candidate_date < window_start:
+            gap = (window_start - candidate_date).days
         else:
-            gap = (date - packet.time_window_end).days
+            gap = (candidate_date - window_end).days
         return max(0.0, 1.0 - (gap / max(1, window_size * 2)))
 
     def _place_overlap(self, text: str, packet: StoryPacket) -> float:

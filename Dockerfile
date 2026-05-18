@@ -21,6 +21,7 @@ COPY src/ ./src/
 COPY src/core/llm_provider_docker.py ./src/core/llm_provider.py
 
 # Install Python dependencies
+RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir .
 
 # Stage 2: Runtime

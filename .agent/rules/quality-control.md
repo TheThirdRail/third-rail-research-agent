@@ -41,14 +41,22 @@ logger = logging.getLogger(__name__)
 def extract_article(url: str) -> ArticleContent:
     """Extract article content with fallback."""
     try:
-        # Try primary extractor
+        return _extract_crawl4ai(url)
+    except Exception as e:
+        logger.warning(f"Crawl4AI failed for {url}: {e}")
+
+    try:
         return _extract_trafilatura(url)
     except Exception as e:
         logger.warning(f"Trafilatura failed for {url}: {e}")
-        
+
     try:
-        # Fallback extractor
-        return _extract_newspaper(url)
+        return _extract_playwright(url)
+    except Exception as e:
+        logger.warning(f"Playwright failed for {url}: {e}")
+
+    try:
+        return _extract_firecrawl(url)
     except Exception as e:
         logger.error(f"All extractors failed for {url}: {e}")
         raise SourceExtractionError(f"Could not extract: {url}")

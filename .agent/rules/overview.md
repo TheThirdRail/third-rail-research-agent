@@ -9,7 +9,7 @@ activation: always_on
 <rule name="project-overview" version="2.0.0">
   <metadata>
     <project>Research Agent</project>
-    <updated>2026-01-31</updated>
+    <updated>2026-05-17</updated>
   </metadata>
 
   <technology_stack>
@@ -36,7 +36,9 @@ activation: always_on
       <dep>feedparser>=6.0.0</dep>
       <dep>ddgs>=6.0.0</dep>
       <dep>trafilatura>=1.12.0</dep>
-      <dep>newspaper4k>=0.9.0</dep>
+      <dep>crawl4ai>=0.8.0</dep>
+      <dep>firecrawl-py>=4.25.2</dep>
+      <dep>playwright>=1.41.0</dep>
     </section>
     <section name="Database & API">
       <dep>sqlalchemy>=2.0.0</dep>

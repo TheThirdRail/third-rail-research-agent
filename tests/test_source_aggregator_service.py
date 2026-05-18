@@ -1,3 +1,5 @@
+import threading
+import time
 from unittest.mock import patch
 from urllib.parse import urlparse
 
@@ -977,9 +979,10 @@ def test_gather_sources_uses_planner_and_relevance_scorer(monkeypatch):
 
 def test_preflight_adds_candidate_semantic_similarity(monkeypatch):
     class DummySemanticScorer:
-        def __init__(self, story_packet, description):
+        def __init__(self, story_packet, description, **kwargs):
             self.story_packet = story_packet
             self.description = description
+            self.kwargs = kwargs
 
         def score_candidate(self, candidate_title: str, candidate_text: str):
             return 0.91
@@ -1070,6 +1073,124 @@ def test_preflight_adds_candidate_semantic_similarity(monkeypatch):
         ]
         == 0.82
     )
+
+
+def test_semantic_candidate_timeout_disables_rest_of_run(monkeypatch):
+    class TimeoutSemanticScorer:
+        def __init__(self):
+            self.calls = 0
+
+        def score_candidate_diagnostics(self, candidate_title: str, candidate_text: str):
+            self.calls += 1
+            raise TimeoutError("timed out")
+
+    monkeypatch.setattr(
+        "src.services.source_aggregator_service.settings.rss_seed_fallback_enabled",
+        False,
+    )
+    service = SourceAggregatorService(settings_overrides={"semantic_fail_open": True})
+    scorer = TimeoutSemanticScorer()
+    first = SourceCandidate(
+        url="https://example.com/first",
+        domain="example.com",
+        title="First",
+        published_date=None,
+        author=None,
+        full_text="text " * 80,
+        extraction_error=None,
+        bias_result=None,
+    )
+    second = SourceCandidate(
+        url="https://example.com/second",
+        domain="example.com",
+        title="Second",
+        published_date=None,
+        author=None,
+        full_text="text " * 80,
+        extraction_error=None,
+        bias_result=None,
+    )
+
+    assert service._score_semantic_candidate(scorer, first) is None
+    assert service._score_semantic_candidate(scorer, second) is None
+    assert scorer.calls == 1
+
+
+def test_preflight_search_results_extracts_distinct_domains_concurrently(monkeypatch):
+    monkeypatch.setattr(SourceAggregatorService, "_init_searcher", lambda self: None)
+    monkeypatch.setattr(
+        "src.services.source_aggregator_service.settings.rss_seed_fallback_enabled",
+        False,
+    )
+    service = SourceAggregatorService()
+
+    lock = threading.Lock()
+    running = 0
+    max_running = 0
+
+    class SlowExtractor:
+        def extract(self, url: str) -> ExtractedArticle:
+            nonlocal max_running, running
+            with lock:
+                running += 1
+                max_running = max(max_running, running)
+            time.sleep(0.05)
+            with lock:
+                running -= 1
+            return ExtractedArticle(
+                title=f"Article {url}",
+                text="Verified article text. " * 40,
+                author=None,
+                date=None,
+                domain=urlparse(url).netloc,
+                url=url,
+                success=True,
+            )
+
+    service._extractor = SlowExtractor()
+    monkeypatch.setattr(
+        service,
+        "_resolve_bias",
+        lambda domain, url, text: BiasResult(
+            domain=domain,
+            bias=0,
+            bias_label="Center",
+            confidence=1.0,
+            method="test",
+            factual_rating=None,
+            category=None,
+        ),
+    )
+
+    plan = service._planner.plan(seed_bias=None, seed_domain=None)
+    results = [
+        SearchResult(
+            title=f"Result {index}",
+            url=f"https://source-{index}.example.com/story",
+            snippet="story",
+            source="test",
+        )
+        for index in range(4)
+    ]
+
+    with patch("src.services.source_aggregator_service.settings") as mock_settings:
+        mock_settings.candidate_probe_limit = 4
+        mock_settings.source_extraction_concurrency_limit = 4
+        mock_settings.semantic_candidate_scoring_enabled = False
+        mock_settings.semantic_fail_open = True
+
+        scored = service._preflight_search_results(
+            results=results,
+            description="story",
+            sources=[],
+            seen_urls=set(),
+            seen_domains=set(),
+            story_packet=None,
+            plan=plan,
+        )
+
+    assert len(scored) == 4
+    assert max_running > 1
 
 
 def test_rss_plan_step_uses_story_matching_when_packet_available():
@@ -1183,9 +1304,10 @@ def test_gather_sources_keeps_opposite_side_with_semantic_scores(monkeypatch):
             return []
 
     class DummySemanticScorer:
-        def __init__(self, story_packet, description):
+        def __init__(self, story_packet, description, **kwargs):
             self.story_packet = story_packet
             self.description = description
+            self.kwargs = kwargs
 
         def score_candidate(self, candidate_title: str, candidate_text: str):
             if "GOP senators" in candidate_text:

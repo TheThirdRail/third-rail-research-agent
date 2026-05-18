@@ -12,7 +12,8 @@ from src.core.model_normalization import (
     normalize_model_for_provider,
     normalize_provider_name,
 )
-from src.database.models import AgentConfiguration, Base
+from src.core.time_utils import utc_now_naive
+from src.database.models import AgentConfiguration, AnalysisRun, Base
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,31 @@ def init_db() -> None:
     ensure_agent_config_rows(engine)
     backfill_agent_config_models(engine)
     backfill_known_bad_agent_models(engine)
+
+
+def mark_interrupted_analysis_runs() -> int:
+    """Fail analysis runs left open by a prior backend process."""
+    with SessionLocal() as session:
+        count = (
+            session.query(AnalysisRun)
+            .filter(AnalysisRun.status == "running")
+            .update(
+                {
+                    "status": "failed",
+                    "error": "interrupted_backend_restart",
+                    "completed_at": utc_now_naive(),
+                },
+                synchronize_session=False,
+            )
+        )
+        session.commit()
+
+    if count:
+        logger.warning(
+            "Marked %d interrupted analysis run(s) as failed after backend startup.",
+            count,
+        )
+    return int(count)
 
 
 def run_alembic_upgrade(database_url: str | None = None) -> tuple[bool, str]:

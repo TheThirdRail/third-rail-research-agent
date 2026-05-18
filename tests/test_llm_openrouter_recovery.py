@@ -5,6 +5,7 @@ from types import SimpleNamespace
 os.environ["DEBUG"] = "true"
 
 import src.core.llm_provider_docker as llm_module
+from src.core.token_usage_context import token_usage_run
 
 
 class _FakeBudget:
@@ -73,6 +74,7 @@ def _build_openai_router(reasoning_effort: str | None):
     router.temperature_override = None
     router.free_tier = False
     router.reasoning_effort = reasoning_effort
+    router.agent_name = None
     return router
 
 
@@ -110,6 +112,33 @@ def test_complete_omits_openai_reasoning_effort_none(monkeypatch):
 
     assert router.complete([{"role": "user", "content": "hello"}]) == "ok"
     assert "reasoning_effort" not in captured
+
+
+def test_complete_passes_token_usage_metadata(monkeypatch):
+    router = _build_openai_router(None)
+    router.agent_name = "visual_evidence"
+    captured: dict[str, object] = {}
+
+    def fake_completion(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))]
+        )
+
+    monkeypatch.setattr(llm_module, "completion", fake_completion)
+    monkeypatch.setattr(llm_module, "completion_cost", lambda completion_response: 0.0)
+    monkeypatch.setattr(llm_module, "get_budget_service", lambda: _FakeBudget())
+
+    with token_usage_run("0001 - Trump China deal Xi", "Trump China deal Xi"):
+        assert router.complete([{"role": "user", "content": "hello"}]) == "ok"
+
+    assert captured["extra_body"] == {
+        "metadata": {
+            "run_id": "0001 - Trump China deal Xi",
+            "run_text": "Trump China deal Xi",
+            "agent_name": "VISUAL_EVIDENCE",
+        }
+    }
 
 
 def test_acomplete_passes_supported_openai_reasoning_effort(monkeypatch):

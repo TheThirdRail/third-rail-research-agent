@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from src.schemas.story_packet import StoryPacket
 from src.services.candidate_semantic_scorer import CandidateSemanticScorer
 from src.services.relevance_scorer_service import RelevanceScorerService
@@ -99,3 +101,18 @@ def test_relevance_reports_explicit_wrong_event_diagnostic():
 
     assert result.rejection_reason == "same_person_wrong_event"
     assert result.to_diagnostics().rejection_reason == "same_person_wrong_event"
+
+
+def test_relevance_time_overlap_normalizes_aware_candidate_date():
+    packet = StoryPacket(
+        canonical_headline="Senate Republicans reject Cuba blockade change",
+        time_window_start=datetime(2026, 5, 11, 8, 0, 0),
+        time_window_end=datetime(2026, 5, 19, 8, 0, 0),
+    )
+
+    result = RelevanceScorerService()._time_overlap(
+        datetime(2026, 5, 13, 12, 0, 0, tzinfo=UTC),
+        packet,
+    )
+
+    assert result == 1.0

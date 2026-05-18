@@ -89,6 +89,65 @@ def test_lmstudio_embedding_provider_posts_openai_compatible_payload(monkeypatch
     ]
 
 
+def test_lmstudio_embedding_provider_batches_and_truncates_payloads(monkeypatch):
+    calls = []
+
+    class DummyResponse:
+        def __init__(self, count: int):
+            self._count = count
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "data": [
+                    {"embedding": [float(index), 1.0]}
+                    for index in range(self._count)
+                ]
+            }
+
+    class DummyClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def post(self, url, headers, json):
+            calls.append(
+                {
+                    "url": url,
+                    "headers": headers,
+                    "json": json,
+                    "timeout": self.timeout,
+                }
+            )
+            return DummyResponse(len(json["input"]))
+
+    monkeypatch.setattr(httpx, "Client", DummyClient)
+
+    provider = LMStudioEmbeddingProvider(
+        model_name="text-embedding-test",
+        base_url="http://localhost:1234/v1",
+        api_key="local-key",
+        timeout_seconds=12.5,
+        max_batch_size=2,
+        max_input_chars=5,
+    )
+    vectors = provider.embed_texts(["abcdef", "ghijkl", "mnopqr"])
+
+    assert vectors == [[0.0, 1.0], [1.0, 1.0], [0.0, 1.0]]
+    assert [call["json"]["input"] for call in calls] == [
+        ["abcde", "ghijk"],
+        ["mnopq"],
+    ]
+    assert {call["timeout"] for call in calls} == {12.5}
+
+
 def test_vector_store_defaults_to_sql_only_operational_mode(monkeypatch):
     monkeypatch.setattr(
         "src.services.vector_store_service.settings.semantic_vector_store",
@@ -154,6 +213,45 @@ def test_candidate_semantic_scorer_indexes_seed_and_scores_candidate():
             "Sports playoffs dominated the evening schedule.",
         )
         == 0.0
+    )
+
+
+def test_candidate_semantic_scorer_limits_candidate_chunks():
+    class RecordingEmbeddingProvider:
+        provider_name = "recording"
+        model_name = "recording-v1"
+        dimensions = 3
+
+        def __init__(self):
+            self.calls: list[list[str]] = []
+
+        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            self.calls.append(list(texts))
+            return [[1.0, 0.0, 0.0] for _ in texts]
+
+    provider = RecordingEmbeddingProvider()
+    packet = StoryPacket(
+        canonical_headline="Senate Republicans reject Cuba blockade change",
+        actors=["Senate Republicans"],
+        action_verbs=["reject"],
+        distinctive_terms=["Cuba"],
+        must_have_terms=["Senate Republicans", "Cuba"],
+        query_pack=["Senate Republicans Cuba blockade"],
+    )
+    scorer = CandidateSemanticScorer(
+        packet,
+        "Senate Republicans reject attempt to end Cuba blockade",
+        provider,
+        max_candidate_text_chars=1200,
+        max_chunks=2,
+    )
+
+    scorer.score_candidate_diagnostics("Long title", "Cuba embargo " * 100)
+
+    candidate_inputs = provider.calls[-1]
+    assert len(candidate_inputs) == 5
+    assert candidate_inputs[0] == (
+        "Title: Long title\nText: " + ("Cuba embargo " * 100).strip()[:1200]
     )
 
 

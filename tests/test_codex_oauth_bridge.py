@@ -231,6 +231,85 @@ def test_bridge_chat_completion_writes_estimated_token_usage(monkeypatch, tmp_pa
     assert body["metadata"]["usage_is_estimate"] is True
 
 
+def test_bridge_metadata_groups_agent_calls_into_pretty_run_report(
+    monkeypatch, tmp_path
+):
+    settings = Settings(
+        _env_file=None,
+        token_usage_log_enabled=True,
+        token_usage_log_dir=str(tmp_path),
+    )
+    app = openai_bridge.create_app(settings)
+
+    monkeypatch.setattr(
+        openai_bridge.cli_adapter,
+        "run_prompt_with_model_result",
+        lambda *_args, **_kwargs: CodexCliRunResult(
+            content="bridge response",
+            usage={
+                "total_input_tokens": 11,
+                "total_output_tokens": 7,
+                "total_tokens": 18,
+                "cached_input_tokens": 3,
+                "reasoning_tokens": 2,
+                "usage_source": "provider_usage",
+                "is_estimate": False,
+            },
+        ),
+    )
+    client = TestClient(app)
+
+    for agent_name in ("PROFILE_READER", "BIAS_CLASSIFIER"):
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "openai/gpt-5.4",
+                "extra_body": {
+                    "metadata": {
+                        "run_id": "0001 - Trump China deal Xi",
+                        "run_text": "Trump China deal Xi",
+                        "agent_name": agent_name,
+                    }
+                },
+                "messages": [{"role": "user", "content": "Analyze this story."}],
+            },
+        )
+        assert response.status_code == 200
+
+    records = _read_jsonl(tmp_path / "token-usage.jsonl")
+    assert [record["run_id"] for record in records] == [
+        "0001 - Trump China deal Xi",
+        "0001 - Trump China deal Xi",
+    ]
+    assert [record["agent_name"] for record in records] == [
+        "PROFILE_READER",
+        "BIAS_CLASSIFIER",
+    ]
+    assert [record["run_text"] for record in records] == [
+        "Trump China deal Xi",
+        "Trump China deal Xi",
+    ]
+
+    report = json.loads(
+        (tmp_path / "0001 - Trump China deal Xi.json").read_text(encoding="utf-8")
+    )
+    assert report["run_id"] == "0001 - Trump China deal Xi"
+    assert report["agent_calls"] == 2
+    assert [agent["agent_name"] for agent in report["agents"]] == [
+        "PROFILE_READER",
+        "BIAS_CLASSIFIER",
+    ]
+    assert report["models"] == [
+        {
+            "model": "gpt-5.4",
+            "total_input_tokens": 22,
+            "total_cached_tokens": 6,
+            "total_output_tokens": 14,
+            "total_reasoning_tokens": 4,
+        }
+    ]
+
+
 def test_bridge_responses_writes_estimated_token_usage(monkeypatch, tmp_path):
     settings = Settings(
         _env_file=None,

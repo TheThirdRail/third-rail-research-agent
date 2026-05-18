@@ -36,6 +36,7 @@ from src.core.model_normalization import (
     normalize_model_for_provider,
     normalize_provider_name,
 )
+from src.core.token_usage_context import merge_token_usage_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,8 @@ class LLMRouter:
             provider: LLM provider to use. Defaults to env var LLM_PROVIDER.
             model: Model to use. Defaults to selected_model from config or fallback.
         """
+        self.agent_name = agent_name
+
         from src.core.config import settings
         from src.database.session import get_session
         from src.services.agent_config_service import AgentConfigService
@@ -605,7 +608,10 @@ class LLMRouter:
             )
 
         def _call_completion():
-            completion_kwargs = dict(kwargs)
+            completion_kwargs = merge_token_usage_metadata(
+                dict(kwargs),
+                agent_name=getattr(self, "agent_name", None),
+            )
             reasoning_effort = self._chat_completion_reasoning_effort()
             if reasoning_effort:
                 completion_kwargs["reasoning_effort"] = reasoning_effort
@@ -681,7 +687,10 @@ class LLMRouter:
             )
 
         async def _call_acompletion():
-            completion_kwargs = dict(kwargs)
+            completion_kwargs = merge_token_usage_metadata(
+                dict(kwargs),
+                agent_name=getattr(self, "agent_name", None),
+            )
             reasoning_effort = self._chat_completion_reasoning_effort()
             if reasoning_effort:
                 completion_kwargs["reasoning_effort"] = reasoning_effort

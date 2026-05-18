@@ -6,13 +6,15 @@ import json
 import logging
 import re
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import datetime, timedelta
 from math import ceil
 from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict
 from urllib.parse import urlparse
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from src.core.token_usage_context import token_usage_agent_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +46,8 @@ class TokenUsageRecord(TypedDict):
     time: NotRequired[str]
     timezone: NotRequired[str]
     endpoint: NotRequired[str | None]
+    agent_name: NotRequired[str | None]
+    run_text: NotRequired[str | None]
     model: NotRequired[str | None]
     links_provided: NotRequired[list[str]]
     total_tokens: NotRequired[int | None]
@@ -339,6 +343,247 @@ def new_run_id() -> str:
     return f"run_{uuid4().hex}"
 
 
+_TOKEN_REPORT_FILE = re.compile(r"^(\d{4}) - .+\.json$")
+_WINDOWS_INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_DESCRIPTION_LINE_RE = re.compile(r"(?im)^Description:\s*(.+)$")
+
+
+def _integer_or_zero(value: Any) -> int:
+    count = _integer_or_none(value)
+    return count if count is not None else 0
+
+
+def sanitize_run_text(text: str | None, *, max_length: int = 80) -> str:
+    """Return user-entered text safe for Windows report filenames."""
+    cleaned = " ".join((text or "").split())
+    cleaned = _WINDOWS_INVALID_FILENAME_CHARS.sub("", cleaned).strip(" .")
+    if not cleaned:
+        return "untitled"
+    return cleaned[:max_length].rstrip(" .") or "untitled"
+
+
+def next_token_usage_run_id(
+    description: str,
+    log_dir: str | Path,
+    *,
+    log_file: str | Path = "token-usage.jsonl",
+) -> str:
+    """Create the next readable token-usage run id for a new analysis run."""
+    path = Path(log_dir)
+    highest = 0
+    if path.exists():
+        for report_file in path.glob("*.json"):
+            match = _TOKEN_REPORT_FILE.match(report_file.name)
+            if match:
+                highest = max(highest, int(match.group(1)))
+        log_path = path / log_file
+        if log_path.exists():
+            with log_path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(record, dict):
+                        continue
+                    run_id = _string_or_none(record.get("run_id"))
+                    if not run_id:
+                        continue
+                    match = _TOKEN_REPORT_FILE.match(f"{run_id}.json")
+                    if match:
+                        highest = max(highest, int(match.group(1)))
+    return f"{highest + 1:04d} - {sanitize_run_text(description)}"
+
+
+def _record_sort_key(record: dict[str, Any]) -> tuple[str, str]:
+    return (
+        str(record.get("timestamp") or ""),
+        str(record.get("request_id") or ""),
+    )
+
+
+def _string_or_none(value: Any) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _display_agent_name(value: Any) -> str:
+    return token_usage_agent_display_name(_string_or_none(value)) or "UNKNOWN"
+
+
+def _model_name(record: dict[str, Any]) -> str:
+    return _string_or_none(record.get("model")) or "unknown"
+
+
+def _run_text(records: list[dict[str, Any]]) -> str:
+    for record in records:
+        text = _string_or_none(record.get("run_text"))
+        if text:
+            return text
+    for record in records:
+        query_text = _string_or_none(record.get("query_text"))
+        if not query_text:
+            continue
+        match = _DESCRIPTION_LINE_RE.search(query_text)
+        if match:
+            return match.group(1).strip()
+    return "untitled"
+
+
+def _report_run_id(raw_run_id: str, records: list[dict[str, Any]], index: int) -> str:
+    if _TOKEN_REPORT_FILE.match(f"{raw_run_id}.json"):
+        return raw_run_id
+    return f"{index:04d} - {sanitize_run_text(_run_text(records))}"
+
+
+def _parse_timestamp(record: dict[str, Any]) -> datetime | None:
+    timestamp = _string_or_none(record.get("timestamp"))
+    if timestamp:
+        try:
+            return datetime.fromisoformat(timestamp)
+        except ValueError:
+            pass
+
+    date = _string_or_none(record.get("date"))
+    time_value = _string_or_none(record.get("time"))
+    if date and time_value:
+        try:
+            return datetime.fromisoformat(f"{date}T{time_value}")
+        except ValueError:
+            pass
+    return None
+
+
+def _time_string(value: datetime | None, fallback: Any = None) -> str | None:
+    if value is not None:
+        return value.time().replace(microsecond=0).isoformat()
+    return _string_or_none(fallback)
+
+
+def _duration_string(start: datetime | None, end: datetime | None) -> str | None:
+    if start is None or end is None:
+        return None
+    duration = end - start
+    if duration < timedelta(0):
+        duration = timedelta(0)
+    return str(duration).split(".", 1)[0]
+
+
+def _build_agent_report(record: dict[str, Any]) -> tuple[dict[str, Any], datetime | None]:
+    started_at = _parse_timestamp(record)
+    duration_ms = _integer_or_none(record.get("duration_ms"))
+    ended_at = (
+        started_at + timedelta(milliseconds=duration_ms)
+        if started_at is not None and duration_ms is not None
+        else started_at
+    )
+    return (
+        {
+            "agent_name": _display_agent_name(record.get("agent_name")),
+            "model": _model_name(record),
+            "input_tokens": _integer_or_zero(record.get("total_input_tokens")),
+            "cached_tokens": _integer_or_zero(record.get("cached_input_tokens")),
+            "output_tokens": _integer_or_zero(record.get("total_output_tokens")),
+            "reasoning_tokens": _integer_or_zero(record.get("reasoning_tokens")),
+            "time_started": _time_string(started_at, record.get("time")),
+            "time_ended": _time_string(ended_at, record.get("time")),
+        },
+        ended_at,
+    )
+
+
+def _build_model_totals(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    totals_by_model: dict[str, dict[str, Any]] = {}
+    for record in records:
+        model = _model_name(record)
+        totals = totals_by_model.setdefault(
+            model,
+            {
+                "model": model,
+                "total_input_tokens": 0,
+                "total_cached_tokens": 0,
+                "total_output_tokens": 0,
+                "total_reasoning_tokens": 0,
+            },
+        )
+        totals["total_input_tokens"] += _integer_or_zero(
+            record.get("total_input_tokens")
+        )
+        totals["total_cached_tokens"] += _integer_or_zero(
+            record.get("cached_input_tokens")
+        )
+        totals["total_output_tokens"] += _integer_or_zero(
+            record.get("total_output_tokens")
+        )
+        totals["total_reasoning_tokens"] += _integer_or_zero(
+            record.get("reasoning_tokens")
+        )
+    return [totals_by_model[model] for model in sorted(totals_by_model)]
+
+
+def _build_run_report(
+    raw_run_id: str,
+    records: list[dict[str, Any]],
+    index: int,
+) -> tuple[str, dict[str, Any]]:
+    ordered_records = sorted(records, key=_record_sort_key)
+    started = ordered_records[0]
+    started_at = _parse_timestamp(started)
+    agent_reports: list[dict[str, Any]] = []
+    end_times: list[datetime] = []
+
+    for record in ordered_records:
+        agent_report, ended_at = _build_agent_report(record)
+        agent_reports.append(agent_report)
+        if ended_at is not None:
+            end_times.append(ended_at)
+
+    ended_at = max(end_times) if end_times else started_at
+    run_id = _report_run_id(raw_run_id, ordered_records, index)
+    return (
+        f"{run_id}.json",
+        {
+            "run_id": run_id,
+            "date_started": _string_or_none(started.get("date")),
+            "time_started": _time_string(started_at, started.get("time")),
+            "agent_calls": len(ordered_records),
+            "agents": agent_reports,
+            "time_ended": _time_string(ended_at, started.get("time")),
+            "total_duration": _duration_string(started_at, ended_at),
+            "models": _build_model_totals(ordered_records),
+        },
+    )
+
+
+def build_token_usage_run_reports(
+    records: Iterable[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Build readable per-run reports from raw token usage JSONL rows."""
+    valid_records = sorted(
+        (
+            record
+            for record in records
+            if isinstance(record, dict) and record.get("event") == "llm_token_usage"
+        ),
+        key=_record_sort_key,
+    )
+    records_by_run: dict[str, list[dict[str, Any]]] = {}
+    for record in valid_records:
+        raw_run_id = _string_or_none(record.get("run_id")) or new_run_id()
+        records_by_run.setdefault(raw_run_id, []).append(record)
+
+    reports: dict[str, dict[str, Any]] = {}
+    sorted_runs = sorted(
+        records_by_run.items(),
+        key=lambda item: _record_sort_key(sorted(item[1], key=_record_sort_key)[0]),
+    )
+    for index, (raw_run_id, run_records) in enumerate(sorted_runs, 1):
+        filename, report = _build_run_report(raw_run_id, run_records, index)
+        reports[filename] = report
+    return reports
+
+
 class TokenUsageTracker:
     """Append local token usage records without affecting main LLM flow."""
 
@@ -385,9 +630,43 @@ class TokenUsageTracker:
                     handle.write("\n")
         except Exception:
             logger.warning("Failed to write token usage record", exc_info=True)
+            return
+
+        self._write_run_reports()
 
     def _enrich_record(self, record: TokenUsageRecord) -> dict[str, Any]:
         enriched = dict(record)
         if not enriched.get("date") or not enriched.get("time"):
             enriched.update(timestamp_parts(self.timezone))
         return enriched
+
+    def _read_jsonl_records(self) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        if not self.log_path.exists():
+            return records
+
+        with self.log_path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    record = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(record, dict):
+                    records.append(record)
+        return records
+
+    def _write_run_reports(self) -> None:
+        try:
+            reports = build_token_usage_run_reports(self._read_jsonl_records())
+            for filename, report in reports.items():
+                report_path = self.log_dir / filename
+                temp_path = report_path.with_name(f"{report_path.name}.tmp")
+                with temp_path.open("w", encoding="utf-8") as handle:
+                    json.dump(report, handle, ensure_ascii=False, indent=2)
+                    handle.write("\n")
+                temp_path.replace(report_path)
+        except Exception:
+            logger.warning("Failed to write token usage run report", exc_info=True)

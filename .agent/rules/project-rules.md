@@ -11,7 +11,7 @@ activation: always_on
   <metadata>
     <category>project-specific</category>
     <severity>error</severity>
-    <updated>2026-01-31</updated>
+    <updated>2026-05-17</updated>
   </metadata>
 
   <project_overview>
@@ -72,6 +72,10 @@ activation: always_on
     <must>Use type hints on all functions</must>
     <must>Never commit .env files</must>
     <must>Use Docker for deployment</must>
+    <must>For local CLI/runtime work, prefer the repo-local editable install in `D:\Coding\Research-Agent\.venv`; verify `where research-agent` before using the bare `research-agent` command.</must>
+    <must>If `research-agent` resolves to `C:\Users\jerem\AppData\Local\miniforge3\Scripts\research-agent.exe`, check `python -m pip show research-agent`; a stale editable install from a removed worktree can cause `ModuleNotFoundError: No module named 'src'`.</must>
+    <must>Use `.\.venv\Scripts\python.exe -m src.cli.main ...` or reinstall the current checkout with `python -m pip install -e . --no-deps` instead of working around a broken global shim.</must>
+    <must>Article scraping must use the maintained fallback order `Crawl4AI -> Trafilatura -> Playwright -> Firecrawl`; do not reintroduce newspaper4k, Fundus, or Selenium scraping paths.</must>
     <must_not>Hardcode API keys in source code</must_not>
     <must_not>Use synchronous operations in FastAPI routes</must_not>
   </constraints>

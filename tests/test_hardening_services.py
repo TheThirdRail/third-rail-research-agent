@@ -6,6 +6,7 @@ ReportValidator (new rules), and BiasClassifier registry routing.
 """
 
 import json
+from datetime import UTC, datetime
 
 from src.schemas.claims import Claim, ClaimType, FactExtractionResult
 from src.schemas.narrative import NarrativeResult
@@ -323,6 +324,19 @@ class TestSourceScoring:
         )
         assert result.event_similarity == 0.9
         assert result.similarity_score == 0.225
+
+    def test_freshness_normalizes_aware_published_date(self) -> None:
+        result = score_candidate(
+            url="https://a.com/1",
+            domain="a.com",
+            title="Article",
+            bias=0,
+            bucket_label="center",
+            published_date=datetime(2026, 5, 13, 12, 0, 0, tzinfo=UTC),
+            reference_date=datetime(2026, 5, 13, 8, 0, 0),
+        )
+
+        assert result.freshness_score > 0.0
 
 
 # ─────────────────────── Report Renderer ───────────────────────

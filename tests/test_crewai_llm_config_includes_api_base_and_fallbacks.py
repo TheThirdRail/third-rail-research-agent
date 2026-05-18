@@ -4,6 +4,7 @@ os.environ["DEBUG"] = "true"
 
 from src.agents import config as agents_config
 from src.core.llm_provider_docker import LLMProvider
+from src.core.token_usage_context import token_usage_run
 
 
 class _FakeRouter:
@@ -128,3 +129,29 @@ def test_build_crewai_llm_passes_reasoning_effort(monkeypatch):
     agents_config.build_crewai_llm("source_aggregator")
 
     assert captured["reasoning_effort"] == "high"
+
+
+def test_build_crewai_llm_passes_token_usage_metadata(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _FakeLLM:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        agents_config,
+        "get_llm_router",
+        lambda agent_name=None: _FakeRouter("openai", model="openai/gpt-5.4"),
+    )
+    monkeypatch.setattr(agents_config, "LLM", _FakeLLM)
+
+    with token_usage_run("0001 - Trump China deal Xi", "Trump China deal Xi"):
+        agents_config.build_crewai_llm("profile_reader")
+
+    assert captured["extra_body"] == {
+        "metadata": {
+            "run_id": "0001 - Trump China deal Xi",
+            "run_text": "Trump China deal Xi",
+            "agent_name": "PROFILE_READER",
+        }
+    }

@@ -11,6 +11,7 @@ from src.core.llm_provider_docker import (
     get_llm_router,
 )
 from src.core.model_normalization import normalize_model_for_provider
+from src.core.token_usage_context import merge_token_usage_metadata
 
 _CREWAI_NATIVE_PROVIDERS = {
     LLMProvider.OPENAI.value,
@@ -95,6 +96,8 @@ def build_crewai_llm(agent_name: str | None = None) -> LLM:
     reasoning_effort = llm_config.get("reasoning_effort")
     if reasoning_effort:
         llm_kwargs["reasoning_effort"] = reasoning_effort
+
+    llm_kwargs = merge_token_usage_metadata(llm_kwargs, agent_name=agent_name)
 
     fallbacks = _build_lmstudio_fallbacks(router.provider.value)
     if fallbacks:

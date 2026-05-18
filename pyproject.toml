@@ -34,8 +34,8 @@ dependencies = [
     "feedparser>=6.0.0",
     "ddgs>=6.0.0",
     "trafilatura>=1.12.0",
-    "newspaper4k>=0.9.0",
     "lxml>=5.3,<6",
+    "soupsieve>=2.6,<2.8",
     "crawl4ai>=0.8.0",
     "firecrawl-py>=4.25.2",
     

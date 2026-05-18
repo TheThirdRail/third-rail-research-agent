@@ -60,11 +60,23 @@ async def test_lifespan_logs_migration_status_before_initializing(monkeypatch, c
         lambda: ("warn", "Database is not stamped with an Alembic revision."),
     )
     monkeypatch.setattr(api_main, "init_db", lambda: calls.append("init_db"))
+    monkeypatch.setattr(
+        api_main,
+        "mark_interrupted_analysis_runs",
+        lambda: calls.append("interrupted_runs"),
+    )
     monkeypatch.setattr(api_main, "close_model_registry", fake_close_model_registry)
 
     with caplog.at_level(logging.WARNING, logger=api_main.logger.name):
         async with api_main.lifespan(api_main.app):
             calls.append("running")
 
-    assert calls == ["timing", "lmstudio", "init_db", "running", "close"]
+    assert calls == [
+        "timing",
+        "lmstudio",
+        "init_db",
+        "interrupted_runs",
+        "running",
+        "close",
+    ]
     assert "Database is not stamped with an Alembic revision." in caplog.text

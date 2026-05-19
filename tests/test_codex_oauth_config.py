@@ -66,7 +66,7 @@ def test_debug_release_env_value_maps_to_false(monkeypatch):
 
 
 def test_codex_bridge_models_are_allowed_in_free_budget_mode(monkeypatch):
-    monkeypatch.setenv("OPENAI_BASE_URL", "http://host.docker.internal:8787/v1")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://host.docker.internal:8790/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "local-placeholder")
     monkeypatch.setattr(core_config.settings, "codex_oauth_testing_enabled", True)
     monkeypatch.setattr(

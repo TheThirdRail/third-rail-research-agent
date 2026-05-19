@@ -64,7 +64,7 @@ def validate_bridge_url(
     if "<" in url or ">" in url:
         raise CodexOAuthConfigError(
             "OPENAI_BASE_URL contains placeholder text; replace it with the "
-            "running bridge URL, for example http://host.docker.internal:8787/v1."
+            "running bridge URL, for example http://host.docker.internal:8790/v1."
         )
 
     parsed = urlparse(url)
@@ -76,7 +76,7 @@ def validate_bridge_url(
         _port = parsed.port
     except ValueError as exc:
         raise CodexOAuthConfigError(
-            "OPENAI_BASE_URL has an invalid port; use a numeric port like 8787."
+            "OPENAI_BASE_URL has an invalid port; use a numeric port like 8790."
         ) from exc
 
     if host in BLOCKED_HOSTS:

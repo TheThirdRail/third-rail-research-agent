@@ -42,14 +42,14 @@ async def test_fetch_openai_models_uses_configured_base_url(monkeypatch):
         return client
 
     monkeypatch.setattr(registry, "_get_client", fake_get_client)
-    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:8787/v1")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:8790/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "local-placeholder")
 
     models = await registry._fetch_openai_models()
 
     assert client.calls == [
         {
-            "url": "http://127.0.0.1:8787/v1/models",
+            "url": "http://127.0.0.1:8790/v1/models",
             "headers": {"Authorization": "Bearer local-placeholder"},
         }
     ]

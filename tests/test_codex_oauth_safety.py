@@ -10,17 +10,17 @@ from src.core.codex_oauth.safety import (
 
 
 def test_bridge_mode_accepts_localhost_urls():
-    validate_bridge_url("http://localhost:8787/v1")
-    validate_bridge_url("http://127.0.0.1:8787/v1")
-    validate_bridge_url("http://[::1]:8787/v1")
+    validate_bridge_url("http://localhost:8790/v1")
+    validate_bridge_url("http://127.0.0.1:8790/v1")
+    validate_bridge_url("http://[::1]:8790/v1")
 
-    assert is_local_bridge_url("http://127.0.0.1:8787/v1") is True
+    assert is_local_bridge_url("http://127.0.0.1:8790/v1") is True
 
 
 def test_bridge_mode_accepts_docker_host_gateway():
-    validate_bridge_url("http://host.docker.internal:8787/v1")
+    validate_bridge_url("http://host.docker.internal:8790/v1")
 
-    assert is_local_bridge_url("http://host.docker.internal:8787/v1") is True
+    assert is_local_bridge_url("http://host.docker.internal:8790/v1") is True
 
 
 def test_bridge_mode_rejects_placeholder_port():
@@ -40,7 +40,7 @@ def test_bridge_mode_rejects_public_urls_by_default():
 
 def test_bridge_mode_rejects_unspecified_bind_address():
     with pytest.raises(CodexOAuthConfigError):
-        validate_bridge_url("http://0.0.0.0:8787/v1")
+        validate_bridge_url("http://0.0.0.0:8790/v1")
 
 
 def test_prompt_length_limits_are_enforced():

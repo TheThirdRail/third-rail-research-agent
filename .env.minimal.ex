@@ -45,11 +45,11 @@ DATABASE_URL=sqlite:///data/research_agent.db
 # LLM: Codex OAuth Bridge Only
 # =========================================
 # Start the local bridge before running analysis:
-# research-agent codex-oauth bridge --host 127.0.0.1 --port 8787
+# research-agent codex-oauth bridge --host 127.0.0.1 --port 8790
 LLM_PROVIDER=openai
 SELECTED_MODEL=
 ANALYSIS_MODEL=
-OPENAI_BASE_URL=http://host.docker.internal:8787/v1
+OPENAI_BASE_URL=http://host.docker.internal:8790/v1
 # Placeholder only. Do not put a real OpenAI API key here for Codex OAuth bridge mode.
 OPENAI_API_KEY=local-placeholder
 

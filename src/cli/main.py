@@ -960,7 +960,7 @@ def codex_oauth_test(prompt: str) -> None:
 
 @codex_oauth.command(name="bridge")
 @click.option("--host", default="127.0.0.1", show_default=True)
-@click.option("--port", default=8787, type=int, show_default=True)
+@click.option("--port", default=8790, type=int, show_default=True)
 def codex_oauth_bridge(host: str, port: int) -> None:
     """Start the local OpenAI-compatible Codex OAuth bridge."""
     import uvicorn
